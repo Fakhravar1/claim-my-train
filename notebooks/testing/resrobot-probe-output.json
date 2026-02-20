@@ -1,0 +1,96 @@
+{
+  "runAt": "2025-12-13T13:29:03.196Z",
+  "results": [
+    {
+      "label": "departureBoard Malmö C (now)",
+      "status": 200,
+      "ms": 716,
+      "count": 111,
+      "sample": [
+        "Länstrafik - Buss 5",
+        "Länstrafik - Buss 5",
+        "Länstrafik - Buss 12"
+      ]
+    },
+    {
+      "label": "departureBoard Malmö Hyllie (now)",
+      "status": 200,
+      "ms": 236,
+      "count": 65,
+      "sample": [
+        "Länstrafik - Buss 300",
+        "Regional Tåg 1083",
+        "Länstrafik - Tåg 1718"
+      ]
+    },
+    {
+      "label": "departureBoard Malmö C (+60 min)",
+      "status": 200,
+      "ms": 300,
+      "count": 107,
+      "sample": [
+        "Länstrafik - Buss 8",
+        "Länstrafik - Buss 10",
+        "Länstrafik - Buss 13"
+      ]
+    },
+    {
+      "label": "departureBoard Malmö C (direction Hyllie)",
+      "status": 200,
+      "ms": 207,
+      "count": 24,
+      "sample": [
+        "Länstrafik - Buss 10",
+        "Regional Tåg 1085",
+        "Länstrafik - Tåg 1221"
+      ]
+    },
+    {
+      "label": "arrivalBoard Malmö Hyllie",
+      "status": 200,
+      "ms": 161,
+      "count": 50,
+      "sample": [
+        "Länstrafik - Tåg 1718",
+        "Länstrafik - Tåg 1771",
+        "Expressbuss 620C"
+      ]
+    },
+    {
+      "label": "trip Malmö C → Malmö Hyllie",
+      "status": 200,
+      "ms": 249,
+      "count": 5,
+      "sample": [
+        "{\"Origin\":{\"name\":\"Malmö Centralstation\",\"type\":\"ST\",\"id\":\"A=1@O=Malmö Centralst",
+        "{\"Origin\":{\"name\":\"Malmö Centralstation\",\"type\":\"ST\",\"id\":\"A=1@O=Malmö Centralst",
+        "{\"Origin\":{\"name\":\"Malmö Centralstation\",\"type\":\"ST\",\"id\":\"A=1@O=Malmö Centralst"
+      ]
+    },
+    {
+      "label": "trip Malmö C → Lund C",
+      "status": 200,
+      "ms": 570,
+      "count": 5,
+      "sample": [
+        "{\"Origin\":{\"name\":\"Malmö Centralstation\",\"type\":\"ST\",\"id\":\"A=1@O=Malmö Centralst",
+        "{\"Origin\":{\"name\":\"Malmö Centralstation\",\"type\":\"ST\",\"id\":\"A=1@O=Malmö Centralst",
+        "{\"Origin\":{\"name\":\"Malmö Centralstation\",\"type\":\"ST\",\"id\":\"A=1@O=Malmö Centralst"
+      ]
+    },
+    {
+      "label": "location.name search 'Malmö'",
+      "status": 200,
+      "ms": 121,
+      "count": 0,
+      "sample": []
+    },
+    {
+      "label": "location.nearbystops Malmö C (coords)",
+      "status": 200,
+      "ms": 91,
+      "count": 0,
+      "sample": []
+    }
+  ]
+}

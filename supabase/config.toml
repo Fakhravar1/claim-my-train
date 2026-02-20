@@ -1,1 +1,4 @@
 project_id = "jnfwmdirvnqfpfhtipld"
+
+[functions.get-train-departures]
+verify_jwt = false

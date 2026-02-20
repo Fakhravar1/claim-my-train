@@ -2,7 +2,7 @@
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**URL**: https://lovable.dev/projects/dde9e4a0-2a35-4ba6-8013-1e36c16cda69
 
 ## How can I edit this code?
 
@@ -10,7 +10,7 @@ There are several ways of editing your application.
 
 **Use Lovable**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+Simply visit the [Lovable Project](https://lovable.dev/projects/dde9e4a0-2a35-4ba6-8013-1e36c16cda69) and start prompting.
 
 Changes made via Lovable will be committed automatically to this repo.
 
@@ -35,6 +35,34 @@ npm i
 # Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
+
+## Local edge-function development (without Lovable sync)
+
+Use this when you want local UI + local `get-train-departures` behavior immediately.
+
+1. Start Supabase function runtime locally (separate terminal):
+
+```sh
+supabase functions serve get-train-departures --no-verify-jwt
+```
+
+2. In your local `.env`, add:
+
+```sh
+VITE_USE_LOCAL_FUNCTIONS="true"
+VITE_LOCAL_FUNCTIONS_URL="http://127.0.0.1:54321/functions/v1"
+```
+
+3. Restart Vite:
+
+```sh
+npm run dev
+```
+
+When enabled, the app calls:
+`http://127.0.0.1:54321/functions/v1/get-train-departures`
+
+Set `VITE_USE_LOCAL_FUNCTIONS="false"` (or remove both vars) to go back to cloud backend.
 
 **Edit a file directly in GitHub**
 
@@ -62,7 +90,7 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Simply open [Lovable](https://lovable.dev/projects/dde9e4a0-2a35-4ba6-8013-1e36c16cda69) and click on Share -> Publish.
 
 ## Can I connect a custom domain to my Lovable project?
 
