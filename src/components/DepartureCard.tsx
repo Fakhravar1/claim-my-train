@@ -90,10 +90,6 @@ const DepartureCard = ({ departure }: DepartureCardProps) => {
     arrivalDeltaSeconds !== null &&
     arrivalDeltaSeconds >= 20 * 60 &&
     arrivalDeltaSeconds < 40 * 60;
-  const hasTestingGreenChange =
-    arrivalDeltaSeconds !== null &&
-    arrivalDeltaSeconds > 5 * 60 &&
-    arrivalDeltaSeconds < 20 * 60;
 
   return (
     <Card
@@ -102,8 +98,6 @@ const DepartureCard = ({ departure }: DepartureCardProps) => {
           ? "bg-orange-100 border-orange-300"
           : hasMajorChange
           ? "bg-yellow-100 border-yellow-300"
-          : hasTestingGreenChange
-          ? "bg-emerald-100 border-emerald-300"
           : ""
       }`}
     >

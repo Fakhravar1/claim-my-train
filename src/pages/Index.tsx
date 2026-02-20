@@ -263,11 +263,6 @@ const Index = () => {
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link to="/delay-alerts">
-                <Button variant="outline" size="sm">
-                  Check Claimable Delays
-                </Button>
-              </Link>
               {historyOffsetMinutes > 0 && (
                 <Button
                   onClick={handleResetOffset}
@@ -283,9 +278,9 @@ const Index = () => {
               <Button
                 onClick={() => fetchDepartures()}
                 disabled={loading}
-                variant="outline"
+                variant="default"
                 size="icon"
-                className="rounded-full"
+                className="rounded-full h-11 w-11 bg-green-600 hover:bg-green-700 text-white"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </Button>
@@ -359,6 +354,17 @@ const Index = () => {
               </div>
             </Card>
           )}
+
+          <div className="mt-2 mb-2 flex justify-center">
+            <Link to="/delay-alerts" className="w-full sm:w-auto">
+              <Button
+                size="lg"
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-base font-semibold"
+              >
+                Check Claimable Delays
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Last updated */}

@@ -474,17 +474,29 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Keep only six hours of history for the "Load earlier" browsing window.
-      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+      // Keep runs/departures for up to 72 hours to reduce repeated external API lookups.
+      const seventyTwoHoursAgo = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
       const { error: cleanupError } = await supabase
         .from('departures')
         .delete()
-        .lt('fetched_at', sixHoursAgo);
+        .lt('fetched_at', seventyTwoHoursAgo);
 
       if (cleanupError) {
         console.error('Error cleaning up old departures:', cleanupError);
       } else {
-        console.log('Successfully cleaned up departures older than 6 hours');
+        console.log('Successfully cleaned up departures older than 72 hours');
+      }
+
+      // Keep claimable alert history for 30 days.
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { error: historyCleanupError } = await supabase
+        .from('yellow_alert_history')
+        .delete()
+        .lt('actual_arrival_datetime', thirtyDaysAgo);
+      if (historyCleanupError) {
+        console.error('Error cleaning up old delay alerts:', historyCleanupError);
+      } else {
+        console.log('Successfully cleaned up delay alerts older than 30 days');
       }
     } catch (dbError) {
       console.error('Error with database operations:', dbError);

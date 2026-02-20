@@ -45,7 +45,6 @@ interface YellowAlertHistoryRow {
 
 const DelayAlerts = () => {
   const [loading, setLoading] = useState(false);
-  const [lookbackHours, setLookbackHours] = useState(6);
   const [directionScope, setDirectionScope] = useState<"both" | Direction>("both");
   const [alerts, setAlerts] = useState<Departure[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -53,7 +52,7 @@ const DelayAlerts = () => {
   const loadAlerts = async () => {
     setLoading(true);
     try {
-      const lookbackStart = new Date(Date.now() - lookbackHours * 60 * 60_000);
+      const lookbackStart = new Date(Date.now() - 30 * 24 * 60 * 60_000);
       const { data: historyRows } = await supabase
         .from("yellow_alert_history")
         .select(
@@ -120,7 +119,7 @@ const DelayAlerts = () => {
   useEffect(() => {
     loadAlerts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lookbackHours, directionScope]);
+  }, [directionScope]);
 
   const backendLabel = useMemo(() => "Source: persistent history", []);
 
@@ -136,7 +135,13 @@ const DelayAlerts = () => {
             <Link to="/">
               <Button variant="outline">Back to departures</Button>
             </Link>
-            <Button onClick={loadAlerts} disabled={loading} variant="outline" size="icon" className="rounded-full">
+            <Button
+              onClick={loadAlerts}
+              disabled={loading}
+              variant="default"
+              size="icon"
+              className="rounded-full h-11 w-11 bg-green-600 hover:bg-green-700 text-white"
+            >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
           </div>
@@ -144,17 +149,13 @@ const DelayAlerts = () => {
 
         <Card className="p-4 mb-4">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Lookback:</span>
-            <Button variant={lookbackHours === 6 ? "default" : "outline"} size="sm" onClick={() => setLookbackHours(6)}>6h</Button>
-            <Button variant={lookbackHours === 12 ? "default" : "outline"} size="sm" onClick={() => setLookbackHours(12)}>12h</Button>
-            <Button variant={lookbackHours === 23 ? "default" : "outline"} size="sm" onClick={() => setLookbackHours(23)}>23h</Button>
-            <span className="ml-4 text-muted-foreground">Direction:</span>
+            <span className="text-muted-foreground">Direction:</span>
             <Button variant={directionScope === "both" ? "default" : "outline"} size="sm" onClick={() => setDirectionScope("both")}>Both</Button>
             <Button variant={directionScope === "malmo-departures" ? "default" : "outline"} size="sm" onClick={() => setDirectionScope("malmo-departures")}>From Malmö C</Button>
             <Button variant={directionScope === "hyllie-departures" ? "default" : "outline"} size="sm" onClick={() => setDirectionScope("hyllie-departures")}>From København H</Button>
           </div>
           <div className="mt-3 text-xs text-muted-foreground">
-            This page reads only from persisted delay history in Supabase. {backendLabel}
+            This page reads only from persisted delay history in Supabase (last 30 days). {backendLabel}
           </div>
         </Card>
 
