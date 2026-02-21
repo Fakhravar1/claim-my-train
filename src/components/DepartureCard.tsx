@@ -90,6 +90,9 @@ const DepartureCard = ({ departure }: DepartureCardProps) => {
     arrivalDeltaSeconds !== null &&
     arrivalDeltaSeconds >= 20 * 60 &&
     arrivalDeltaSeconds < 40 * 60;
+  const departureDateLabel = departure.departureDate || "-";
+  const arrivalDateLabel = departure.arrivalDate || departure.departureDate || "-";
+  const spansMultipleDays = arrivalDateLabel !== departureDateLabel;
 
   return (
     <Card
@@ -104,19 +107,24 @@ const DepartureCard = ({ departure }: DepartureCardProps) => {
       <div className="flex items-start justify-between gap-3 sm:gap-4">
         <div className="flex items-start gap-3 sm:gap-4 flex-1">
           <div className="flex flex-col flex-1 min-w-0">
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="font-bold text-base sm:text-lg text-foreground">
-                {departure.line}
-              </span>
-              <span className="text-xs sm:text-sm text-muted-foreground truncate">
-                {departure.lineName}
-              </span>
-            </div>
-            
-            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground mb-2">
+            <div className="flex items-center gap-2 text-sm sm:text-base text-foreground mb-1">
               <span>{departure.departureStation}</span>
               <span>→</span>
               <span>{departure.arrivalStation}</span>
+            </div>
+
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="font-semibold text-sm sm:text-base text-muted-foreground">
+                {departure.line}
+              </span>
+              <span className="text-xs text-muted-foreground truncate">
+                {departure.lineName}
+              </span>
+            </div>
+
+            <div className="text-xs text-muted-foreground mb-2">
+              <span>Departs: {departureDateLabel}</span>
+              {spansMultipleDays && <span> | Arrives: {arrivalDateLabel}</span>}
             </div>
 
             <div className="text-sm overflow-x-auto">

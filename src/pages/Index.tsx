@@ -311,6 +311,17 @@ const Index = () => {
             </div>
           </Card>
 
+          <div className="mt-2 mb-4 flex justify-center">
+            <Link to="/delay-alerts" className="w-full sm:w-auto">
+              <Button
+                size="lg"
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-base font-semibold"
+              >
+                Check Claimable Delays
+              </Button>
+            </Link>
+          </div>
+
           {/* Train Filter */}
           {availableTrainNames.length > 0 && (
             <Card className="p-4 bg-card border-border mb-4">
@@ -354,17 +365,6 @@ const Index = () => {
               </div>
             </Card>
           )}
-
-          <div className="mt-2 mb-2 flex justify-center">
-            <Link to="/delay-alerts" className="w-full sm:w-auto">
-              <Button
-                size="lg"
-                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-base font-semibold"
-              >
-                Check Claimable Delays
-              </Button>
-            </Link>
-          </div>
         </div>
 
         {/* Last updated */}

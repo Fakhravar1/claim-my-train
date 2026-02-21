@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RefreshCw } from "lucide-react";
 import DepartureCard from "@/components/DepartureCard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Direction } from "@/constants/stops";
 
@@ -43,11 +50,17 @@ interface YellowAlertHistoryRow {
   arrival_delay_minutes: number;
 }
 
+const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
+const LOCAL_CLAIM_BOT_URL = "http://127.0.0.1:8787/claim";
+
 const DelayAlerts = () => {
   const [loading, setLoading] = useState(false);
   const [directionScope, setDirectionScope] = useState<"both" | Direction>("both");
   const [alerts, setAlerts] = useState<Departure[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<Departure | null>(null);
+  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
+  const [claimActionStatus, setClaimActionStatus] = useState("");
 
   const loadAlerts = async () => {
     setLoading(true);
@@ -121,6 +134,41 @@ const DelayAlerts = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directionScope]);
 
+  const openClaimFormWithFallback = async (dep: Departure) => {
+    try {
+      setClaimActionStatus("Trying autofill bot...");
+      const response = await fetch(LOCAL_CLAIM_BOT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          departureDate: dep.departureDate,
+          departureTime: dep.departureTime,
+          line: dep.line,
+          lineName: dep.lineName,
+          from: dep.departureStation,
+          to: dep.arrivalStation,
+          scheduledArrivalTime: dep.scheduledArrivalTime ?? null,
+          actualArrivalTime: dep.arrivalTime ?? null,
+          delayMinutes: dep.arrivalDelayMinutes ?? 0,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`bot responded ${response.status}`);
+      }
+
+      const result = (await response.json()) as { success?: boolean; message?: string };
+      if (!result.success) {
+        throw new Error(result.message || "autofill bot failed");
+      }
+      setClaimActionStatus("Autofill bot launched. Continue on the opened claim page.");
+      return;
+    } catch {
+      window.open(CLAIM_START_URL, "_blank", "noopener,noreferrer");
+      setClaimActionStatus("Autofill unavailable. Opened manual claim page.");
+    }
+  };
+
   const backendLabel = useMemo(() => "Source: persistent history", []);
 
   return (
@@ -132,9 +180,6 @@ const DelayAlerts = () => {
             <p className="text-sm text-muted-foreground">Yellow alerts: delays from 20 to 39 minutes. Orange alerts: delays of 40 minutes or more.</p>
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/">
-              <Button variant="outline">Back to departures</Button>
-            </Link>
             <Button
               onClick={loadAlerts}
               disabled={loading}
@@ -159,6 +204,17 @@ const DelayAlerts = () => {
           </div>
         </Card>
 
+        <div className="mt-2 mb-4 flex justify-center">
+          <Link to="/" className="w-full sm:w-auto">
+            <Button
+              size="lg"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-base font-semibold"
+            >
+              Back to departures
+            </Button>
+          </Link>
+        </div>
+
         <div className="text-sm text-muted-foreground mb-4">
           {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString("sv-SE")} | Alerts: ${alerts.length}` : "Loading..."}
         </div>
@@ -169,10 +225,62 @@ const DelayAlerts = () => {
               <p className="text-muted-foreground">{loading ? "Loading delay alerts..." : "No delay alerts in selected window."}</p>
             </Card>
           ) : (
-            alerts.map((dep, idx) => <DepartureCard key={`${dep.line}-${dep.departureDate}-${dep.departureTime}-${idx}`} departure={dep} />)
+            alerts.map((dep, idx) => (
+              <div key={`${dep.line}-${dep.departureDate}-${dep.departureTime}-${idx}`} className="space-y-2">
+                <DepartureCard departure={dep} />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSelectedAlert(dep);
+                      setClaimActionStatus("");
+                      setClaimDialogOpen(true);
+                    }}
+                  >
+                    Start claim
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </div>
+
+      <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Claim Assistant</DialogTitle>
+            <DialogDescription>
+              Review this delay summary, then continue to the official claim page.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAlert && (
+            <div className="space-y-4">
+              <Card className="p-3 text-sm space-y-1">
+                <p><span className="font-semibold">Line:</span> {selectedAlert.line} {selectedAlert.lineName}</p>
+                <p><span className="font-semibold">Route:</span> {selectedAlert.departureStation} {" -> "} {selectedAlert.arrivalStation}</p>
+                <p><span className="font-semibold">Date:</span> {selectedAlert.departureDate}</p>
+                <p><span className="font-semibold">Departs:</span> {selectedAlert.departureTime}</p>
+                <p><span className="font-semibold">Scheduled arrival:</span> {selectedAlert.scheduledArrivalTime ?? "-"}</p>
+                <p><span className="font-semibold">Actual arrival:</span> {selectedAlert.arrivalTime ?? "-"}</p>
+                <p><span className="font-semibold">Delay:</span> +{selectedAlert.arrivalDelayMinutes ?? 0} min</p>
+              </Card>
+
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => void openClaimFormWithFallback(selectedAlert)}
+              >
+                Open claim form
+              </Button>
+              {claimActionStatus && (
+                <p className="text-xs text-muted-foreground">{claimActionStatus}</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

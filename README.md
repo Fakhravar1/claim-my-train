@@ -64,6 +64,26 @@ When enabled, the app calls:
 
 Set `VITE_USE_LOCAL_FUNCTIONS="false"` (or remove both vars) to go back to cloud backend.
 
+## Local claim autofill bot (MVP)
+
+The Claim Assistant now tries a local automation bot first, then falls back to the manual claim page if the bot is not running or fails.
+
+1. Install Chromium for Playwright once:
+
+```sh
+npx playwright install chromium
+```
+
+2. Start the bot in a separate terminal:
+
+```sh
+npm run claim-bot
+```
+
+3. In the app, click **Start claim** -> **Open claim form**.
+
+The app will call `http://127.0.0.1:8787/claim`. If that call fails, it automatically opens the manual Skanetrafiken claim page.
+
 **Edit a file directly in GitHub**
 
 - Navigate to the desired file(s).
