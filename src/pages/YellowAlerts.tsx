@@ -51,7 +51,6 @@ interface YellowAlertHistoryRow {
 }
 
 const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
-const LOCAL_CLAIM_BOT_URL = "http://127.0.0.1:8787/claim";
 
 const DelayAlerts = () => {
   const [loading, setLoading] = useState(false);
@@ -137,10 +136,8 @@ const DelayAlerts = () => {
   const openClaimFormWithFallback = async (dep: Departure) => {
     try {
       setClaimActionStatus("Trying autofill bot...");
-      const response = await fetch(LOCAL_CLAIM_BOT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke("claim-assistant", {
+        body: {
           departureDate: dep.departureDate,
           departureTime: dep.departureTime,
           line: dep.line,
@@ -150,14 +147,11 @@ const DelayAlerts = () => {
           scheduledArrivalTime: dep.scheduledArrivalTime ?? null,
           actualArrivalTime: dep.arrivalTime ?? null,
           delayMinutes: dep.arrivalDelayMinutes ?? 0,
-        }),
+        },
       });
 
-      if (!response.ok) {
-        throw new Error(`bot responded ${response.status}`);
-      }
-
-      const result = (await response.json()) as { success?: boolean; message?: string };
+      if (error) throw error;
+      const result = (data ?? {}) as { success?: boolean; message?: string };
       if (!result.success) {
         throw new Error(result.message || "autofill bot failed");
       }

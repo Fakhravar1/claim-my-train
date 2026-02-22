@@ -64,25 +64,41 @@ When enabled, the app calls:
 
 Set `VITE_USE_LOCAL_FUNCTIONS="false"` (or remove both vars) to go back to cloud backend.
 
-## Local claim autofill bot (MVP)
+## Claim autofill bot via Supabase Edge Function
 
-The Claim Assistant now tries a local automation bot first, then falls back to the manual claim page if the bot is not running or fails.
+The Claim Assistant now calls Supabase Edge Function `claim-assistant`, which forwards the request to your hosted Playwright worker. If anything fails, the app automatically opens the manual Skanetrafiken claim page.
 
-1. Install Chromium for Playwright once:
+1. Deploy the function:
 
 ```sh
-npx playwright install chromium
+supabase functions deploy claim-assistant --no-verify-jwt
 ```
 
-2. Start the bot in a separate terminal:
+2. Set worker secrets in Supabase:
 
 ```sh
-npm run claim-bot
+supabase secrets set CLAIM_AUTOFILL_WORKER_URL="https://your-worker-domain/claim"
+supabase secrets set CLAIM_AUTOFILL_WORKER_API_KEY="your-worker-api-key"
 ```
 
 3. In the app, click **Start claim** -> **Open claim form**.
 
-The app will call `http://127.0.0.1:8787/claim`. If that call fails, it automatically opens the manual Skanetrafiken claim page.
+### Optional local testing
+
+You can still run the local Playwright bot and point the function to it for testing:
+
+```sh
+npx playwright install chromium
+npm run claim-bot
+supabase functions serve claim-assistant --no-verify-jwt
+```
+
+Set local function env:
+
+```sh
+CLAIM_AUTOFILL_WORKER_URL="http://127.0.0.1:8787/claim"
+CLAIM_AUTOFILL_WORKER_API_KEY=""
+```
 
 **Edit a file directly in GitHub**
 

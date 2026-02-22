@@ -6,15 +6,17 @@
 import http from "node:http";
 import { chromium } from "playwright";
 
-const HOST = "127.0.0.1";
-const PORT = 8787;
+const HOST = process.env.CLAIM_BOT_HOST || "0.0.0.0";
+const PORT = Number(process.env.PORT || process.env.CLAIM_BOT_PORT || 8787);
+const HEADLESS = process.env.CLAIM_BOT_HEADLESS !== "false";
 const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
+const API_KEY = process.env.CLAIM_BOT_API_KEY || "";
 
 const json = (res, status, payload) => {
   res.writeHead(status, {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   });
   res.end(JSON.stringify(payload));
@@ -40,7 +42,7 @@ const tryFillFirst = async (page, selectors, value) => {
 };
 
 const runClaimFlow = async (payload) => {
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: HEADLESS });
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -68,6 +70,12 @@ const runClaimFlow = async (payload) => {
       "input[placeholder*='biljett' i]",
     ], payload.ticketId);
 
+    if (HEADLESS) {
+      await context.close().catch(() => {});
+      await browser.close().catch(() => {});
+      return { success: true, message: "Autofill completed in headless mode." };
+    }
+
     return { success: true, message: "Claim page opened. Verify fields before submit." };
   } catch (error) {
     await context.close().catch(() => {});
@@ -86,6 +94,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && req.url === "/claim") {
+    if (API_KEY) {
+      const authHeader = req.headers.authorization || "";
+      const expected = `Bearer ${API_KEY}`;
+      if (authHeader !== expected) {
+        return json(res, 401, { success: false, message: "Unauthorized" });
+      }
+    }
+
     try {
       const payload = await readBody(req);
       const result = await runClaimFlow(payload);
