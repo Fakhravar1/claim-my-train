@@ -1,5 +1,13 @@
 # Backlog
 
+- Claim bot (Skånetrafiken) status:
+  - DONE (test mode): autofill flow reaches step 6 summary without submitting.
+  - DONE (test mode): supports route/date/time selection, Prisavdrag, Värdekod, personnummer/email test fill, and manual-stop behavior.
+  - TODO (production): stabilize final consent checkbox handling for all UI variants.
+  - TODO (production): add structured run logging + error snapshots for failed runs.
+  - TODO (production): add retry policy + timeout policy per step with metrics.
+  - TODO (production): add secure execution model (queue + status + worker isolation + rate limits).
+
 - Build mobile-compatible claim automation architecture:
   - Keep current manual fallback flow in app.
   - Replace local Playwright dependency with a hosted automation worker/API.

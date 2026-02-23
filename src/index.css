@@ -8,89 +8,89 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 200 15% 15%;
+    --background: 28 42% 97%;
+    --foreground: 222 22% 16%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 200 15% 15%;
+    --card: 32 50% 99%;
+    --card-foreground: 222 22% 16%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 200 15% 15%;
+    --popover: 32 50% 99%;
+    --popover-foreground: 222 22% 16%;
 
-    --primary: 170 65% 42%;
+    --primary: 14 78% 56%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 170 20% 95%;
-    --secondary-foreground: 170 65% 25%;
+    --secondary: 26 42% 93%;
+    --secondary-foreground: 220 24% 24%;
 
-    --muted: 200 10% 94%;
-    --muted-foreground: 200 10% 45%;
+    --muted: 28 32% 92%;
+    --muted-foreground: 220 10% 42%;
 
-    --accent: 170 60% 50%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 338 44% 88%;
+    --accent-foreground: 332 30% 28%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 1 77% 57%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 200 10% 88%;
-    --input: 200 10% 90%;
-    --ring: 170 65% 42%;
+    --border: 24 28% 84%;
+    --input: 24 30% 88%;
+    --ring: 14 78% 56%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 28 42% 97%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-foreground: 222 22% 16%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary: 14 78% 56%;
 
     --sidebar-primary-foreground: 0 0% 98%;
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent: 26 42% 93%;
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-accent-foreground: 220 24% 24%;
 
-    --sidebar-border: 220 13% 91%;
+    --sidebar-border: 24 28% 84%;
 
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 14 78% 56%;
   }
 
   .dark {
-    --background: 200 15% 10%;
-    --foreground: 0 0% 95%;
+    --background: 226 26% 10%;
+    --foreground: 30 40% 96%;
 
-    --card: 200 15% 12%;
-    --card-foreground: 0 0% 95%;
+    --card: 226 24% 13%;
+    --card-foreground: 30 40% 96%;
 
-    --popover: 200 15% 12%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 226 24% 13%;
+    --popover-foreground: 30 40% 96%;
 
-    --primary: 170 65% 50%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 16 88% 64%;
+    --primary-foreground: 222 47% 11%;
 
-    --secondary: 200 15% 18%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 226 20% 18%;
+    --secondary-foreground: 30 40% 96%;
 
-    --muted: 200 15% 18%;
-    --muted-foreground: 200 10% 65%;
+    --muted: 226 18% 20%;
+    --muted-foreground: 30 14% 72%;
 
-    --accent: 170 60% 45%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 335 30% 26%;
+    --accent-foreground: 26 74% 92%;
 
-    --destructive: 0 62.8% 50%;
+    --destructive: 1 70% 56%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 200 15% 20%;
-    --input: 200 15% 18%;
-    --ring: 170 65% 50%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --border: 226 18% 24%;
+    --input: 226 18% 22%;
+    --ring: 16 88% 64%;
+    --sidebar-background: 226 26% 10%;
+    --sidebar-foreground: 30 40% 96%;
+    --sidebar-primary: 16 88% 64%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 226 20% 18%;
+    --sidebar-accent-foreground: 30 40% 96%;
+    --sidebar-border: 226 18% 24%;
+    --sidebar-ring: 16 88% 64%;
   }
 }
 
@@ -101,5 +101,12 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: "Inter", "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+    background-image:
+      radial-gradient(1200px 420px at 15% -10%, hsl(14 100% 86% / 0.5), transparent 62%),
+      radial-gradient(900px 380px at 100% -15%, hsl(338 75% 85% / 0.35), transparent 60%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
   }
 }

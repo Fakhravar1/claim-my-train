@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RefreshCw } from "lucide-react";
 import DepartureCard from "@/components/DepartureCard";
+import UserMenu from "@/components/UserMenu";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Direction } from "@/constants/stops";
 
@@ -67,6 +70,9 @@ const DelayAlerts = () => {
   const [selectedAlert, setSelectedAlert] = useState<Departure | null>(null);
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
   const [claimActionStatus, setClaimActionStatus] = useState("");
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
   const loadAlerts = async () => {
     setLoading(true);
@@ -141,6 +147,10 @@ const DelayAlerts = () => {
   }, [directionScope]);
 
   const openClaimFormWithFallback = async (dep: Departure) => {
+    if (!user) {
+      navigate(`/login?next=${encodeURIComponent("/delay-alerts")}`);
+      return;
+    }
     try {
       setClaimActionStatus("Trying autofill bot...");
       const requestBody = {
@@ -192,23 +202,33 @@ const DelayAlerts = () => {
     }
   };
 
+  const promptLoginForClaim = () => {
+    toast({
+      title: "Sign in required",
+      description: "Please sign in with Google to start a claim.",
+    });
+    navigate(`/login?next=${encodeURIComponent("/delay-alerts")}`);
+  };
+
   const backendLabel = useMemo(() => "Source: persistent history", []);
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 max-w-5xl">
+      <div className="container mx-auto max-w-5xl px-4 py-8">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Claimable Delays</h1>
-            <p className="text-sm text-muted-foreground">Yellow alerts: delays from 20 to 39 minutes. Orange alerts: delays of 40 minutes or more.</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Saved delay history</p>
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground">Claimable Delays</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Yellow alerts: delays from 20 to 39 minutes. Orange alerts: delays of 40 minutes or more.</p>
           </div>
           <div className="flex items-center gap-2">
+            <UserMenu />
             <Button
               onClick={loadAlerts}
               disabled={loading}
               variant="default"
               size="icon"
-              className="rounded-full h-11 w-11 bg-green-600 hover:bg-green-700 text-white"
+              className="h-11 w-11 rounded-full"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
@@ -231,14 +251,14 @@ const DelayAlerts = () => {
           <Link to="/" className="w-full sm:w-auto">
             <Button
               size="lg"
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-base font-semibold"
+              className="w-full rounded-full px-8 py-6 text-base font-semibold shadow-lg shadow-primary/20 sm:w-auto"
             >
               Back to departures
             </Button>
           </Link>
         </div>
 
-        <div className="text-sm text-muted-foreground mb-4">
+        <div className="mb-4 rounded-2xl border border-border/70 bg-card/70 p-4 text-sm text-muted-foreground">
           {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString("sv-SE")} | Alerts: ${alerts.length}` : "Loading..."}
         </div>
 
@@ -255,6 +275,10 @@ const DelayAlerts = () => {
                   <Button
                     size="sm"
                     onClick={() => {
+                      if (!user) {
+                        promptLoginForClaim();
+                        return;
+                      }
                       setSelectedAlert(dep);
                       setClaimActionStatus("");
                       setClaimDialogOpen(true);

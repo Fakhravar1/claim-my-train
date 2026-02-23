@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { RefreshCw, Train, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import DepartureCard from "@/components/DepartureCard";
+import UserMenu from "@/components/UserMenu";
 import { supabase } from "@/integrations/supabase/client";
 import { ROUTES, Direction } from "@/constants/stops";
 import {
@@ -14,7 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Link } from "react-router-dom";
-import UserMenu from "@/components/UserMenu";
 
 interface Departure {
   line: string;
@@ -253,19 +253,17 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 max-w-4xl">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
         {/* Header */}
-        <div className="mb-8">
-          <div className="mb-2 flex items-start justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Claim My Train</h1>
-              <p className="text-sm text-muted-foreground">
-                Find delayed departures and claim what you&apos;re owed.
-              </p>
-            </div>
-            <UserMenu />
+        <div className="mb-10">
+          <div className="mb-4 space-y-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Scandinavian rail delay tracker</p>
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">Claim My Train</h1>
+            <p className="max-w-2xl text-base text-muted-foreground">
+              Find delayed departures and claim what you&apos;re owed.
+            </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-5">
             <div className="flex items-center gap-2 flex-wrap">
               {historyOffsetMinutes > 0 && (
                 <Button
@@ -279,12 +277,13 @@ const Index = () => {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <UserMenu />
               <Button
                 onClick={() => fetchDepartures()}
                 disabled={loading}
                 variant="default"
                 size="icon"
-                className="rounded-full h-11 w-11 bg-green-600 hover:bg-green-700 text-white"
+                className="h-11 w-11 rounded-full"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </Button>
@@ -292,7 +291,7 @@ const Index = () => {
           </div>
           
           {/* Direction Selector */}
-          <Card className="p-4 bg-card border-border mb-4">
+          <Card className="mb-4 p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3 flex-1">
                 <Train className="h-6 w-6 text-primary" />
@@ -307,7 +306,7 @@ const Index = () => {
                 onClick={() => setDirection(direction === "malmo-departures" ? "hyllie-departures" : "malmo-departures")}
                 variant="outline"
                 size="sm"
-                className="gap-2 w-full sm:w-auto"
+                className="w-full gap-2 sm:w-auto"
               >
                 <ArrowRight className="h-4 w-4" />
                 Switch station
@@ -319,7 +318,7 @@ const Index = () => {
             <Link to="/delay-alerts" className="w-full sm:w-auto">
               <Button
                 size="lg"
-                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-base font-semibold"
+                className="w-full rounded-full px-8 py-6 text-base font-semibold shadow-lg shadow-primary/20 sm:w-auto"
               >
                 Check Claimable Delays
               </Button>
@@ -328,7 +327,7 @@ const Index = () => {
 
           {/* Train Filter */}
           {availableTrainNames.length > 0 && (
-            <Card className="p-4 bg-card border-border mb-4">
+            <Card className="mb-4 p-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                 <span className="text-sm text-muted-foreground whitespace-nowrap">Filter by train:</span>
                 <Select value={selectedTrain} onValueChange={setSelectedTrain}>
@@ -350,7 +349,7 @@ const Index = () => {
 
           {/* Destination Filter */}
           {availableDestinations.length > 0 && (
-            <Card className="p-4 bg-card border-border mb-4">
+            <Card className="mb-4 p-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                 <span className="text-sm text-muted-foreground whitespace-nowrap">Filter by destination:</span>
                 <Select value={selectedDestination} onValueChange={setSelectedDestination}>
@@ -372,8 +371,8 @@ const Index = () => {
         </div>
 
         {/* Last updated */}
-        <div className="text-sm text-muted-foreground mb-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div className="mb-5 text-sm text-muted-foreground">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col">
               <span>Last updated: {lastUpdated.toLocaleTimeString("sv-SE")}</span>
               <span className="text-xs text-muted-foreground">{backendLabel}</span>
@@ -401,7 +400,7 @@ const Index = () => {
         </div>
 
         {/* Departures list */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {loading && departures.length === 0 ? (
             <div className="text-center py-12">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />

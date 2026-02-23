@@ -96,11 +96,11 @@ const DepartureCard = ({ departure }: DepartureCardProps) => {
 
   return (
     <Card
-      className={`p-3 sm:p-4 hover:shadow-md transition-shadow ${
+      className={`p-4 transition-shadow hover:shadow-lg ${
         hasOrangeChange
-          ? "bg-orange-100 border-orange-300"
+          ? "border-rose-200 bg-rose-50/90"
           : hasMajorChange
-          ? "bg-yellow-100 border-yellow-300"
+          ? "border-amber-200 bg-amber-50/90"
           : ""
       }`}
     >
