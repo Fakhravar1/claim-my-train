@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Link } from "react-router-dom";
+import UserMenu from "@/components/UserMenu";
 
 interface Departure {
   line: string;
@@ -255,11 +256,14 @@ const Index = () => {
       <div className="container mx-auto px-4 py-6 max-w-4xl">
         {/* Header */}
         <div className="mb-8">
-          <div className="mb-2">
-            <h1 className="text-3xl font-bold text-foreground">Claim My Train</h1>
-            <p className="text-sm text-muted-foreground">
-              Find delayed departures and claim what you&apos;re owed.
-            </p>
+          <div className="mb-2 flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Claim My Train</h1>
+              <p className="text-sm text-muted-foreground">
+                Find delayed departures and claim what you&apos;re owed.
+              </p>
+            </div>
+            <UserMenu />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div className="flex items-center gap-2 flex-wrap">
