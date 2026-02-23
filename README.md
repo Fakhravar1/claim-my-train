@@ -100,6 +100,36 @@ CLAIM_AUTOFILL_WORKER_URL="http://127.0.0.1:8787/claim"
 CLAIM_AUTOFILL_WORKER_API_KEY=""
 ```
 
+## Test vs production switch
+
+Use frontend env vars to switch between local visible testing and production worker flow:
+
+```sh
+# Local visible testing
+VITE_CLAIM_AUTOFILL_PROVIDER="local"
+VITE_CLAIM_AUTOFILL_LOCAL_URL="http://127.0.0.1:8787/claim"
+
+# Production (Supabase -> hosted worker)
+VITE_CLAIM_AUTOFILL_PROVIDER="supabase"
+```
+
+Recommended workflow:
+1. Test locally with provider `local` until behavior is correct.
+2. Switch to provider `supabase`.
+3. Deploy/push to production.
+
+### Local full-flow test to final summary (safe mode)
+
+To test multi-step autofill up to the final confirmation page locally:
+
+```sh
+set CLAIM_BOT_HEADLESS=false
+set CLAIM_BOT_STOP_BEFORE_SUBMIT=true
+npm run claim-bot
+```
+
+Then trigger the claim from the app. The bot will try to progress all steps and stop before submit when summary is reached.
+
 **Edit a file directly in GitHub**
 
 - Navigate to the desired file(s).

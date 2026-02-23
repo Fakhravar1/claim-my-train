@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const timeoutMs = 12_000;
+    const timeoutMs = Number(Deno.env.get("CLAIM_AUTOFILL_WORKER_TIMEOUT_MS") || "90000");
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
 

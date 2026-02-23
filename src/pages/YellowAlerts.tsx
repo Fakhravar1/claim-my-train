@@ -51,6 +51,13 @@ interface YellowAlertHistoryRow {
 }
 
 const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
+const CLAIM_AUTOFILL_TEST_MODE = import.meta.env.VITE_CLAIM_AUTOFILL_TEST_MODE === "true";
+const CLAIM_AUTOFILL_PROVIDER = import.meta.env.VITE_CLAIM_AUTOFILL_PROVIDER ?? "supabase";
+const CLAIM_AUTOFILL_LOCAL_URL =
+  (import.meta.env.VITE_CLAIM_AUTOFILL_LOCAL_URL as string | undefined) ?? "http://127.0.0.1:8787/claim";
+const CLAIM_AUTOFILL_TEST_DATE = "2026-02-14";
+const CLAIM_AUTOFILL_TEST_MOBILE = "0701234567";
+const CLAIM_AUTOFILL_TEST_TICKET_ID = "2Y3CE88";
 
 const DelayAlerts = () => {
   const [loading, setLoading] = useState(false);
@@ -136,26 +143,48 @@ const DelayAlerts = () => {
   const openClaimFormWithFallback = async (dep: Departure) => {
     try {
       setClaimActionStatus("Trying autofill bot...");
-      const { data, error } = await supabase.functions.invoke("claim-assistant", {
-        body: {
-          departureDate: dep.departureDate,
-          departureTime: dep.departureTime,
-          line: dep.line,
-          lineName: dep.lineName,
-          from: dep.departureStation,
-          to: dep.arrivalStation,
-          scheduledArrivalTime: dep.scheduledArrivalTime ?? null,
-          actualArrivalTime: dep.arrivalTime ?? null,
-          delayMinutes: dep.arrivalDelayMinutes ?? 0,
-        },
-      });
+      const requestBody = {
+        departureDate: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_DATE : dep.departureDate,
+        departureTime: dep.departureTime,
+        line: dep.line,
+        lineName: dep.lineName,
+        from: dep.departureStation,
+        to: dep.arrivalStation,
+        scheduledArrivalTime: dep.scheduledArrivalTime ?? null,
+        actualArrivalTime: dep.arrivalTime ?? null,
+        delayMinutes: dep.arrivalDelayMinutes ?? 0,
+        mobileNumber: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_MOBILE : null,
+        ticketId: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_TICKET_ID : null,
+      };
 
-      if (error) throw error;
-      const result = (data ?? {}) as { success?: boolean; message?: string };
+      let result: { success?: boolean; message?: string };
+      if (CLAIM_AUTOFILL_PROVIDER === "local") {
+        const response = await fetch(CLAIM_AUTOFILL_LOCAL_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        const data = (await response.json()) as { success?: boolean; message?: string };
+        if (!response.ok) {
+          throw new Error(data.message || `Local bot failed (${response.status})`);
+        }
+        result = data;
+      } else {
+        const { data, error } = await supabase.functions.invoke("claim-assistant", {
+          body: requestBody,
+        });
+        if (error) throw error;
+        result = (data ?? {}) as { success?: boolean; message?: string };
+      }
+
       if (!result.success) {
         throw new Error(result.message || "autofill bot failed");
       }
-      setClaimActionStatus("Autofill bot launched. Continue on the opened claim page.");
+      setClaimActionStatus(
+        CLAIM_AUTOFILL_TEST_MODE
+          ? "Autofill bot launched in test mode (14 Feb + dummy ticket/app fields)."
+          : "Autofill bot launched. Continue on the opened claim page."
+      );
       return;
     } catch {
       window.open(CLAIM_START_URL, "_blank", "noopener,noreferrer");

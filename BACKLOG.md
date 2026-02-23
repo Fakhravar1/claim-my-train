@@ -5,3 +5,19 @@
   - Replace local Playwright dependency with a hosted automation worker/API.
   - Add queue + status tracking so users can start a claim flow from mobile and continue safely.
   - Verify legal/TOS compliance before enabling production automation.
+- Ensure claim-flow field mapping always comes from selected claimable card data:
+  - Pass station, route, and time values from card payload (not hardcoded station assumptions).
+  - Support future multi-origin/multi-destination expansion without changing bot selectors.
+- Add user payout preference setting in app:
+  - Let user choose default claim payout option: `Värdekod` or `Kontant utbetalning till svensk bank`.
+  - Persist preference and pass it into claim autofill so bot selects the chosen option automatically.
+- Add individual user registration/auth support via Lovable:
+  - Support account registration/login with Lovable user model.
+  - Integrate Google authentication for sign-in.
+- Add admin-only manual-claims control page:
+  - Create a secret/admin-only page listing claims that failed automatic bot submission.
+  - Include all data needed for manual handling (trip details, delay context, contact/claim fields, timestamps, failure reason).
+- Plan multi-operator claim automation architecture (beyond Skånetrafiken):
+  - Keep current bot scoped to Skånetrafiken only for now.
+  - Evaluate per-operator bot adapters (e.g. Västtrafik, SL, SJ) vs a single generic bot with operator-specific strategy modules.
+  - Define a shared claim data contract and orchestration layer so new operators can be added without breaking existing flows.
