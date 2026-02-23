@@ -106,10 +106,28 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background: linear-gradient(
+      170deg,
+      hsl(30 40% 95%) 0%,
+      hsl(35 35% 96%) 25%,
+      hsl(20 30% 94%) 50%,
+      hsl(340 20% 93%) 75%,
+      hsl(280 15% 94%) 100%
+    );
+    min-height: 100vh;
+  }
+
+  .dark body {
+    background: linear-gradient(
+      170deg,
+      hsl(20 20% 10%) 0%,
+      hsl(340 15% 9%) 50%,
+      hsl(270 12% 10%) 100%
+    );
   }
 
   h1, h2, h3, h4 {
