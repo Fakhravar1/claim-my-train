@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -71,6 +71,33 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       train_names: {
         Row: {
           created_at: string
@@ -104,6 +131,7 @@ export type Database = {
           departure_datetime: string
           departure_station: string
           direction: string
+          event_key: string
           id: string
           line: string
           line_name: string
@@ -117,6 +145,7 @@ export type Database = {
           departure_datetime: string
           departure_station: string
           direction: string
+          event_key: string
           id?: string
           line: string
           line_name: string
@@ -130,6 +159,7 @@ export type Database = {
           departure_datetime?: string
           departure_station?: string
           direction?: string
+          event_key?: string
           id?: string
           line?: string
           line_name?: string
@@ -143,6 +173,7 @@ export type Database = {
     }
     Functions: {
       delete_old_departures: { Args: never; Returns: undefined }
+      trigger_claim_collection: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
