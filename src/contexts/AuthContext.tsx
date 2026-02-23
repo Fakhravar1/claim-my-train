@@ -7,6 +7,12 @@ interface Profile {
   email: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  claim_email: string | null;
+  claim_mobile: string | null;
+  claim_ticket_id: string | null;
+  claim_personnummer: string | null;
+  is_period_ticket: boolean;
+  ticket_valid_until: string | null;
 }
 
 interface AuthContextType {
@@ -14,7 +20,7 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (nextPath?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -27,11 +33,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, avatar_url")
+      .select("id, email, full_name, avatar_url, claim_email, claim_mobile, claim_ticket_id, claim_personnummer, is_period_ticket, ticket_valid_until")
       .eq("id", userId)
       .single();
+    if (error) {
+      const { data: fallbackData } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, avatar_url")
+        .eq("id", userId)
+        .single();
+      setProfile({
+        ...fallbackData,
+        claim_email: null,
+        claim_mobile: null,
+        claim_ticket_id: null,
+        claim_personnummer: null,
+        is_period_ticket: false,
+        ticket_valid_until: null,
+      } as Profile);
+      return;
+    }
     setProfile(data);
   };
 
@@ -61,10 +84,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (nextPath?: string) => {
+    const safeNextPath = nextPath?.startsWith("/") ? nextPath : "/";
+    const redirectTo = `${window.location.origin}/login?next=${encodeURIComponent(safeNextPath ?? "/")}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo },
     });
   };
 

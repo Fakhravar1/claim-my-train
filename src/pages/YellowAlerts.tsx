@@ -62,6 +62,15 @@ const CLAIM_AUTOFILL_TEST_DATE = "2026-02-14";
 const CLAIM_AUTOFILL_TEST_MOBILE = "0701234567";
 const CLAIM_AUTOFILL_TEST_TICKET_ID = "2Y3CE88";
 
+const isClaimOutsideTicketValidity = (
+  departureDate: string,
+  isPeriodTicket?: boolean,
+  ticketValidUntil?: string | null
+) => {
+  if (!isPeriodTicket || !ticketValidUntil) return false;
+  return departureDate > ticketValidUntil.slice(0, 10);
+};
+
 const DelayAlerts = () => {
   const [loading, setLoading] = useState(false);
   const [directionScope, setDirectionScope] = useState<"both" | Direction>("both");
@@ -70,7 +79,7 @@ const DelayAlerts = () => {
   const [selectedAlert, setSelectedAlert] = useState<Departure | null>(null);
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
   const [claimActionStatus, setClaimActionStatus] = useState("");
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -163,8 +172,10 @@ const DelayAlerts = () => {
         scheduledArrivalTime: dep.scheduledArrivalTime ?? null,
         actualArrivalTime: dep.arrivalTime ?? null,
         delayMinutes: dep.arrivalDelayMinutes ?? 0,
-        mobileNumber: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_MOBILE : null,
-        ticketId: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_TICKET_ID : null,
+        mobileNumber: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_MOBILE : (profile?.claim_mobile ?? null),
+        ticketId: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_TICKET_ID : (profile?.claim_ticket_id ?? null),
+        personnummer: profile?.claim_personnummer ?? null,
+        email: profile?.claim_email ?? user.email ?? null,
       };
 
       let result: { success?: boolean; message?: string };
@@ -313,6 +324,17 @@ const DelayAlerts = () => {
                 <p><span className="font-semibold">Actual arrival:</span> {selectedAlert.arrivalTime ?? "-"}</p>
                 <p><span className="font-semibold">Delay:</span> +{selectedAlert.arrivalDelayMinutes ?? 0} min</p>
               </Card>
+
+              {isClaimOutsideTicketValidity(
+                selectedAlert.departureDate,
+                profile?.is_period_ticket,
+                profile?.ticket_valid_until
+              ) && (
+                <Card className="border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  Warning: this claim date is outside your saved period ticket validity
+                  ({profile?.ticket_valid_until}). Update your ticket validity in settings if needed.
+                </Card>
+              )}
 
               <Button
                 type="button"

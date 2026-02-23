@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { LogOut, LogIn } from "lucide-react";
+import { LogOut, LogIn, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const UserMenu = () => {
@@ -48,6 +48,12 @@ const UserMenu = () => {
             <p className="text-sm font-medium">{profile?.full_name ?? "User"}</p>
             <p className="text-xs text-muted-foreground">{user.email}</p>
           </div>
+          <Link to="/settings">
+            <Button variant="outline" size="sm" className="w-full gap-2">
+              <Settings className="h-4 w-4" />
+              Claim settings
+            </Button>
+          </Link>
           <Button variant="outline" size="sm" className="w-full gap-2" onClick={signOut}>
             <LogOut className="h-4 w-4" />
             Sign out
