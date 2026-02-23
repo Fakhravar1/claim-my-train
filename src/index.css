@@ -8,51 +8,51 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 28 42% 97%;
+    --background: 28 70% 95%;
     --foreground: 222 22% 16%;
 
-    --card: 32 50% 99%;
+    --card: 32 78% 98%;
     --card-foreground: 222 22% 16%;
 
-    --popover: 32 50% 99%;
+    --popover: 32 78% 98%;
     --popover-foreground: 222 22% 16%;
 
-    --primary: 14 78% 56%;
+    --primary: 16 86% 56%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 26 42% 93%;
-    --secondary-foreground: 220 24% 24%;
+    --secondary: 24 72% 88%;
+    --secondary-foreground: 220 22% 22%;
 
     --muted: 28 32% 92%;
     --muted-foreground: 220 10% 42%;
 
-    --accent: 338 44% 88%;
-    --accent-foreground: 332 30% 28%;
+    --accent: 334 76% 83%;
+    --accent-foreground: 332 42% 24%;
 
     --destructive: 1 77% 57%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 24 28% 84%;
-    --input: 24 30% 88%;
-    --ring: 14 78% 56%;
+    --border: 24 46% 76%;
+    --input: 24 54% 84%;
+    --ring: 16 86% 56%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 28 42% 97%;
+    --sidebar-background: 28 70% 95%;
 
     --sidebar-foreground: 222 22% 16%;
 
-    --sidebar-primary: 14 78% 56%;
+    --sidebar-primary: 16 86% 56%;
 
     --sidebar-primary-foreground: 0 0% 98%;
 
-    --sidebar-accent: 26 42% 93%;
+    --sidebar-accent: 24 72% 88%;
 
     --sidebar-accent-foreground: 220 24% 24%;
 
-    --sidebar-border: 24 28% 84%;
+    --sidebar-border: 24 46% 76%;
 
-    --sidebar-ring: 14 78% 56%;
+    --sidebar-ring: 16 86% 56%;
   }
 
   .dark {
@@ -65,32 +65,32 @@ All colors MUST be HSL.
     --popover: 226 24% 13%;
     --popover-foreground: 30 40% 96%;
 
-    --primary: 16 88% 64%;
+    --primary: 16 92% 66%;
     --primary-foreground: 222 47% 11%;
 
-    --secondary: 226 20% 18%;
+    --secondary: 228 26% 22%;
     --secondary-foreground: 30 40% 96%;
 
     --muted: 226 18% 20%;
     --muted-foreground: 30 14% 72%;
 
-    --accent: 335 30% 26%;
-    --accent-foreground: 26 74% 92%;
+    --accent: 336 46% 34%;
+    --accent-foreground: 24 84% 93%;
 
     --destructive: 1 70% 56%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 226 18% 24%;
     --input: 226 18% 22%;
-    --ring: 16 88% 64%;
+    --ring: 16 92% 66%;
     --sidebar-background: 226 26% 10%;
     --sidebar-foreground: 30 40% 96%;
-    --sidebar-primary: 16 88% 64%;
+    --sidebar-primary: 16 92% 66%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 226 20% 18%;
     --sidebar-accent-foreground: 30 40% 96%;
     --sidebar-border: 226 18% 24%;
-    --sidebar-ring: 16 88% 64%;
+    --sidebar-ring: 16 92% 66%;
   }
 }
 
@@ -103,8 +103,9 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
     font-family: "Inter", "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
     background-image:
-      radial-gradient(1200px 420px at 15% -10%, hsl(14 100% 86% / 0.5), transparent 62%),
-      radial-gradient(900px 380px at 100% -15%, hsl(338 75% 85% / 0.35), transparent 60%);
+      radial-gradient(1200px 520px at 12% -8%, hsl(16 100% 74% / 0.72), transparent 64%),
+      radial-gradient(980px 460px at 96% -14%, hsl(336 100% 78% / 0.58), transparent 62%),
+      linear-gradient(180deg, hsl(27 95% 94%) 0%, hsl(28 62% 96%) 45%, hsl(0 0% 99%) 100%);
     background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     text-rendering: geometricPrecision;

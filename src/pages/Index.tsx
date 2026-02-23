@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RefreshCw, Train, ArrowRight } from "lucide-react";
+import { RefreshCw, Train } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import DepartureCard from "@/components/DepartureCard";
 import UserMenu from "@/components/UserMenu";
 import { supabase } from "@/integrations/supabase/client";
-import { ROUTES, Direction } from "@/constants/stops";
+import { STOPS, Direction } from "@/constants/stops";
 import {
   Select,
   SelectContent,
@@ -43,6 +43,8 @@ interface EdgeFunctionResponse {
   updatedAt: string;
   departures: Departure[];
 }
+
+type RouteTerminal = "MALMO_C" | "COPENHAGEN_H";
 
 const USE_LOCAL_FUNCTIONS = import.meta.env.VITE_USE_LOCAL_FUNCTIONS === "true";
 const LOCAL_FUNCTIONS_BASE_URL = (import.meta.env.VITE_LOCAL_FUNCTIONS_URL as string | undefined)?.replace(/\/$/, "");
@@ -81,12 +83,13 @@ const Index = () => {
   const [departures, setDepartures] = useState<Departure[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [direction, setDirection] = useState<Direction>("malmo-departures");
+  const [fromStop, setFromStop] = useState<RouteTerminal>("MALMO_C");
+  const [toStop, setToStop] = useState<RouteTerminal>("COPENHAGEN_H");
   const [selectedTrain, setSelectedTrain] = useState<string>("all");
-  const [selectedDestination, setSelectedDestination] = useState<string>("all");
   const [storedTrainNames, setStoredTrainNames] = useState<string[]>([]);
   const [historyOffsetMinutes, setHistoryOffsetMinutes] = useState<number>(0);
   const { toast } = useToast();
+  const direction: Direction = fromStop === "MALMO_C" ? "malmo-departures" : "hyllie-departures";
 
   const fetchDepartures = async (offsetMinutes = historyOffsetMinutes) => {
     const clampedOffset = Math.max(0, Math.min(360, offsetMinutes));
@@ -143,54 +146,7 @@ const Index = () => {
     return allNames.sort();
   }, [departures, storedTrainNames]);
 
-  // Extract unique destinations
-  const destinations = useMemo(() => {
-    const dests = departures
-      .map(d => d.arrivalStation)
-      .filter((dest, index, self) => self.indexOf(dest) === index)
-      .sort();
-    return dests;
-  }, [departures]);
-
-  // Build lookup tables for cross-filtering
-  const trainsByDestination = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    departures.forEach((d) => {
-      const set = map.get(d.arrivalStation) ?? new Set<string>();
-      set.add(d.lineName);
-      map.set(d.arrivalStation, set);
-    });
-    return map;
-  }, [departures]);
-
-  const destinationsByTrain = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    departures.forEach((d) => {
-      const set = map.get(d.lineName) ?? new Set<string>();
-      set.add(d.arrivalStation);
-      map.set(d.lineName, set);
-    });
-    return map;
-  }, [departures]);
-
-  // Options constrained by the other filter
-  const availableTrainNames = useMemo(() => {
-    if (selectedDestination === "all") {
-      return trainNames;
-    }
-    const trainsForDestination = trainsByDestination.get(selectedDestination);
-    if (!trainsForDestination) return [];
-    return trainNames.filter((name) => trainsForDestination.has(name));
-  }, [selectedDestination, trainNames, trainsByDestination]);
-
-  const availableDestinations = useMemo(() => {
-    if (selectedTrain === "all") {
-      return destinations;
-    }
-    const destsForTrain = destinationsByTrain.get(selectedTrain);
-    if (!destsForTrain) return [];
-    return destinations.filter((dest) => destsForTrain.has(dest));
-  }, [selectedTrain, destinations, destinationsByTrain]);
+  const availableTrainNames = useMemo(() => trainNames, [trainNames]);
 
   // Reset selections if they become invalid after cross-filtering
   useEffect(() => {
@@ -199,26 +155,16 @@ const Index = () => {
     }
   }, [availableTrainNames, selectedTrain]);
 
-  useEffect(() => {
-    if (selectedDestination !== "all" && !availableDestinations.includes(selectedDestination)) {
-      setSelectedDestination("all");
-    }
-  }, [availableDestinations, selectedDestination]);
-
-  // Filter departures based on selected train and destination
+  // Filter departures based on selected train
   const filteredDepartures = useMemo(() => {
     let filtered = departures;
     
     if (selectedTrain !== "all") {
       filtered = filtered.filter(d => d.lineName === selectedTrain);
     }
-    
-    if (selectedDestination !== "all") {
-      filtered = filtered.filter(d => d.arrivalStation === selectedDestination);
-    }
 
     return filtered;
-  }, [departures, selectedTrain, selectedDestination]);
+  }, [departures, selectedTrain]);
 
   useEffect(() => {
     fetchDepartures();
@@ -238,6 +184,16 @@ const Index = () => {
   const handleResetOffset = () => {
     setHistoryOffsetMinutes(0);
     fetchDepartures(0);
+  };
+
+  const handleFromChange = (value: RouteTerminal) => {
+    setFromStop(value);
+    setToStop(value === "MALMO_C" ? "COPENHAGEN_H" : "MALMO_C");
+  };
+
+  const handleToChange = (value: RouteTerminal) => {
+    setToStop(value);
+    setFromStop(value === "MALMO_C" ? "COPENHAGEN_H" : "MALMO_C");
   };
 
   const offsetLabel =
@@ -292,25 +248,45 @@ const Index = () => {
           
           {/* Direction Selector */}
           <Card className="mb-4 p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3 flex-1">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
                 <Train className="h-6 w-6 text-primary" />
                 <div className="flex flex-col">
                   <span className="text-sm text-muted-foreground">Route</span>
                   <span className="font-semibold text-foreground">
-                    From {ROUTES[direction].origin.shortName}
+                    {fromStop === "MALMO_C" ? STOPS.MALMO_C.shortName : STOPS.COPENHAGEN_H.shortName} to{" "}
+                    {toStop === "MALMO_C" ? STOPS.MALMO_C.shortName : STOPS.COPENHAGEN_H.shortName}
                   </span>
                 </div>
               </div>
-              <Button
-                onClick={() => setDirection(direction === "malmo-departures" ? "hyllie-departures" : "malmo-departures")}
-                variant="outline"
-                size="sm"
-                className="w-full gap-2 sm:w-auto"
-              >
-                <ArrowRight className="h-4 w-4" />
-                Switch station
-              </Button>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">From</span>
+                  <Select value={fromStop} onValueChange={(value) => handleFromChange(value as RouteTerminal)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MALMO_C">{STOPS.MALMO_C.shortName}</SelectItem>
+                      <SelectItem value="COPENHAGEN_H">{STOPS.COPENHAGEN_H.shortName}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">To</span>
+                  <Select value={toStop} onValueChange={(value) => handleToChange(value as RouteTerminal)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MALMO_C">{STOPS.MALMO_C.shortName}</SelectItem>
+                      <SelectItem value="COPENHAGEN_H">{STOPS.COPENHAGEN_H.shortName}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </Card>
 
@@ -347,27 +323,6 @@ const Index = () => {
             </Card>
           )}
 
-          {/* Destination Filter */}
-          {availableDestinations.length > 0 && (
-            <Card className="mb-4 p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Filter by destination:</span>
-                <Select value={selectedDestination} onValueChange={setSelectedDestination}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Show all destinations" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Show all</SelectItem>
-                    {availableDestinations.map((dest) => (
-                      <SelectItem key={dest} value={dest}>
-                        {dest}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </Card>
-          )}
         </div>
 
         {/* Last updated */}
@@ -409,9 +364,7 @@ const Index = () => {
           ) : filteredDepartures.length === 0 ? (
             <Card className="p-8 text-center">
               <p className="text-muted-foreground">
-                {selectedTrain === "all" && selectedDestination === "all" 
-                  ? "No departures found" 
-                  : "No departures match the selected filters"}
+                {selectedTrain === "all" ? "No departures found" : "No departures match the selected train"}
               </p>
             </Card>
           ) : (
