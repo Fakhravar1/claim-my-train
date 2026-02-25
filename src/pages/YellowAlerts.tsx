@@ -92,6 +92,39 @@ const formatDayShift = (diffDays: number) => {
   return diffDays > 0 ? `+${diffDays} days` : `${diffDays} days`;
 };
 
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+
+const stockholmDateFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const stockholmTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+const toStockholmDate = (isoDateTime: string) => {
+  const parsed = new Date(isoDateTime);
+  if (Number.isNaN(parsed.getTime())) {
+    return isoDateTime.split("T")[0] ?? "";
+  }
+  return stockholmDateFormatter.format(parsed);
+};
+
+const toStockholmTime = (isoDateTime: string) => {
+  const parsed = new Date(isoDateTime);
+  if (Number.isNaN(parsed.getTime())) {
+    return isoDateTime.split("T")[1]?.slice(0, 8) ?? "";
+  }
+  return stockholmTimeFormatter.format(parsed);
+};
+
 const normalizeStation = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
 
 const stationMatchesStop = (
@@ -163,11 +196,11 @@ const DelayAlerts = () => {
             stationMatchesStop(row.arrival_station, toStop)
         )
         .map((row) => {
-          const departureDate = row.departure_datetime.split("T")[0] ?? "";
-          const departureTime = row.departure_datetime.split("T")[1]?.slice(0, 8) ?? "";
-          const arrivalDate = row.actual_arrival_datetime.split("T")[0] ?? "";
-          const arrivalTime = row.actual_arrival_datetime.split("T")[1]?.slice(0, 8) ?? "";
-          const scheduledArrivalTime = row.scheduled_arrival_datetime.split("T")[1]?.slice(0, 8) ?? "";
+          const departureDate = toStockholmDate(row.departure_datetime);
+          const departureTime = toStockholmTime(row.departure_datetime);
+          const arrivalDate = toStockholmDate(row.actual_arrival_datetime);
+          const arrivalTime = toStockholmTime(row.actual_arrival_datetime);
+          const scheduledArrivalTime = toStockholmTime(row.scheduled_arrival_datetime);
           return {
             line: row.line,
             operator: "",
