@@ -136,6 +136,13 @@ const departureKey = (dep: RealtimeDeparture) =>
     dep.route?.destination?.name ?? "",
   ].join("|");
 
+const sourceFromRequest = (req: Request, mode?: string) => {
+  if (mode === "collect-corridor") return "collector";
+  const userAgent = req.headers.get("user-agent")?.toLowerCase() ?? "";
+  if (userAgent.includes("pg_net")) return "scheduled";
+  return "user";
+};
+
 const isCopenhagen = (text: string) => {
   const t = normalizeText(text);
   return (
@@ -254,6 +261,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+    const requestSource = sourceFromRequest(req, mode);
 
     if (mode === "collect-corridor") {
       if (!supabase) throw new Error("Supabase env vars missing, cannot collect corridor.");
@@ -421,6 +429,20 @@ Deno.serve(async (req) => {
     const destination = destinationId
       ? Object.values(STOPS).find((s) => s.id === destinationId) ?? route.destination
       : route.destination;
+
+    if (supabase) {
+      const { error: eventError } = await supabase.from("api_call_events").insert({
+        source: requestSource,
+        direction: normalizedDirection,
+        origin_stop_id: origin.id,
+        origin_stop_name: origin.name,
+        destination_stop_id: destination.id,
+        destination_stop_name: destination.name,
+      });
+      if (eventError) {
+        console.error("Error storing api_call_events row:", eventError);
+      }
+    }
     cacheKey = `${normalizedDirection}|${requestedShiftMinutes}|${origin.id}|${destination.id}`;
     const cachedFresh = getCachedPayload(cacheKey, RESPONSE_CACHE_TTL_MS);
     if (cachedFresh) {

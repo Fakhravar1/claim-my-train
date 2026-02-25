@@ -40,6 +40,17 @@ type SeverityPoint = {
   opportunities: number;
 };
 
+type SourceBreakdownPoint = {
+  source: "user" | "scheduled" | "collector";
+  calls: number;
+};
+
+type TopRoutePoint = {
+  origin: string;
+  destination: string;
+  searches: number;
+};
+
 type AnalyticsPayload = {
   daily_calls: Array<{ day: string; calls: number }>;
   funnel: FunnelPoint[];
@@ -65,6 +76,8 @@ type AnalyticsPayload = {
     avg_gap_minutes: number;
     max_gap_minutes: number;
   };
+  source_breakdown: SourceBreakdownPoint[];
+  top_user_routes: TopRoutePoint[];
 };
 
 const chartConfig = {
@@ -122,6 +135,8 @@ const AdminApiUsage = () => {
   const [byHour, setByHour] = useState<ByHourPoint[]>([]);
   const [byWeekday, setByWeekday] = useState<ByWeekdayPoint[]>([]);
   const [severity, setSeverity] = useState<SeverityPoint[]>([]);
+  const [sourceBreakdown, setSourceBreakdown] = useState<SourceBreakdownPoint[]>([]);
+  const [topRoutes, setTopRoutes] = useState<TopRoutePoint[]>([]);
   const [uniqueImpacted, setUniqueImpacted] = useState({
     unique_trains: 0,
     unique_stations: 0,
@@ -171,6 +186,8 @@ const AdminApiUsage = () => {
           setByHour(typed.by_hour ?? []);
           setByWeekday(typed.by_weekday ?? []);
           setSeverity(typed.severity ?? []);
+          setSourceBreakdown(typed.source_breakdown ?? []);
+          setTopRoutes(typed.top_user_routes ?? []);
           setUniqueImpacted(
             typed.unique_impacted ?? { unique_trains: 0, unique_stations: 0, station_touches: 0 }
           );
@@ -227,6 +244,8 @@ const AdminApiUsage = () => {
           setByHour([]);
           setByWeekday([]);
           setSeverity([]);
+          setSourceBreakdown([]);
+          setTopRoutes([]);
           setUniqueImpacted({ unique_trains: 0, unique_stations: 0, station_touches: 0 });
           setQuality({
             calls_count: uniqueCalls.size,
@@ -285,6 +304,21 @@ const AdminApiUsage = () => {
       hour12: false,
     });
   }, [freshness.latest_fetch]);
+
+  const sourceBreakdownChartData = useMemo(() => {
+    const order: Array<SourceBreakdownPoint["source"]> = ["user", "scheduled", "collector"];
+    const labels: Record<SourceBreakdownPoint["source"], string> = {
+      user: "User",
+      scheduled: "Scheduled",
+      collector: "Collector",
+    };
+    return order
+      .map((source) => {
+        const row = sourceBreakdown.find((item) => item.source === source);
+        return row ? { source: labels[source], calls: row.calls } : null;
+      })
+      .filter((row): row is { source: string; calls: number } => Boolean(row));
+  }, [sourceBreakdown]);
 
   if (loading) return null;
   if (!user) return <Navigate to="/login?next=%2Fadmin%2Fapi-usage" replace />;
@@ -503,6 +537,20 @@ const AdminApiUsage = () => {
                   API quality and efficiency
                   <CardHint text="Operational metrics for how efficiently API fetches produce usable data." />
                 </p>
+                {sourceBreakdown.length > 0 && (
+                  <div className="mb-3 rounded-lg border border-border/70 p-3 text-sm">
+                    <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Requested vs scheduled calls</p>
+                    <ChartContainer config={chartConfig} className="h-[190px] w-full">
+                      <BarChart data={sourceBreakdownChartData}>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="source" />
+                        <YAxis allowDecimals={false} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="calls" fill="var(--color-calls)" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="rounded-lg border border-border/70 p-3" title="Estimated number of unique API fetch events.">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Calls</p>
@@ -529,6 +577,27 @@ const AdminApiUsage = () => {
                     <p className="mt-1 text-xl font-semibold">{quality.claimable_per_100_calls.toFixed(1)}</p>
                   </div>
                 </div>
+              </Card>
+
+              <Card className="p-4">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  Most searched station pairs (user requests)
+                  <CardHint text="Top origin/destination pairs requested directly by users." />
+                </p>
+                {topRoutes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No user route search data yet.</p>
+                ) : (
+                  <div className="space-y-2 text-sm">
+                    {topRoutes.map((route, idx) => (
+                      <div key={`${route.origin}-${route.destination}-${idx}`} className="flex items-center justify-between rounded-lg border border-border/70 p-2">
+                        <span className="truncate">
+                          {route.origin} {"->"} {route.destination}
+                        </span>
+                        <span className="ml-3 font-semibold">{route.searches.toLocaleString("sv-SE")}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Card>
             </TabsContent>
           </Tabs>
