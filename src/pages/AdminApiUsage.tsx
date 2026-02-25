@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, LineChart, Line } from "recharts";
+import { Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UserMenu from "@/components/UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -87,6 +89,16 @@ const formatDayLabel = (dayKey: string) => {
   if (Number.isNaN(date.getTime())) return dayKey;
   return date.toLocaleDateString("sv-SE", { month: "short", day: "numeric" });
 };
+
+const CardHint = ({ text }: { text: string }) => (
+  <span
+    title={text}
+    className="inline-flex cursor-help items-center text-muted-foreground/80 transition-colors hover:text-foreground"
+    aria-label={text}
+  >
+    <Info className="h-3.5 w-3.5" />
+  </span>
+);
 
 const toStockholmDayKey = (isoTimestamp: string) => {
   const date = new Date(isoTimestamp);
@@ -304,174 +316,223 @@ const AdminApiUsage = () => {
           </Button>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {loadingUsage && <Card className="p-4"><p className="text-sm text-muted-foreground">Loading usage data...</p></Card>}
+        {!loadingUsage && error && (
           <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total calls</p>
-            <p className="mt-1 text-2xl font-semibold">{totals.totalCalls.toLocaleString("sv-SE")}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Active days</p>
-            <p className="mt-1 text-2xl font-semibold">{totals.activeDays.toLocaleString("sv-SE")}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Avg / active day</p>
-            <p className="mt-1 text-2xl font-semibold">{totals.avgPerActiveDay.toFixed(1)}</p>
-          </Card>
-        </div>
-
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Unique trains impacted</p>
-            <p className="mt-1 text-2xl font-semibold">{uniqueImpacted.unique_trains.toLocaleString("sv-SE")}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Unique stations impacted</p>
-            <p className="mt-1 text-2xl font-semibold">{uniqueImpacted.unique_stations.toLocaleString("sv-SE")}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Station touches</p>
-            <p className="mt-1 text-2xl font-semibold">{uniqueImpacted.station_touches.toLocaleString("sv-SE")}</p>
-          </Card>
-        </div>
-
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Latest ingestion</p>
-            <p className="mt-1 text-sm font-semibold">{latestFetchLabel}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Minutes since last fetch</p>
-            <p className="mt-1 text-2xl font-semibold">{freshness.minutes_since_last_fetch.toFixed(1)}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Avg / max gap (min)</p>
-            <p className="mt-1 text-2xl font-semibold">
-              {freshness.avg_gap_minutes.toFixed(1)} / {freshness.max_gap_minutes.toFixed(1)}
-            </p>
-          </Card>
-        </div>
-
-        <Card className="p-4">
-          {loadingUsage ? (
-            <p className="text-sm text-muted-foreground">Loading usage data...</p>
-          ) : error ? (
             <p className="text-sm text-destructive">{error}</p>
-          ) : data.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No usage found for selected period.</p>
-          ) : (
-            <ChartContainer config={chartConfig} className="h-[340px] w-full">
-              <BarChart data={data}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={24} />
-                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="calls" fill="var(--color-calls)" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ChartContainer>
-          )}
-        </Card>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card className="p-4">
-            <p className="mb-2 text-sm font-semibold">Claim opportunity funnel</p>
-            {funnel.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No funnel data available.</p>
-            ) : (
-              <ChartContainer config={chartConfig} className="h-[280px] w-full">
-                <BarChart data={funnel} layout="vertical" margin={{ left: 32 }}>
-                  <CartesianGrid horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="stage" width={180} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="value" fill="var(--color-value)" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ChartContainer>
-            )}
           </Card>
+        )}
 
-          <Card className="p-4">
-            <p className="mb-2 text-sm font-semibold">By hour of day</p>
-            {byHour.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No claim opportunities for selected period.</p>
-            ) : (
-              <ChartContainer config={chartConfig} className="h-[280px] w-full">
-                <LineChart data={byHour}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey="hour" />
-                  <YAxis allowDecimals={false} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="opportunities" stroke="var(--color-opportunities)" strokeWidth={2} dot />
-                </LineChart>
-              </ChartContainer>
-            )}
-          </Card>
-        </div>
+        {!loadingUsage && (
+          <Tabs defaultValue="overview" className="space-y-4">
+            <TabsList className="!grid h-auto w-full !grid-cols-3 gap-1 p-1">
+              <TabsTrigger value="overview" className="w-full">Overview</TabsTrigger>
+              <TabsTrigger value="opportunities" className="w-full">Opportunities</TabsTrigger>
+              <TabsTrigger value="quality" className="w-full">Quality & Health</TabsTrigger>
+            </TabsList>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card className="p-4">
-            <p className="mb-2 text-sm font-semibold">By weekday</p>
-            {byWeekday.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No weekday data for selected period.</p>
-            ) : (
-              <ChartContainer config={chartConfig} className="h-[260px] w-full">
-                <BarChart data={byWeekday}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis dataKey="weekday" />
-                  <YAxis allowDecimals={false} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="opportunities" fill="var(--color-opportunities)" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ChartContainer>
-            )}
-          </Card>
+            <TabsContent value="overview" className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Total calls
+                    <CardHint text="Estimated number of upstream API fetch events in the selected period." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{totals.totalCalls.toLocaleString("sv-SE")}</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Active days
+                    <CardHint text="Number of calendar days with at least one recorded API call." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{totals.activeDays.toLocaleString("sv-SE")}</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Avg / active day
+                    <CardHint text="Average API calls per day, counting only days with activity." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{totals.avgPerActiveDay.toFixed(1)}</p>
+                </Card>
+              </div>
 
-          <Card className="p-4">
-            <p className="mb-2 text-sm font-semibold">API quality and efficiency</p>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border border-border/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Calls</p>
-                <p className="mt-1 text-xl font-semibold">{quality.calls_count.toLocaleString("sv-SE")}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Unique trains impacted
+                    <CardHint text="Distinct train line IDs that had claim opportunities in the selected period." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{uniqueImpacted.unique_trains.toLocaleString("sv-SE")}</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Unique stations impacted
+                    <CardHint text="Distinct station names involved in claim opportunities (departure or arrival)." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{uniqueImpacted.unique_stations.toLocaleString("sv-SE")}</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Station touches
+                    <CardHint text="Departure station count plus arrival station count across claim opportunities." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{uniqueImpacted.station_touches.toLocaleString("sv-SE")}</p>
+                </Card>
               </div>
-              <div className="rounded-lg border border-border/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Rows captured</p>
-                <p className="mt-1 text-xl font-semibold">{quality.total_rows.toLocaleString("sv-SE")}</p>
-              </div>
-              <div className="rounded-lg border border-border/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Avg rows/call</p>
-                <p className="mt-1 text-xl font-semibold">{quality.avg_rows_per_call.toFixed(1)}</p>
-              </div>
-              <div className="rounded-lg border border-border/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">P95 rows/call</p>
-                <p className="mt-1 text-xl font-semibold">{quality.p95_rows_per_call.toFixed(1)}</p>
-              </div>
-              <div className="rounded-lg border border-border/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Delayed rows</p>
-                <p className="mt-1 text-xl font-semibold">{quality.delayed_rows.toLocaleString("sv-SE")}</p>
-              </div>
-              <div className="rounded-lg border border-border/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Opportunities / 100 calls</p>
-                <p className="mt-1 text-xl font-semibold">{quality.claimable_per_100_calls.toFixed(1)}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
 
-        <Card className="mt-4 p-4">
-          <p className="mb-2 text-sm font-semibold">Delay severity distribution (claim opportunities)</p>
-          {severity.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No severity data for selected period.</p>
-          ) : (
-            <ChartContainer config={chartConfig} className="h-[260px] w-full">
-              <BarChart data={severity}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="bucket" />
-                <YAxis allowDecimals={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="opportunities" fill="var(--color-opportunities)" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ChartContainer>
-          )}
-        </Card>
+              <Card className="p-4">
+                {data.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No usage found for selected period.</p>
+                ) : (
+                  <ChartContainer config={chartConfig} className="h-[340px] w-full">
+                    <BarChart data={data}>
+                      <CartesianGrid vertical={false} />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={24} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="calls" fill="var(--color-calls)" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ChartContainer>
+                )}
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="opportunities" className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Card className="p-4">
+                  <p className="mb-2 text-sm font-semibold">Claim opportunity funnel</p>
+                  {funnel.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No funnel data available.</p>
+                  ) : (
+                    <ChartContainer config={chartConfig} className="h-[280px] w-full">
+                      <BarChart data={funnel} layout="vertical" margin={{ left: 32 }}>
+                        <CartesianGrid horizontal={false} />
+                        <XAxis type="number" allowDecimals={false} />
+                        <YAxis type="category" dataKey="stage" width={180} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="value" fill="var(--color-value)" radius={[0, 8, 8, 0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  )}
+                </Card>
+
+                <Card className="p-4">
+                  <p className="mb-2 text-sm font-semibold">By hour of day</p>
+                  {byHour.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No claim opportunities for selected period.</p>
+                  ) : (
+                    <ChartContainer config={chartConfig} className="h-[280px] w-full">
+                      <LineChart data={byHour}>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="hour" />
+                        <YAxis allowDecimals={false} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Line type="monotone" dataKey="opportunities" stroke="var(--color-opportunities)" strokeWidth={2} dot />
+                      </LineChart>
+                    </ChartContainer>
+                  )}
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Card className="p-4">
+                  <p className="mb-2 text-sm font-semibold">By weekday</p>
+                  {byWeekday.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No weekday data for selected period.</p>
+                  ) : (
+                    <ChartContainer config={chartConfig} className="h-[260px] w-full">
+                      <BarChart data={byWeekday}>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="weekday" />
+                        <YAxis allowDecimals={false} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="opportunities" fill="var(--color-opportunities)" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  )}
+                </Card>
+
+                <Card className="p-4">
+                  <p className="mb-2 text-sm font-semibold">Delay severity distribution (claim opportunities)</p>
+                  {severity.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No severity data for selected period.</p>
+                  ) : (
+                    <ChartContainer config={chartConfig} className="h-[260px] w-full">
+                      <BarChart data={severity}>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="bucket" />
+                        <YAxis allowDecimals={false} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="opportunities" fill="var(--color-opportunities)" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ChartContainer>
+                  )}
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="quality" className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Latest ingestion
+                    <CardHint text="Most recent timestamp when departures were stored in the database." />
+                  </p>
+                  <p className="mt-1 text-sm font-semibold">{latestFetchLabel}</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Minutes since last fetch
+                    <CardHint text="Freshness indicator: lower means collection is running recently." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{freshness.minutes_since_last_fetch.toFixed(1)}</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    Avg / max gap (min)
+                    <CardHint text="Average and largest gap between consecutive API call events." />
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">
+                    {freshness.avg_gap_minutes.toFixed(1)} / {freshness.max_gap_minutes.toFixed(1)}
+                  </p>
+                </Card>
+              </div>
+
+              <Card className="p-4">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  API quality and efficiency
+                  <CardHint text="Operational metrics for how efficiently API fetches produce usable data." />
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-lg border border-border/70 p-3" title="Estimated number of unique API fetch events.">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Calls</p>
+                    <p className="mt-1 text-xl font-semibold">{quality.calls_count.toLocaleString("sv-SE")}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 p-3" title="Total rows written to departures from API fetches.">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Rows captured</p>
+                    <p className="mt-1 text-xl font-semibold">{quality.total_rows.toLocaleString("sv-SE")}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 p-3" title="Average number of departure rows produced per API call.">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Avg rows/call</p>
+                    <p className="mt-1 text-xl font-semibold">{quality.avg_rows_per_call.toFixed(1)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 p-3" title="95th percentile of rows captured per API call.">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">P95 rows/call</p>
+                    <p className="mt-1 text-xl font-semibold">{quality.p95_rows_per_call.toFixed(1)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 p-3" title="Rows currently marked as delayed in departures data.">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Delayed rows</p>
+                    <p className="mt-1 text-xl font-semibold">{quality.delayed_rows.toLocaleString("sv-SE")}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 p-3" title="Claim opportunities generated per 100 API calls.">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Opportunities / 100 calls</p>
+                    <p className="mt-1 text-xl font-semibold">{quality.claimable_per_100_calls.toFixed(1)}</p>
+                  </div>
+                </div>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </div>
   );
