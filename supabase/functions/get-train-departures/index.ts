@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { ROUTES, Direction, STOPS } from '../shared/stops.ts'
+import { ROUTES, Direction, STOPS, STOP_OPTIONS } from '../shared/stops.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,6 +47,22 @@ interface EdgePayload {
   updatedAt: string;
   departures: unknown[];
 }
+interface CorridorWindowRow {
+  event_key: string;
+  direction: string;
+  trip_key: string;
+  line: string;
+  line_name: string;
+  origin_stop_id: string;
+  origin_stop_name: string;
+  destination_stop_id: string;
+  destination_stop_name: string;
+  departure_datetime: string;
+  scheduled_arrival_datetime: string | null;
+  actual_arrival_datetime: string | null;
+  arrival_delay_minutes: number;
+  claimable: boolean;
+}
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
@@ -91,6 +107,7 @@ const COPENHAGEN_CORRIDOR_LINES = new Set(["802", "803", "804", "805", "806"]);
 const RESPONSE_CACHE_TTL_MS = 45_000;
 const STALE_CACHE_MAX_AGE_MS = 10 * 60_000;
 const DELAY_ALERT_MINUTES = 20;
+const MATCH_RATE_FOR_SECONDARY_WINDOW = 0.7;
 const responseCache = new Map<string, { storedAt: number; payload: EdgePayload }>();
 const getCachedPayload = (cacheKey: string, maxAgeMs: number): EdgePayload | null => {
   const entry = responseCache.get(cacheKey);
@@ -136,6 +153,53 @@ const isMalmo = (text: string) => {
   return t.includes('malmo') || t.includes('malm');
 };
 
+const stopById = (id: string) => Object.values(STOPS).find((stop) => stop.id === id);
+const stopSequence = STOP_OPTIONS.map((stop) => stop.id);
+const corridorPairsForDirection = (direction: Direction) => {
+  const pairs: Array<{ originId: string; destinationId: string }> = [];
+  for (let i = 0; i < stopSequence.length; i += 1) {
+    for (let j = 0; j < stopSequence.length; j += 1) {
+      if (i === j) continue;
+      if (direction === "malmo-departures" && i < j) {
+        pairs.push({ originId: stopSequence[i], destinationId: stopSequence[j] });
+      }
+      if (direction === "hyllie-departures" && i > j) {
+        pairs.push({ originId: stopSequence[i], destinationId: stopSequence[j] });
+      }
+    }
+  }
+  return pairs;
+};
+
+const toUiDeparture = (row: CorridorWindowRow) => {
+  const depDate = isoDate(row.departure_datetime);
+  const depTime = isoTime(row.departure_datetime);
+  const actualArrDate = row.actual_arrival_datetime ? isoDate(row.actual_arrival_datetime) : null;
+  const actualArrTime = row.actual_arrival_datetime ? isoTime(row.actual_arrival_datetime) : null;
+  const scheduledArrTime = row.scheduled_arrival_datetime ? isoTime(row.scheduled_arrival_datetime) : null;
+  return {
+    line: row.line,
+    operator: "Corridor collector",
+    lineName: row.line_name,
+    transportCategory: "TRAIN",
+    departureStationId: row.origin_stop_id,
+    departureStation: row.origin_stop_name,
+    arrivalStation: row.destination_stop_name,
+    departureTime: depTime,
+    departureDate: depDate,
+    scheduledTime: depTime,
+    arrivalTime: actualArrTime,
+    arrivalDate: actualArrDate,
+    scheduledArrivalTime: scheduledArrTime,
+    isArrivalDelayed: row.arrival_delay_minutes > 0,
+    isArrivalEarly: row.arrival_delay_minutes < 0,
+    arrivalDelayMinutes: row.arrival_delay_minutes,
+    track: undefined,
+    isDelayed: row.arrival_delay_minutes > 0,
+    delayMinutes: Math.max(0, row.arrival_delay_minutes),
+  };
+};
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -145,11 +209,12 @@ Deno.serve(async (req) => {
   let cacheKey = "";
 
   try {
-    const { direction, originId, destinationId, timeShiftMinutes = 0 } = await req.json() as {
+    const { direction, originId, destinationId, timeShiftMinutes = 0, mode } = await req.json() as {
       direction: string;
       originId?: string;
       destinationId?: string;
       timeShiftMinutes?: number;
+      mode?: string;
     };
 
     const requestedShiftMinutes = Math.max(
@@ -185,6 +250,166 @@ Deno.serve(async (req) => {
       console.warn(`Unknown direction '${rawDirection}', defaulting to malmo-departures`);
       return "malmo-departures";
     })();
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
+    if (mode === "collect-corridor") {
+      if (!supabase) throw new Error("Supabase env vars missing, cannot collect corridor.");
+      const collectOneDirection = async (collectDirection: Direction) => {
+        const collectRoute = ROUTES[collectDirection];
+        const collectOrigin = collectRoute.origin;
+        const collectDestination = collectRoute.destination;
+        const collectCacheKey = `${collectDirection}|${requestedShiftMinutes}|${collectOrigin.id}|${collectDestination.id}|collect`;
+        const cachedCollector = getCachedPayload(collectCacheKey, RESPONSE_CACHE_TTL_MS);
+        if (cachedCollector) return cachedCollector;
+
+        const apiKey = Deno.env.get('TRAFIKLAB_REALTIME_API_KEY');
+        if (!apiKey) {
+          throw new Error('TRAFIKLAB_REALTIME_API_KEY not configured');
+        }
+
+        const anchorTime = new Date(Date.now() - requestedShiftMinutes * 60_000);
+        const queryDateTime = formatDateTime(anchorTime);
+        const departuresUrl = `https://realtime-api.trafiklab.se/v1/departures/${collectOrigin.id}/${queryDateTime}?key=${apiKey}`;
+        const arrivalsUrl = `https://realtime-api.trafiklab.se/v1/arrivals/${collectDestination.id}/${queryDateTime}?key=${apiKey}`;
+        const departuresResponse = await fetch(departuresUrl);
+        const arrivalsResponse = await fetch(arrivalsUrl);
+        if (!departuresResponse.ok) {
+          throw new Error(`Collector departures API error: ${departuresResponse.status}`);
+        }
+        const departuresData: RealtimeResponse = await departuresResponse.json();
+        const arrivalsData: RealtimeResponse = arrivalsResponse.ok ? await arrivalsResponse.json() : { arrivals: [] };
+        const departuresPrimary = departuresData.departures ?? [];
+        const arrivalsPrimary = arrivalsData.arrivals ?? [];
+
+        const departuresByTripPrimary = new Set(
+          departuresPrimary
+            .map((dep) => tripKey(dep))
+            .filter((key) => Boolean(key))
+        );
+        const arrivalsByTripPrimary = new Set(
+          arrivalsPrimary
+            .map((arr) => tripKey(arr))
+            .filter((key) => Boolean(key))
+        );
+        const matchedPrimary = [...departuresByTripPrimary].filter((key) => arrivalsByTripPrimary.has(key)).length;
+        const matchRatePrimary = departuresByTripPrimary.size > 0 ? matchedPrimary / departuresByTripPrimary.size : 1;
+        const shouldFetchSecondary = matchRatePrimary < MATCH_RATE_FOR_SECONDARY_WINDOW;
+
+        let departuresMerged = [...departuresPrimary];
+        let arrivalsMerged = [...arrivalsPrimary];
+        if (shouldFetchSecondary) {
+          const departuresFutureAnchor = new Date(anchorTime.getTime() + 60 * 60_000);
+          const departuresFutureDateTime = formatDateTime(departuresFutureAnchor);
+          const arrivalsFutureDateTime = departuresFutureDateTime;
+          const departuresFutureUrl = `https://realtime-api.trafiklab.se/v1/departures/${collectOrigin.id}/${departuresFutureDateTime}?key=${apiKey}`;
+          const arrivalsFutureUrl = `https://realtime-api.trafiklab.se/v1/arrivals/${collectDestination.id}/${arrivalsFutureDateTime}?key=${apiKey}`;
+          const [depFutureResp, arrFutureResp] = await Promise.all([fetch(departuresFutureUrl), fetch(arrivalsFutureUrl)]);
+          const depFutureData: RealtimeResponse = depFutureResp.ok ? await depFutureResp.json() : { departures: [] };
+          const arrFutureData: RealtimeResponse = arrFutureResp.ok ? await arrFutureResp.json() : { arrivals: [] };
+          departuresMerged = departuresMerged.concat(depFutureData.departures ?? []);
+          arrivalsMerged = arrivalsMerged.concat(arrFutureData.arrivals ?? []);
+        }
+
+        const corridorDepartures = departuresMerged
+          .filter((dep) => normalizeText(dep.route?.transport_mode ?? '') === 'train')
+          .filter((dep) => COPENHAGEN_CORRIDOR_LINES.has(String(dep.route?.designation ?? '').trim()));
+        const corridorArrivals = arrivalsMerged
+          .filter((arr) => normalizeText(arr.route?.transport_mode ?? '') === 'train')
+          .filter((arr) => COPENHAGEN_CORRIDOR_LINES.has(String(arr.route?.designation ?? '').trim()));
+
+        const arrivalsByTrip = new Map<string, RealtimeDeparture>();
+        for (const arr of corridorArrivals) {
+          const key = tripKey(arr);
+          if (key && !arrivalsByTrip.has(key)) arrivalsByTrip.set(key, arr);
+        }
+
+        const windows: CorridorWindowRow[] = [];
+        const pairs = corridorPairsForDirection(collectDirection);
+        for (const dep of corridorDepartures) {
+          const key = tripKey(dep);
+          if (!key) continue;
+          const matchArrival = arrivalsByTrip.get(key);
+          if (!matchArrival) continue;
+          const depIso = dep.realtime || dep.scheduled;
+          const actualArrIso = matchArrival.realtime || matchArrival.scheduled || null;
+          const scheduledArrIso = matchArrival.scheduled || null;
+          const actualSec = timeToSeconds(actualArrIso ? isoTime(actualArrIso) : null);
+          const schedSec = timeToSeconds(scheduledArrIso ? isoTime(scheduledArrIso) : null);
+          const delayMinutes =
+            actualSec !== null && schedSec !== null
+              ? Math.round((actualSec - schedSec) / 60)
+              : 0;
+          const depLine = dep.route?.designation || '';
+          const depLineName = dep.route?.name || dep.route?.designation || 'Train';
+
+          for (const pair of pairs) {
+            const o = stopById(pair.originId);
+            const d = stopById(pair.destinationId);
+            if (!o || !d) continue;
+            const eventKey = [
+              collectDirection,
+              key,
+              o.id,
+              d.id,
+              depIso,
+            ].join("|");
+            windows.push({
+              event_key: eventKey,
+              direction: collectDirection,
+              trip_key: key,
+              line: depLine,
+              line_name: depLineName,
+              origin_stop_id: o.id,
+              origin_stop_name: o.name,
+              destination_stop_id: d.id,
+              destination_stop_name: d.name,
+              departure_datetime: depIso,
+              scheduled_arrival_datetime: scheduledArrIso,
+              actual_arrival_datetime: actualArrIso,
+              arrival_delay_minutes: delayMinutes,
+              claimable: delayMinutes >= DELAY_ALERT_MINUTES,
+            });
+          }
+        }
+
+        if (windows.length > 0) {
+          const { error: upsertError } = await supabase
+            .from("claimable_corridor_windows")
+            .upsert(windows, { onConflict: "event_key", ignoreDuplicates: false });
+          if (upsertError) console.error("Error writing claimable_corridor_windows:", upsertError);
+        }
+        const expiryCutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+        await supabase
+          .from("claimable_corridor_windows")
+          .delete()
+          .lt("departure_datetime", expiryCutoff);
+
+        const payload: EdgePayload = {
+          direction: collectDirection,
+          updatedAt: new Date().toISOString(),
+          departures: windows.map(toUiDeparture),
+        };
+        responseCache.set(collectCacheKey, { storedAt: Date.now(), payload });
+        return payload;
+      };
+
+      const [malmoPayload, cphPayload] = await Promise.all([
+        collectOneDirection("malmo-departures"),
+        collectOneDirection("hyllie-departures"),
+      ]);
+
+      return new Response(
+        JSON.stringify({
+          direction: "both",
+          updatedAt: new Date().toISOString(),
+          departures: [...(malmoPayload.departures ?? []), ...(cphPayload.departures ?? [])],
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     const route = ROUTES[normalizedDirection];
     if (!route) {
       throw new Error('Invalid direction configuration');
@@ -204,9 +429,36 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+    if (!supabase) {
+      throw new Error("Supabase env vars missing, cannot read corridor windows.");
+    }
+
+    // UI read path: read from precomputed corridor windows only.
+    if (originId && destinationId) {
+      const rowsResp = await supabase
+        .from("claimable_corridor_windows")
+        .select(
+          "event_key,direction,trip_key,line,line_name,origin_stop_id,origin_stop_name,destination_stop_id,destination_stop_name,departure_datetime,scheduled_arrival_datetime,actual_arrival_datetime,arrival_delay_minutes,claimable,observed_at"
+        )
+        .eq("origin_stop_id", originId)
+        .eq("destination_stop_id", destinationId)
+        .eq("direction", normalizedDirection)
+        .order("departure_datetime", { ascending: false })
+        .limit(300);
+      if (rowsResp.error) {
+        throw rowsResp.error;
+      }
+      const rows = (rowsResp.data ?? []) as CorridorWindowRow[];
+      const payload: EdgePayload = {
+        direction: normalizedDirection,
+        updatedAt: new Date().toISOString(),
+        departures: rows.map(toUiDeparture),
+      };
+      responseCache.set(cacheKey, { storedAt: Date.now(), payload });
+      return new Response(JSON.stringify(payload), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const apiKey = Deno.env.get('TRAFIKLAB_REALTIME_API_KEY');
     if (!apiKey) {
@@ -231,9 +483,8 @@ Deno.serve(async (req) => {
     const arrivalsFutureUrl = `https://realtime-api.trafiklab.se/v1/arrivals/${destination.id}/${arrivalsFutureDateTime}?key=${apiKey}`;
     console.log(`Fetching realtime departures from ${boardStationName} at ${queryDateTime}`);
 
-    const [departuresResponse, departuresFutureResponse, arrivalsResponse] = await Promise.all([
+    const [departuresResponse, arrivalsResponse] = await Promise.all([
       fetch(departuresUrl),
-      fetch(departuresFutureUrl),
       fetch(arrivalsUrl),
     ]);
 
@@ -250,23 +501,32 @@ Deno.serve(async (req) => {
     }
 
     const departuresData: RealtimeResponse = await departuresResponse.json();
-    const departuresFutureData: RealtimeResponse = departuresFutureResponse.ok
-      ? await departuresFutureResponse.json()
-      : { departures: [] };
     const arrivalsData: RealtimeResponse = arrivalsResponse.ok
       ? await arrivalsResponse.json()
       : { arrivals: [] };
-
-    // A second arrivals window improves match rate for longer/late trips.
-    const arrivalsFutureResponse = await fetch(arrivalsFutureUrl);
-    const arrivalsFutureData: RealtimeResponse = arrivalsFutureResponse.ok
-      ? await arrivalsFutureResponse.json()
-      : { arrivals: [] };
-
-    const departuresMerged = [
-      ...(departuresData.departures ?? []),
-      ...(departuresFutureData.departures ?? []),
-    ];
+    const departuresPrimary = departuresData.departures ?? [];
+    const arrivalsPrimary = arrivalsData.arrivals ?? [];
+    const departuresByTripPrimary = new Set(
+      departuresPrimary.map((dep) => tripKey(dep)).filter((k) => Boolean(k))
+    );
+    const arrivalsByTripPrimary = new Set(
+      arrivalsPrimary.map((arr) => tripKey(arr)).filter((k) => Boolean(k))
+    );
+    const primaryMatches = [...departuresByTripPrimary].filter((k) => arrivalsByTripPrimary.has(k)).length;
+    const primaryMatchRate = departuresByTripPrimary.size > 0 ? primaryMatches / departuresByTripPrimary.size : 1;
+    const shouldFetchSecondaryWindow = primaryMatchRate < MATCH_RATE_FOR_SECONDARY_WINDOW;
+    let departuresMerged = [...departuresPrimary];
+    let arrivalsMerged = [...arrivalsPrimary];
+    if (shouldFetchSecondaryWindow) {
+      const [depFutureResp, arrFutureResp] = await Promise.all([
+        fetch(departuresFutureUrl),
+        fetch(arrivalsFutureUrl),
+      ]);
+      const depFutureData: RealtimeResponse = depFutureResp.ok ? await depFutureResp.json() : { departures: [] };
+      const arrFutureData: RealtimeResponse = arrFutureResp.ok ? await arrFutureResp.json() : { arrivals: [] };
+      departuresMerged = departuresMerged.concat(depFutureData.departures ?? []);
+      arrivalsMerged = arrivalsMerged.concat(arrFutureData.arrivals ?? []);
+    }
     const departuresByKey = new Map<string, RealtimeDeparture>();
     for (const dep of departuresMerged) {
       const key = departureKey(dep);
@@ -275,10 +535,7 @@ Deno.serve(async (req) => {
       }
     }
     const departures = Array.from(departuresByKey.values());
-    const arrivals = [
-      ...(arrivalsData.arrivals ?? []),
-      ...(arrivalsFutureData.arrivals ?? []),
-    ];
+    const arrivals = arrivalsMerged;
 
     // Stage 1: train only
     const trainDepartures = departures.filter((dep) =>
@@ -522,7 +779,7 @@ Deno.serve(async (req) => {
     };
     responseCache.set(cacheKey, { storedAt: Date.now(), payload });
     if (requestedShiftMinutes === 0) {
-      responseCache.set(`${normalizedDirection}|0`, { storedAt: Date.now(), payload });
+      responseCache.set(`${normalizedDirection}|0|${origin.id}|${destination.id}`, { storedAt: Date.now(), payload });
     }
     return new Response(JSON.stringify(payload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -71,6 +71,66 @@ export type Database = {
         }
         Relationships: []
       }
+      claimable_corridor_windows: {
+        Row: {
+          actual_arrival_datetime: string | null
+          arrival_delay_minutes: number
+          claimable: boolean
+          departure_datetime: string
+          destination_stop_id: string
+          destination_stop_name: string
+          direction: string
+          event_key: string
+          expires_at: string
+          id: string
+          line: string
+          line_name: string
+          observed_at: string
+          origin_stop_id: string
+          origin_stop_name: string
+          scheduled_arrival_datetime: string | null
+          trip_key: string
+        }
+        Insert: {
+          actual_arrival_datetime?: string | null
+          arrival_delay_minutes?: number
+          claimable?: boolean
+          departure_datetime: string
+          destination_stop_id: string
+          destination_stop_name: string
+          direction: string
+          event_key: string
+          expires_at?: string
+          id?: string
+          line: string
+          line_name: string
+          observed_at?: string
+          origin_stop_id: string
+          origin_stop_name: string
+          scheduled_arrival_datetime?: string | null
+          trip_key: string
+        }
+        Update: {
+          actual_arrival_datetime?: string | null
+          arrival_delay_minutes?: number
+          claimable?: boolean
+          departure_datetime?: string
+          destination_stop_id?: string
+          destination_stop_name?: string
+          direction?: string
+          event_key?: string
+          expires_at?: string
+          id?: string
+          line?: string
+          line_name?: string
+          observed_at?: string
+          origin_stop_id?: string
+          origin_stop_name?: string
+          scheduled_arrival_datetime?: string | null
+          trip_key?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -218,6 +278,10 @@ export type Database = {
     }
     Functions: {
       delete_old_departures: { Args: never; Returns: undefined }
+      get_api_usage_daily: {
+        Args: { since_ts: string; timezone_name?: string }
+        Returns: { day: string; calls: number }[]
+      }
       trigger_claim_collection: { Args: never; Returns: undefined }
     }
     Enums: {
