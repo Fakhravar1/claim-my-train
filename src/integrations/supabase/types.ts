@@ -282,6 +282,10 @@ export type Database = {
         Args: { since_ts: string; timezone_name?: string }
         Returns: { day: string; calls: number }[]
       }
+      get_admin_api_analytics: {
+        Args: { since_ts: string; timezone_name?: string }
+        Returns: Json
+      }
       trigger_claim_collection: { Args: never; Returns: undefined }
     }
     Enums: {

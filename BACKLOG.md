@@ -1,8 +1,6 @@
 # Backlog
 
 - Claim bot (Skånetrafiken) status:
-  - DONE (test mode): autofill flow reaches step 6 summary without submitting.
-  - DONE (test mode): supports route/date/time selection, Prisavdrag, Värdekod, personnummer/email test fill, and manual-stop behavior.
   - TODO (production): stabilize final consent checkbox handling for all UI variants.
   - TODO (production): add structured run logging + error snapshots for failed runs.
   - TODO (production): add retry policy + timeout policy per step with metrics.
@@ -21,7 +19,6 @@
   - Persist preference and pass it into claim autofill so bot selects the chosen option automatically.
 - Add individual user registration/auth support via Lovable:
   - Support account registration/login with Lovable user model.
-  - Integrate Google authentication for sign-in.
 - Add admin-only manual-claims control page:
   - Create a secret/admin-only page listing claims that failed automatic bot submission.
   - Include all data needed for manual handling (trip details, delay context, contact/claim fields, timestamps, failure reason).

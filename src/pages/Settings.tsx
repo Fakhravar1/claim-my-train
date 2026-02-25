@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { STOP_OPTIONS } from "@/constants/stops";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -159,233 +160,247 @@ const Settings = () => {
 
         <Card className="p-5">
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
-            <div className="space-y-2">
-              <Label htmlFor="claim-email">Claim email</Label>
-              <Input
-                id="claim-email"
-                type="email"
-                value={claimEmail}
-                onChange={(event) => setClaimEmail(event.target.value)}
-                placeholder="name@example.com"
-              />
-            </div>
+            <Tabs defaultValue="personal" className="space-y-4">
+              <TabsList className="!grid h-auto w-full !grid-cols-3 gap-1 p-1">
+                <TabsTrigger value="personal" className="w-full">Personal info</TabsTrigger>
+                <TabsTrigger value="ticket" className="w-full">Ticket</TabsTrigger>
+                <TabsTrigger value="commuter" className="w-full">Commuter habits</TabsTrigger>
+              </TabsList>
 
-            <div className="space-y-2">
-              <Label htmlFor="claim-mobile">Mobile number</Label>
-              <Input
-                id="claim-mobile"
-                type="tel"
-                value={claimMobile}
-                onChange={(event) => setClaimMobile(event.target.value)}
-                placeholder="0701234567"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="claim-ticket-id">Ticket ID</Label>
-              <Input
-                id="claim-ticket-id"
-                value={claimTicketId}
-                onChange={(event) => setClaimTicketId(event.target.value)}
-                placeholder="2Y3CE88"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="claim-personnummer">Personnummer</Label>
-              <Input
-                id="claim-personnummer"
-                value={claimPersonnummer}
-                onChange={(event) => setClaimPersonnummer(event.target.value)}
-                placeholder="19700901-3975"
-              />
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
-              <div>
-                <p className="text-sm font-semibold">Claims tracker</p>
-                <p className="text-xs text-muted-foreground">
-                  Track total submitted claims and estimated payout at {CLAIM_VALUE_SEK} KR per claim.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="claims-done-count">Claims done</Label>
-                <Input
-                  id="claims-done-count"
-                  type="number"
-                  min={0}
-                  value={claimsDoneCount}
-                  onChange={(event) =>
-                    setClaimsDoneCount(Math.max(0, Number.parseInt(event.target.value || "0", 10) || 0))
-                  }
-                />
-              </div>
-              <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-foreground">
-                Amount received: <span className="font-semibold">{claimsDoneCount * CLAIM_VALUE_SEK} KR</span>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
-              <div>
-                <p className="text-sm font-semibold">Usual travel route</p>
-                <p className="text-xs text-muted-foreground">
-                  Set the stations you usually travel between so potential claims can be monitored for your route.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <TabsContent value="personal" className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="preferred-from">From</Label>
-                  <Select value={preferredFromStopId} onValueChange={setPreferredFromStopId}>
-                    <SelectTrigger id="preferred-from">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STOP_OPTIONS.map((stop) => (
-                        <SelectItem key={stop.id} value={stop.id}>
-                          {stop.shortName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="preferred-to">To</Label>
-                  <Select value={preferredToStopId} onValueChange={setPreferredToStopId}>
-                    <SelectTrigger id="preferred-to">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STOP_OPTIONS.map((stop) => (
-                        <SelectItem key={stop.id} value={stop.id}>
-                          {stop.shortName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
-              <div>
-                <p className="text-sm font-semibold">Commuter habits (optional)</p>
-                <p className="text-xs text-muted-foreground">
-                  Save your usual commute stops and time windows for going out and coming back.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="commuter-from">From</Label>
-                  <Select value={commuterFromStopId || "none"} onValueChange={(value) => setCommuterFromStopId(value === "none" ? "" : value)}>
-                    <SelectTrigger id="commuter-from">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Not set</SelectItem>
-                      {STOP_OPTIONS.map((stop) => (
-                        <SelectItem key={stop.id} value={stop.id}>
-                          {stop.shortName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="commuter-to">To</Label>
-                  <Select value={commuterToStopId || "none"} onValueChange={(value) => setCommuterToStopId(value === "none" ? "" : value)}>
-                    <SelectTrigger id="commuter-to">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Not set</SelectItem>
-                      {STOP_OPTIONS.map((stop) => (
-                        <SelectItem key={stop.id} value={stop.id}>
-                          {stop.shortName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="commuter-outbound-start">Outbound start</Label>
+                  <Label htmlFor="claim-email">Claim email</Label>
                   <Input
-                    id="commuter-outbound-start"
-                    type="time"
-                    value={commuterOutboundStartTime}
-                    onChange={(event) => setCommuterOutboundStartTime(event.target.value)}
+                    id="claim-email"
+                    type="email"
+                    value={claimEmail}
+                    onChange={(event) => setClaimEmail(event.target.value)}
+                    placeholder="name@example.com"
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="commuter-outbound-end">Outbound end</Label>
+                  <Label htmlFor="claim-mobile">Mobile number</Label>
                   <Input
-                    id="commuter-outbound-end"
-                    type="time"
-                    value={commuterOutboundEndTime}
-                    onChange={(event) => setCommuterOutboundEndTime(event.target.value)}
+                    id="claim-mobile"
+                    type="tel"
+                    value={claimMobile}
+                    onChange={(event) => setClaimMobile(event.target.value)}
+                    placeholder="0701234567"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="commuter-return-start">Return start</Label>
+                  <Label htmlFor="claim-personnummer">Personnummer</Label>
                   <Input
-                    id="commuter-return-start"
-                    type="time"
-                    value={commuterReturnStartTime}
-                    onChange={(event) => setCommuterReturnStartTime(event.target.value)}
+                    id="claim-personnummer"
+                    value={claimPersonnummer}
+                    onChange={(event) => setClaimPersonnummer(event.target.value)}
+                    placeholder="19700901-3975"
                   />
                 </div>
+              </TabsContent>
+
+              <TabsContent value="ticket" className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="commuter-return-end">Return end</Label>
+                  <Label htmlFor="claim-ticket-id">Ticket ID</Label>
                   <Input
-                    id="commuter-return-end"
-                    type="time"
-                    value={commuterReturnEndTime}
-                    onChange={(event) => setCommuterReturnEndTime(event.target.value)}
+                    id="claim-ticket-id"
+                    value={claimTicketId}
+                    onChange={(event) => setClaimTicketId(event.target.value)}
+                    placeholder="2Y3CE88"
                   />
                 </div>
-              </div>
-            </div>
 
-            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/70 p-3">
-              <div>
-                <p className="text-sm font-medium">Period ticket</p>
-                <p className="text-xs text-muted-foreground">
-                  Enable if your claim uses a ticket with date validity.
-                </p>
-              </div>
-              <Switch checked={isPeriodTicket} onCheckedChange={setIsPeriodTicket} />
-            </div>
+                <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/70 p-3">
+                  <div>
+                    <p className="text-sm font-medium">Period ticket</p>
+                    <p className="text-xs text-muted-foreground">
+                      Enable if your claim uses a ticket with date validity.
+                    </p>
+                  </div>
+                  <Switch checked={isPeriodTicket} onCheckedChange={setIsPeriodTicket} />
+                </div>
 
-            {isPeriodTicket && (
-              <div className="space-y-2">
-                <Label htmlFor="ticket-valid-until">Ticket valid until</Label>
-                <Input
-                  id="ticket-valid-until"
-                  type="date"
-                  value={ticketValidUntil}
-                  onChange={(event) => setTicketValidUntil(event.target.value)}
-                />
-              </div>
-            )}
+                {isPeriodTicket && (
+                  <div className="space-y-2">
+                    <Label htmlFor="ticket-valid-until">Ticket valid until</Label>
+                    <Input
+                      id="ticket-valid-until"
+                      type="date"
+                      value={ticketValidUntil}
+                      onChange={(event) => setTicketValidUntil(event.target.value)}
+                    />
+                  </div>
+                )}
 
-            {validityStatus && (
-              <div
-                className={`rounded-xl border px-3 py-2 text-sm ${
-                  validityStatus.tone === "expired"
-                    ? "border-destructive/40 bg-destructive/10 text-destructive"
-                    : validityStatus.tone === "warning"
-                      ? "border-amber-300 bg-amber-50 text-amber-900"
-                      : "border-emerald-300 bg-emerald-50 text-emerald-900"
-                }`}
-              >
-                {validityStatus.text}
-              </div>
-            )}
+                {validityStatus && (
+                  <div
+                    className={`rounded-xl border px-3 py-2 text-sm ${
+                      validityStatus.tone === "expired"
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : validityStatus.tone === "warning"
+                          ? "border-amber-300 bg-amber-50 text-amber-900"
+                          : "border-emerald-300 bg-emerald-50 text-emerald-900"
+                    }`}
+                  >
+                    {validityStatus.text}
+                  </div>
+                )}
+
+                <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+                  <div>
+                    <p className="text-sm font-semibold">Claims tracker</p>
+                    <p className="text-xs text-muted-foreground">
+                      Track total submitted claims and estimated payout at {CLAIM_VALUE_SEK} KR per claim.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="claims-done-count">Claims done</Label>
+                    <Input
+                      id="claims-done-count"
+                      type="number"
+                      min={0}
+                      value={claimsDoneCount}
+                      onChange={(event) =>
+                        setClaimsDoneCount(Math.max(0, Number.parseInt(event.target.value || "0", 10) || 0))
+                      }
+                    />
+                  </div>
+                  <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-foreground">
+                    Amount received: <span className="font-semibold">{claimsDoneCount * CLAIM_VALUE_SEK} KR</span>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="commuter" className="space-y-4">
+                <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+                  <div>
+                    <p className="text-sm font-semibold">Usual travel route</p>
+                    <p className="text-xs text-muted-foreground">
+                      Set the stations you usually travel between so potential claims can be monitored for your route.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="preferred-from">From</Label>
+                      <Select value={preferredFromStopId} onValueChange={setPreferredFromStopId}>
+                        <SelectTrigger id="preferred-from">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STOP_OPTIONS.map((stop) => (
+                            <SelectItem key={stop.id} value={stop.id}>
+                              {stop.shortName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="preferred-to">To</Label>
+                      <Select value={preferredToStopId} onValueChange={setPreferredToStopId}>
+                        <SelectTrigger id="preferred-to">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STOP_OPTIONS.map((stop) => (
+                            <SelectItem key={stop.id} value={stop.id}>
+                              {stop.shortName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+                  <div>
+                    <p className="text-sm font-semibold">Commuter habits (optional)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Save your usual commute stops and time windows for going out and coming back.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="commuter-from">From</Label>
+                      <Select value={commuterFromStopId || "none"} onValueChange={(value) => setCommuterFromStopId(value === "none" ? "" : value)}>
+                        <SelectTrigger id="commuter-from">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Not set</SelectItem>
+                          {STOP_OPTIONS.map((stop) => (
+                            <SelectItem key={stop.id} value={stop.id}>
+                              {stop.shortName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="commuter-to">To</Label>
+                      <Select value={commuterToStopId || "none"} onValueChange={(value) => setCommuterToStopId(value === "none" ? "" : value)}>
+                        <SelectTrigger id="commuter-to">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Not set</SelectItem>
+                          {STOP_OPTIONS.map((stop) => (
+                            <SelectItem key={stop.id} value={stop.id}>
+                              {stop.shortName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="commuter-outbound-start">Outbound start</Label>
+                      <Input
+                        id="commuter-outbound-start"
+                        type="time"
+                        value={commuterOutboundStartTime}
+                        onChange={(event) => setCommuterOutboundStartTime(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="commuter-outbound-end">Outbound end</Label>
+                      <Input
+                        id="commuter-outbound-end"
+                        type="time"
+                        value={commuterOutboundEndTime}
+                        onChange={(event) => setCommuterOutboundEndTime(event.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="commuter-return-start">Return start</Label>
+                      <Input
+                        id="commuter-return-start"
+                        type="time"
+                        value={commuterReturnStartTime}
+                        onChange={(event) => setCommuterReturnStartTime(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="commuter-return-end">Return end</Label>
+                      <Input
+                        id="commuter-return-end"
+                        type="time"
+                        value={commuterReturnEndTime}
+                        onChange={(event) => setCommuterReturnEndTime(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button type="submit" disabled={saving}>
