@@ -185,14 +185,6 @@ Deno.serve(async (req) => {
       console.warn(`Unknown direction '${rawDirection}', defaulting to malmo-departures`);
       return "malmo-departures";
     })();
-    cacheKey = `${normalizedDirection}|${requestedShiftMinutes}`;
-    const cachedFresh = getCachedPayload(cacheKey, RESPONSE_CACHE_TTL_MS);
-    if (cachedFresh) {
-      return new Response(JSON.stringify(cachedFresh), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const route = ROUTES[normalizedDirection];
     if (!route) {
       throw new Error('Invalid direction configuration');
@@ -204,6 +196,13 @@ Deno.serve(async (req) => {
     const destination = destinationId
       ? Object.values(STOPS).find((s) => s.id === destinationId) ?? route.destination
       : route.destination;
+    cacheKey = `${normalizedDirection}|${requestedShiftMinutes}|${origin.id}|${destination.id}`;
+    const cachedFresh = getCachedPayload(cacheKey, RESPONSE_CACHE_TTL_MS);
+    if (cachedFresh) {
+      return new Response(JSON.stringify(cachedFresh), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -239,7 +238,9 @@ Deno.serve(async (req) => {
     ]);
 
     if (!departuresResponse.ok) {
-      const stale = getCachedPayload(cacheKey, STALE_CACHE_MAX_AGE_MS) ?? getCachedPayload(`${normalizedDirection}|0`, STALE_CACHE_MAX_AGE_MS);
+      const stale =
+        getCachedPayload(cacheKey, STALE_CACHE_MAX_AGE_MS) ??
+        getCachedPayload(`${normalizedDirection}|0|${origin.id}|${destination.id}`, STALE_CACHE_MAX_AGE_MS);
       if (stale) {
         return new Response(JSON.stringify(stale), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -289,18 +290,23 @@ Deno.serve(async (req) => {
       COPENHAGEN_CORRIDOR_LINES.has(String(dep.route?.designation ?? '').trim())
     );
 
-    // Stage 3: direction filter
-    const directionDepartures = corridorDepartures.filter((dep) => {
-      const originName = dep.route?.origin?.name ?? '';
-      const destinationName = dep.route?.destination?.name ?? '';
-      const directionName = dep.route?.direction ?? '';
+    // Stage 3: direction filter.
+    // For explicit origin+destination station queries, keep all corridor departures from
+    // the selected origin and let trip-based arrival matching determine correctness.
+    const directionDepartures =
+      originId || destinationId
+        ? corridorDepartures
+        : corridorDepartures.filter((dep) => {
+            const originName = dep.route?.origin?.name ?? '';
+            const destinationName = dep.route?.destination?.name ?? '';
+            const directionName = dep.route?.direction ?? '';
 
-      if (normalizedDirection === 'malmo-departures') {
-        return isCopenhagen(destinationName) || isCopenhagen(directionName);
-      }
+            if (normalizedDirection === 'malmo-departures') {
+              return isCopenhagen(destinationName) || isCopenhagen(directionName);
+            }
 
-      return isMalmo(destinationName) || isMalmo(directionName) || isCopenhagen(originName);
-    });
+            return isMalmo(destinationName) || isMalmo(directionName) || isCopenhagen(originName);
+          });
 
     if (!departures.length) {
       return new Response(
@@ -315,8 +321,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const departuresToProcess = directionDepartures;
-
     // Build arrivals lookup by trip key
     const arrivalCandidates = arrivals
       .filter((arr) => normalizeText(arr.route?.transport_mode ?? '') === 'train')
@@ -328,6 +332,11 @@ Deno.serve(async (req) => {
         arrivalsByTrip.set(key, arr);
       }
     }
+    const matchedDepartures = directionDepartures.filter((dep) => {
+      const key = tripKey(dep);
+      return Boolean(key && arrivalsByTrip.has(key));
+    });
+    const departuresToProcess = matchedDepartures.length > 0 ? matchedDepartures : directionDepartures;
 
     // Process departures and keep arrival ISO metadata for persistence checks.
     const processedWithArrivalMeta = departuresToProcess.map((dep) => {
@@ -361,7 +370,9 @@ Deno.serve(async (req) => {
         operator: dep.agency?.name || 'Unknown',
         lineName: dep.route?.name || dep.route?.designation || 'Train',
         transportCategory: dep.route?.transport_mode || "TRAIN",
-        departureStation: dep.stop?.name || boardStationName,
+        // Always show the selected board station in cards.
+        // Trip origin may be an upstream station (e.g. Landskrona) and is confusing here.
+        departureStation: boardStationName,
         departureStationId: boardStationId,
         arrivalStation: targetStationName,
         departureTime: realtimeTime || scheduledTime,

@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { LogOut, LogIn, Settings } from "lucide-react";
+import { LogOut, LogIn, Settings, BarChart3 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const UserMenu = () => {
@@ -31,6 +31,7 @@ const UserMenu = () => {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+  const isAdmin = (user.email ?? "").toLowerCase() === "arianfakhravar@gmail.com";
 
   return (
     <Popover>
@@ -42,18 +43,32 @@ const UserMenu = () => {
           </Avatar>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56" align="end">
+      <PopoverContent className="w-64" align="end">
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium">{profile?.full_name ?? "User"}</p>
             <p className="text-xs text-muted-foreground">{user.email}</p>
           </div>
           <Link to="/settings">
-            <Button variant="outline" size="sm" className="w-full gap-2">
-              <Settings className="h-4 w-4" />
-              Claim settings
+            <Button
+              variant="default"
+              size="default"
+              className="h-12 w-full justify-start gap-3 rounded-xl px-4 text-base font-semibold shadow-md shadow-primary/30"
+            >
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-foreground/20">
+                <Settings className="h-4.5 w-4.5" />
+              </span>
+              <span>Account settings</span>
             </Button>
           </Link>
+          {isAdmin && (
+            <Link to="/admin/api-usage">
+              <Button variant="outline" size="default" className="h-11 w-full justify-start gap-3 rounded-xl px-4 text-sm font-semibold">
+                <BarChart3 className="h-4 w-4" />
+                API usage
+              </Button>
+            </Link>
+          )}
           <Button variant="outline" size="sm" className="w-full gap-2" onClick={signOut}>
             <LogOut className="h-4 w-4" />
             Sign out

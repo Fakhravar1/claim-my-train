@@ -34,6 +34,20 @@ const parseTimeToSeconds = (value?: string | null) => {
   return hh * 3600 + mm * 60 + ss;
 };
 
+const dayDifference = (fromDate: string, toDate: string) => {
+  const from = new Date(`${fromDate}T00:00:00`);
+  const to = new Date(`${toDate}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
+  return Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
+};
+
+const formatDayShift = (diffDays: number) => {
+  if (diffDays === 0) return "";
+  if (diffDays === 1) return "next day";
+  if (diffDays === -1) return "previous day";
+  return diffDays > 0 ? `+${diffDays} days` : `${diffDays} days`;
+};
+
 const DepartureCard = ({ departure }: DepartureCardProps) => {
   // Calculate travel duration
   const calculateDuration = () => {
@@ -93,6 +107,8 @@ const DepartureCard = ({ departure }: DepartureCardProps) => {
   const departureDateLabel = departure.departureDate || "-";
   const arrivalDateLabel = departure.arrivalDate || departure.departureDate || "-";
   const spansMultipleDays = arrivalDateLabel !== departureDateLabel;
+  const arrivalDayDiff = dayDifference(departureDateLabel, arrivalDateLabel);
+  const arrivalDayShiftLabel = formatDayShift(arrivalDayDiff);
 
   return (
     <Card
@@ -113,18 +129,17 @@ const DepartureCard = ({ departure }: DepartureCardProps) => {
               <span>{departure.arrivalStation}</span>
             </div>
 
-            <div className="flex items-baseline gap-2 mb-2">
-              <span className="font-semibold text-sm sm:text-base text-muted-foreground">
-                {departure.line}
-              </span>
-              <span className="text-xs text-muted-foreground truncate">
-                {departure.lineName}
-              </span>
-            </div>
-
             <div className="text-xs text-muted-foreground mb-2">
               <span>Departs: {departureDateLabel}</span>
-              {spansMultipleDays && <span> | Arrives: {arrivalDateLabel}</span>}
+              {spansMultipleDays && (
+                <span>
+                  {" "}
+                  | Arrives: {arrivalDateLabel}{" "}
+                  <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700">
+                    {arrivalDayShiftLabel}
+                  </span>
+                </span>
+              )}
             </div>
 
             <div className="text-sm overflow-x-auto">

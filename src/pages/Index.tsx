@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RefreshCw, Train } from "lucide-react";
+import { RefreshCw, Train, Clock3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import DepartureCard from "@/components/DepartureCard";
 import UserMenu from "@/components/UserMenu";
 import { supabase } from "@/integrations/supabase/client";
-import { STOPS, Direction } from "@/constants/stops";
+import { STOPS, Direction, STOP_OPTIONS, getDirectionForStops } from "@/constants/stops";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Select,
   SelectContent,
@@ -44,20 +45,20 @@ interface EdgeFunctionResponse {
   departures: Departure[];
 }
 
-type RouteTerminal = "MALMO_C" | "COPENHAGEN_H";
-
 const USE_LOCAL_FUNCTIONS = import.meta.env.VITE_USE_LOCAL_FUNCTIONS === "true";
 const LOCAL_FUNCTIONS_BASE_URL = (import.meta.env.VITE_LOCAL_FUNCTIONS_URL as string | undefined)?.replace(/\/$/, "");
 
 const invokeDeparturesFunction = async (
   direction: Direction,
-  timeShiftMinutes: number
+  timeShiftMinutes: number,
+  originId?: string,
+  destinationId?: string
 ): Promise<EdgeFunctionResponse> => {
   if (USE_LOCAL_FUNCTIONS && LOCAL_FUNCTIONS_BASE_URL) {
     const response = await fetch(`${LOCAL_FUNCTIONS_BASE_URL}/get-train-departures`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ direction, timeShiftMinutes }),
+      body: JSON.stringify({ direction, timeShiftMinutes, originId, destinationId }),
     });
 
     if (!response.ok) {
@@ -69,7 +70,7 @@ const invokeDeparturesFunction = async (
   }
 
   const { data, error } = await supabase.functions.invoke("get-train-departures", {
-    body: { direction, timeShiftMinutes },
+    body: { direction, timeShiftMinutes, originId, destinationId },
   });
 
   if (error) {
@@ -80,22 +81,28 @@ const invokeDeparturesFunction = async (
 };
 
 const Index = () => {
+  const { profile } = useAuth();
   const [departures, setDepartures] = useState<Departure[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [fromStop, setFromStop] = useState<RouteTerminal>("MALMO_C");
-  const [toStop, setToStop] = useState<RouteTerminal>("COPENHAGEN_H");
+  const [fromStopId, setFromStopId] = useState<string>(STOPS.MALMO_C.id);
+  const [toStopId, setToStopId] = useState<string>(STOPS.COPENHAGEN_H.id);
   const [selectedTrain, setSelectedTrain] = useState<string>("all");
   const [storedTrainNames, setStoredTrainNames] = useState<string[]>([]);
   const [historyOffsetMinutes, setHistoryOffsetMinutes] = useState<number>(0);
   const { toast } = useToast();
-  const direction: Direction = fromStop === "MALMO_C" ? "malmo-departures" : "hyllie-departures";
+  const fromStop = STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? STOP_OPTIONS[0];
+  const toStop = STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? STOP_OPTIONS[STOP_OPTIONS.length - 1];
+  const direction: Direction = useMemo(
+    () => getDirectionForStops(fromStopId, toStopId),
+    [fromStopId, toStopId]
+  );
 
   const fetchDepartures = async (offsetMinutes = historyOffsetMinutes) => {
     const clampedOffset = Math.max(0, Math.min(360, offsetMinutes));
     setLoading(true);
     try {
-      const response = await invokeDeparturesFunction(direction, clampedOffset);
+      const response = await invokeDeparturesFunction(direction, clampedOffset, fromStopId, toStopId);
       
       setDepartures(response.departures ?? []);
       setLastUpdated(new Date());
@@ -171,7 +178,7 @@ const Index = () => {
     // Auto-refresh every 15 minutes
     const interval = setInterval(() => fetchDepartures(), 15 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [direction, historyOffsetMinutes]);
+  }, [direction, historyOffsetMinutes, fromStopId, toStopId]);
 
   const handleLoadEarlier = () => {
     setHistoryOffsetMinutes((prev) => Math.min(prev + 60, 360));
@@ -186,14 +193,25 @@ const Index = () => {
     fetchDepartures(0);
   };
 
-  const handleFromChange = (value: RouteTerminal) => {
-    setFromStop(value);
-    setToStop(value === "MALMO_C" ? "COPENHAGEN_H" : "MALMO_C");
+  const handleFromChange = (value: string) => {
+    setFromStopId(value);
+    if (value === toStopId) {
+      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      if (fallback) setToStopId(fallback.id);
+    }
   };
 
-  const handleToChange = (value: RouteTerminal) => {
-    setToStop(value);
-    setFromStop(value === "MALMO_C" ? "COPENHAGEN_H" : "MALMO_C");
+  const handleToChange = (value: string) => {
+    setToStopId(value);
+    if (value === fromStopId) {
+      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      if (fallback) setFromStopId(fallback.id);
+    }
+  };
+
+  const handleSearchRoute = () => {
+    setHistoryOffsetMinutes(0);
+    fetchDepartures(0);
   };
 
   const offsetLabel =
@@ -202,20 +220,28 @@ const Index = () => {
       : "Showing latest departures";
   const canLoadEarlier = historyOffsetMinutes < 360;
   const canLoadLater = historyOffsetMinutes > 0;
-  const backendLabel =
-    USE_LOCAL_FUNCTIONS && LOCAL_FUNCTIONS_BASE_URL
-      ? `Backend: local (${LOCAL_FUNCTIONS_BASE_URL})`
-      : "Backend: cloud";
+  const backendLabel = USE_LOCAL_FUNCTIONS && LOCAL_FUNCTIONS_BASE_URL ? `Local backend: ${LOCAL_FUNCTIONS_BASE_URL}` : null;
+
+  useEffect(() => {
+    if (!profile) return;
+    if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
+      setFromStopId(profile.preferred_from_stop_id);
+    }
+    if (profile.preferred_to_stop_id && profile.preferred_to_stop_id !== toStopId) {
+      setToStopId(profile.preferred_to_stop_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id]);
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         {/* Header */}
         <div className="mb-10">
-          <div className="mb-4 space-y-2">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Scandinavian rail delay tracker</p>
-            <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">Claim My Train</h1>
-            <p className="max-w-2xl text-base text-muted-foreground">
+          <div className="mb-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Live departures</p>
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground">Claim My Train</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Find delayed departures and claim what you&apos;re owed.
             </p>
           </div>
@@ -254,8 +280,7 @@ const Index = () => {
                 <div className="flex flex-col">
                   <span className="text-sm text-muted-foreground">Route</span>
                   <span className="font-semibold text-foreground">
-                    {fromStop === "MALMO_C" ? STOPS.MALMO_C.shortName : STOPS.COPENHAGEN_H.shortName} to{" "}
-                    {toStop === "MALMO_C" ? STOPS.MALMO_C.shortName : STOPS.COPENHAGEN_H.shortName}
+                    {fromStop.shortName} to {toStop.shortName}
                   </span>
                 </div>
               </div>
@@ -263,29 +288,41 @@ const Index = () => {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">From</span>
-                  <Select value={fromStop} onValueChange={(value) => handleFromChange(value as RouteTerminal)}>
+                  <Select value={fromStopId} onValueChange={handleFromChange}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MALMO_C">{STOPS.MALMO_C.shortName}</SelectItem>
-                      <SelectItem value="COPENHAGEN_H">{STOPS.COPENHAGEN_H.shortName}</SelectItem>
+                      {STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
+                        <SelectItem key={stop.id} value={stop.id}>
+                          {stop.shortName}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">To</span>
-                  <Select value={toStop} onValueChange={(value) => handleToChange(value as RouteTerminal)}>
+                  <Select value={toStopId} onValueChange={handleToChange}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MALMO_C">{STOPS.MALMO_C.shortName}</SelectItem>
-                      <SelectItem value="COPENHAGEN_H">{STOPS.COPENHAGEN_H.shortName}</SelectItem>
+                      {STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
+                        <SelectItem key={stop.id} value={stop.id}>
+                          {stop.shortName}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSearchRoute} disabled={loading} className="min-w-32">
+                  Search route
+                </Button>
               </div>
             </div>
           </Card>
@@ -329,8 +366,12 @@ const Index = () => {
         <div className="mb-5 text-sm text-muted-foreground">
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col">
-              <span>Last updated: {lastUpdated.toLocaleTimeString("sv-SE")}</span>
-              <span className="text-xs text-muted-foreground">{backendLabel}</span>
+              <div className="flex items-center gap-2 text-foreground">
+                <Clock3 className="h-4 w-4 text-primary" />
+                <span className="text-base font-semibold">Last updated {lastUpdated.toLocaleTimeString("sv-SE")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">Times are shown in local Swedish time.</span>
+              {backendLabel && <span className="text-xs text-muted-foreground">{backendLabel}</span>}
               <span className="text-xs text-muted-foreground">{offsetLabel}</span>
             </div>
             <div className="flex items-center gap-2">
@@ -368,9 +409,25 @@ const Index = () => {
               </p>
             </Card>
           ) : (
-            filteredDepartures.map((departure, index) => (
-              <DepartureCard key={index} departure={departure} />
-            ))
+            filteredDepartures.map((departure, index) => {
+              const previousDeparture = index > 0 ? filteredDepartures[index - 1] : null;
+              const hasDateBoundary = !previousDeparture || previousDeparture.departureDate !== departure.departureDate;
+
+              return (
+                <div key={`${departure.line}-${departure.departureDate}-${departure.departureTime}-${index}`} className="space-y-3">
+                  {hasDateBoundary && (
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="h-px flex-1 bg-border/80" />
+                      <span className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold uppercase tracking-wide text-foreground">
+                        {departure.departureDate}
+                      </span>
+                      <div className="h-px flex-1 bg-border/80" />
+                    </div>
+                  )}
+                  <DepartureCard departure={departure} />
+                </div>
+              );
+            })
           )}
         </div>
       </div>

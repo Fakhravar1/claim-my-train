@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Train } from "lucide-react";
 import DepartureCard from "@/components/DepartureCard";
 import UserMenu from "@/components/UserMenu";
 import {
@@ -12,10 +12,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Direction } from "@/constants/stops";
+import { Direction, STOPS, STOP_OPTIONS, getDirectionForStops } from "@/constants/stops";
 
 interface Departure {
   line: string;
@@ -71,9 +78,36 @@ const isClaimOutsideTicketValidity = (
   return departureDate > ticketValidUntil.slice(0, 10);
 };
 
+const dayDifference = (fromDate: string, toDate: string) => {
+  const from = new Date(`${fromDate}T00:00:00`);
+  const to = new Date(`${toDate}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
+  return Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
+};
+
+const formatDayShift = (diffDays: number) => {
+  if (diffDays === 0) return "";
+  if (diffDays === 1) return "next day";
+  if (diffDays === -1) return "previous day";
+  return diffDays > 0 ? `+${diffDays} days` : `${diffDays} days`;
+};
+
+const normalizeStation = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+
+const stationMatchesStop = (
+  stationName: string,
+  stop: { name: string; shortName: string }
+) => {
+  const normalizedStation = normalizeStation(stationName);
+  return [stop.name, stop.shortName].some(
+    (candidate) => normalizeStation(candidate) === normalizedStation
+  );
+};
+
 const DelayAlerts = () => {
   const [loading, setLoading] = useState(false);
-  const [directionScope, setDirectionScope] = useState<"both" | Direction>("both");
+  const [fromStopId, setFromStopId] = useState<string>(STOPS.MALMO_C.id);
+  const [toStopId, setToStopId] = useState<string>(STOPS.COPENHAGEN_H.id);
   const [alerts, setAlerts] = useState<Departure[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<Departure | null>(null);
@@ -82,6 +116,28 @@ const DelayAlerts = () => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const fromStop = STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? STOP_OPTIONS[0];
+  const toStop = STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? STOP_OPTIONS[STOP_OPTIONS.length - 1];
+  const directionScope: Direction = useMemo(
+    () => getDirectionForStops(fromStopId, toStopId),
+    [fromStopId, toStopId]
+  );
+
+  const handleFromChange = (value: string) => {
+    setFromStopId(value);
+    if (value === toStopId) {
+      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      if (fallback) setToStopId(fallback.id);
+    }
+  };
+
+  const handleToChange = (value: string) => {
+    setToStopId(value);
+    if (value === fromStopId) {
+      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      if (fallback) setFromStopId(fallback.id);
+    }
+  };
 
   const loadAlerts = async () => {
     setLoading(true);
@@ -100,7 +156,12 @@ const DelayAlerts = () => {
       const dedup = new Map<string, Departure>();
       for (const dep of history
         .filter((row) => row.arrival_delay_minutes >= 20)
-        .filter((row) => directionScope === "both" || row.direction === directionScope)
+        .filter((row) => row.direction === directionScope)
+        .filter(
+          (row) =>
+            stationMatchesStop(row.departure_station, fromStop) &&
+            stationMatchesStop(row.arrival_station, toStop)
+        )
         .map((row) => {
           const departureDate = row.departure_datetime.split("T")[0] ?? "";
           const departureTime = row.departure_datetime.split("T")[1]?.slice(0, 8) ?? "";
@@ -153,7 +214,22 @@ const DelayAlerts = () => {
   useEffect(() => {
     loadAlerts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directionScope]);
+  }, [directionScope, fromStopId, toStopId]);
+
+  useEffect(() => {
+    if (!profile) return;
+    if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
+      setFromStopId(profile.preferred_from_stop_id);
+    }
+    if (profile.preferred_to_stop_id && profile.preferred_to_stop_id !== toStopId) {
+      setToStopId(profile.preferred_to_stop_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id]);
+
+  const handleSearchRoute = () => {
+    void loadAlerts();
+  };
 
   const openClaimFormWithFallback = async (dep: Departure) => {
     if (!user) {
@@ -246,12 +322,55 @@ const DelayAlerts = () => {
           </div>
         </div>
 
-        <Card className="p-4 mb-4">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Direction:</span>
-            <Button variant={directionScope === "both" ? "default" : "outline"} size="sm" onClick={() => setDirectionScope("both")}>Both</Button>
-            <Button variant={directionScope === "malmo-departures" ? "default" : "outline"} size="sm" onClick={() => setDirectionScope("malmo-departures")}>From Malmö C</Button>
-            <Button variant={directionScope === "hyllie-departures" ? "default" : "outline"} size="sm" onClick={() => setDirectionScope("hyllie-departures")}>From København H</Button>
+        <Card className="mb-4 p-5">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <Train className="h-6 w-6 text-primary" />
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Route</span>
+                <span className="font-semibold text-foreground">
+                  {fromStop.shortName} to {toStop.shortName}
+                </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">From</span>
+                <Select value={fromStopId} onValueChange={handleFromChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
+                      <SelectItem key={stop.id} value={stop.id}>
+                        {stop.shortName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">To</span>
+                <Select value={toStopId} onValueChange={handleToChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
+                      <SelectItem key={stop.id} value={stop.id}>
+                        {stop.shortName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={handleSearchRoute} disabled={loading} className="min-w-32">
+                Search route
+              </Button>
+            </div>
           </div>
           <div className="mt-3 text-xs text-muted-foreground">
             This page reads only from persisted delay history in Supabase (last 30 days). {backendLabel}
@@ -279,27 +398,41 @@ const DelayAlerts = () => {
               <p className="text-muted-foreground">{loading ? "Loading delay alerts..." : "No delay alerts in selected window."}</p>
             </Card>
           ) : (
-            alerts.map((dep, idx) => (
-              <div key={`${dep.line}-${dep.departureDate}-${dep.departureTime}-${idx}`} className="space-y-2">
-                <DepartureCard departure={dep} />
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      if (!user) {
-                        promptLoginForClaim();
-                        return;
-                      }
-                      setSelectedAlert(dep);
-                      setClaimActionStatus("");
-                      setClaimDialogOpen(true);
-                    }}
-                  >
-                    Start claim
-                  </Button>
+            alerts.map((dep, idx) => {
+              const prev = idx > 0 ? alerts[idx - 1] : null;
+              const isNewDay = !!prev && prev.departureDate !== dep.departureDate;
+
+              return (
+                <div key={`${dep.line}-${dep.departureDate}-${dep.departureTime}-${idx}`} className="space-y-2">
+                  {isNewDay && (
+                    <div className="my-4 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                        Day change: {prev?.departureDate} {"->"} {dep.departureDate}
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+                  <DepartureCard departure={dep} />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (!user) {
+                          promptLoginForClaim();
+                          return;
+                        }
+                        setSelectedAlert(dep);
+                        setClaimActionStatus("");
+                        setClaimDialogOpen(true);
+                      }}
+                    >
+                      Start claim
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -315,15 +448,36 @@ const DelayAlerts = () => {
 
           {selectedAlert && (
             <div className="space-y-4">
-              <Card className="p-3 text-sm space-y-1">
-                <p><span className="font-semibold">Line:</span> {selectedAlert.line} {selectedAlert.lineName}</p>
-                <p><span className="font-semibold">Route:</span> {selectedAlert.departureStation} {" -> "} {selectedAlert.arrivalStation}</p>
-                <p><span className="font-semibold">Date:</span> {selectedAlert.departureDate}</p>
-                <p><span className="font-semibold">Departs:</span> {selectedAlert.departureTime}</p>
-                <p><span className="font-semibold">Scheduled arrival:</span> {selectedAlert.scheduledArrivalTime ?? "-"}</p>
-                <p><span className="font-semibold">Actual arrival:</span> {selectedAlert.arrivalTime ?? "-"}</p>
-                <p><span className="font-semibold">Delay:</span> +{selectedAlert.arrivalDelayMinutes ?? 0} min</p>
-              </Card>
+              {(() => {
+                const claimDate = selectedAlert.departureDate || "-";
+                const arrivalDate = selectedAlert.arrivalDate || selectedAlert.departureDate || "-";
+                const dayShift = formatDayShift(dayDifference(claimDate, arrivalDate));
+                const hasDayShift = claimDate !== arrivalDate;
+
+                return (
+                  <>
+                    {hasDayShift && (
+                      <Card className="border-rose-200 bg-rose-50 p-3 text-sm">
+                        <p className="font-semibold text-rose-700">Day change detected</p>
+                        <p className="mt-1 text-rose-700/90">
+                          Claim date: {claimDate} | Arrival date: {arrivalDate} ({dayShift})
+                        </p>
+                      </Card>
+                    )}
+
+                    <Card className="p-3 text-sm space-y-1">
+                      <p><span className="font-semibold">Line:</span> {selectedAlert.line} {selectedAlert.lineName}</p>
+                      <p><span className="font-semibold">Route:</span> {selectedAlert.departureStation} {" -> "} {selectedAlert.arrivalStation}</p>
+                      <p><span className="font-semibold">Claim date:</span> {claimDate}</p>
+                      <p><span className="font-semibold">Arrival date:</span> {arrivalDate}{hasDayShift ? ` (${dayShift})` : ""}</p>
+                      <p><span className="font-semibold">Departs:</span> {selectedAlert.departureTime}</p>
+                      <p><span className="font-semibold">Scheduled arrival:</span> {selectedAlert.scheduledArrivalTime ?? "-"}</p>
+                      <p><span className="font-semibold">Actual arrival:</span> {selectedAlert.arrivalTime ?? "-"}</p>
+                      <p><span className="font-semibold">Delay:</span> +{selectedAlert.arrivalDelayMinutes ?? 0} min</p>
+                    </Card>
+                  </>
+                );
+              })()}
 
               {isClaimOutsideTicketValidity(
                 selectedAlert.departureDate,

@@ -78,11 +78,20 @@ export type Database = {
           claim_mobile: string | null
           claim_personnummer: string | null
           claim_ticket_id: string | null
+          claims_done_count: number
+          commuter_from_stop_id: string | null
+          commuter_outbound_end_time: string | null
+          commuter_outbound_start_time: string | null
+          commuter_return_end_time: string | null
+          commuter_return_start_time: string | null
+          commuter_to_stop_id: string | null
           created_at: string | null
           email: string | null
           full_name: string | null
           id: string
           is_period_ticket: boolean
+          preferred_from_stop_id: string | null
+          preferred_to_stop_id: string | null
           ticket_valid_until: string | null
           updated_at: string | null
         }
@@ -92,11 +101,20 @@ export type Database = {
           claim_mobile?: string | null
           claim_personnummer?: string | null
           claim_ticket_id?: string | null
+          claims_done_count?: number
+          commuter_from_stop_id?: string | null
+          commuter_outbound_end_time?: string | null
+          commuter_outbound_start_time?: string | null
+          commuter_return_end_time?: string | null
+          commuter_return_start_time?: string | null
+          commuter_to_stop_id?: string | null
           created_at?: string | null
           email?: string | null
           full_name?: string | null
           id: string
           is_period_ticket?: boolean
+          preferred_from_stop_id?: string | null
+          preferred_to_stop_id?: string | null
           ticket_valid_until?: string | null
           updated_at?: string | null
         }
@@ -106,11 +124,20 @@ export type Database = {
           claim_mobile?: string | null
           claim_personnummer?: string | null
           claim_ticket_id?: string | null
+          claims_done_count?: number
+          commuter_from_stop_id?: string | null
+          commuter_outbound_end_time?: string | null
+          commuter_outbound_start_time?: string | null
+          commuter_return_end_time?: string | null
+          commuter_return_start_time?: string | null
+          commuter_to_stop_id?: string | null
           created_at?: string | null
           email?: string | null
           full_name?: string | null
           id?: string
           is_period_ticket?: boolean
+          preferred_from_stop_id?: string | null
+          preferred_to_stop_id?: string | null
           ticket_valid_until?: string | null
           updated_at?: string | null
         }

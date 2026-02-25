@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import DelayAlerts from "./pages/YellowAlerts";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
+import AdminApiUsage from "./pages/AdminApiUsage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/admin/api-usage" element={<AdminApiUsage />} />
             <Route path="/delay-alerts" element={<DelayAlerts />} />
             <Route path="/yellow-alerts" element={<DelayAlerts />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

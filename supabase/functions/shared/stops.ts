@@ -6,10 +6,30 @@ export const STOPS = {
     name: "Malmö Centralstation",
     shortName: "Malmö C",
   },
+  MALMO_TRIANGELN: {
+    id: "740001554",
+    name: "Malmö Triangeln station",
+    shortName: "Malmö Triangeln",
+  },
   MALMO_HYLLIE: {
     id: "740001586",
     name: "Malmö Hyllie station",
     shortName: "Malmö Hyllie",
+  },
+  COPENHAGEN_AIRPORT: {
+    id: "860000284",
+    name: "Københavns Lufthavn st",
+    shortName: "Copenhagen Airport",
+  },
+  COPENHAGEN_TARNBY: {
+    id: "860000322",
+    name: "Tårnby st",
+    shortName: "Tårnby",
+  },
+  COPENHAGEN_ORESTAD: {
+    id: "860000501",
+    name: "Ørestad st",
+    shortName: "Ørestad",
   },
   COPENHAGEN_H: {
     id: "860000626",
@@ -34,6 +54,11 @@ export const ROUTES: Record<
 
 export const STOP_OPTIONS = [
   STOPS.MALMO_C,
+  STOPS.MALMO_TRIANGELN,
+  STOPS.MALMO_HYLLIE,
+  STOPS.COPENHAGEN_AIRPORT,
+  STOPS.COPENHAGEN_TARNBY,
+  STOPS.COPENHAGEN_ORESTAD,
   STOPS.COPENHAGEN_H,
 ] as const;
 

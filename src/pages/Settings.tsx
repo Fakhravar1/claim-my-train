@@ -9,6 +9,14 @@ import UserMenu from "@/components/UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { STOP_OPTIONS } from "@/constants/stops";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const toIsoDate = (value: string | null | undefined) => {
   if (!value) return "";
@@ -18,13 +26,23 @@ const toIsoDate = (value: string | null | undefined) => {
 const Settings = () => {
   const { user, profile, loading } = useAuth();
   const { toast } = useToast();
+  const CLAIM_VALUE_SEK = 100;
 
   const [claimEmail, setClaimEmail] = useState("");
   const [claimMobile, setClaimMobile] = useState("");
   const [claimTicketId, setClaimTicketId] = useState("");
   const [claimPersonnummer, setClaimPersonnummer] = useState("");
+  const [claimsDoneCount, setClaimsDoneCount] = useState(0);
   const [isPeriodTicket, setIsPeriodTicket] = useState(false);
   const [ticketValidUntil, setTicketValidUntil] = useState("");
+  const [preferredFromStopId, setPreferredFromStopId] = useState("740000003");
+  const [preferredToStopId, setPreferredToStopId] = useState("860000626");
+  const [commuterFromStopId, setCommuterFromStopId] = useState("");
+  const [commuterToStopId, setCommuterToStopId] = useState("");
+  const [commuterOutboundStartTime, setCommuterOutboundStartTime] = useState("");
+  const [commuterOutboundEndTime, setCommuterOutboundEndTime] = useState("");
+  const [commuterReturnStartTime, setCommuterReturnStartTime] = useState("");
+  const [commuterReturnEndTime, setCommuterReturnEndTime] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -32,8 +50,17 @@ const Settings = () => {
     setClaimMobile(profile?.claim_mobile ?? "");
     setClaimTicketId(profile?.claim_ticket_id ?? "");
     setClaimPersonnummer(profile?.claim_personnummer ?? "");
+    setClaimsDoneCount(profile?.claims_done_count ?? 0);
     setIsPeriodTicket(profile?.is_period_ticket ?? false);
     setTicketValidUntil(toIsoDate(profile?.ticket_valid_until));
+    setPreferredFromStopId(profile?.preferred_from_stop_id ?? "740000003");
+    setPreferredToStopId(profile?.preferred_to_stop_id ?? "860000626");
+    setCommuterFromStopId(profile?.commuter_from_stop_id ?? "");
+    setCommuterToStopId(profile?.commuter_to_stop_id ?? "");
+    setCommuterOutboundStartTime(profile?.commuter_outbound_start_time ?? "");
+    setCommuterOutboundEndTime(profile?.commuter_outbound_end_time ?? "");
+    setCommuterReturnStartTime(profile?.commuter_return_start_time ?? "");
+    setCommuterReturnEndTime(profile?.commuter_return_end_time ?? "");
   }, [profile]);
 
   const validityStatus = useMemo(() => {
@@ -85,8 +112,17 @@ const Settings = () => {
           claim_mobile: claimMobile || null,
           claim_ticket_id: claimTicketId || null,
           claim_personnummer: claimPersonnummer || null,
+          claims_done_count: Math.max(0, claimsDoneCount),
           is_period_ticket: isPeriodTicket,
           ticket_valid_until: isPeriodTicket ? ticketValidUntil || null : null,
+          preferred_from_stop_id: preferredFromStopId || null,
+          preferred_to_stop_id: preferredToStopId || null,
+          commuter_from_stop_id: commuterFromStopId || null,
+          commuter_to_stop_id: commuterToStopId || null,
+          commuter_outbound_start_time: commuterOutboundStartTime || null,
+          commuter_outbound_end_time: commuterOutboundEndTime || null,
+          commuter_return_start_time: commuterReturnStartTime || null,
+          commuter_return_end_time: commuterReturnEndTime || null,
         },
         { onConflict: "id" }
       );
@@ -113,7 +149,7 @@ const Settings = () => {
         <div className="mb-6 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Account</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Claim settings</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Account settings</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Save your default claim details to prefill the claim flow faster.
             </p>
@@ -163,6 +199,156 @@ const Settings = () => {
                 onChange={(event) => setClaimPersonnummer(event.target.value)}
                 placeholder="19700901-3975"
               />
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+              <div>
+                <p className="text-sm font-semibold">Claims tracker</p>
+                <p className="text-xs text-muted-foreground">
+                  Track total submitted claims and estimated payout at {CLAIM_VALUE_SEK} KR per claim.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="claims-done-count">Claims done</Label>
+                <Input
+                  id="claims-done-count"
+                  type="number"
+                  min={0}
+                  value={claimsDoneCount}
+                  onChange={(event) =>
+                    setClaimsDoneCount(Math.max(0, Number.parseInt(event.target.value || "0", 10) || 0))
+                  }
+                />
+              </div>
+              <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-foreground">
+                Amount received: <span className="font-semibold">{claimsDoneCount * CLAIM_VALUE_SEK} KR</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+              <div>
+                <p className="text-sm font-semibold">Usual travel route</p>
+                <p className="text-xs text-muted-foreground">
+                  Set the stations you usually travel between so potential claims can be monitored for your route.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="preferred-from">From</Label>
+                  <Select value={preferredFromStopId} onValueChange={setPreferredFromStopId}>
+                    <SelectTrigger id="preferred-from">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STOP_OPTIONS.map((stop) => (
+                        <SelectItem key={stop.id} value={stop.id}>
+                          {stop.shortName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="preferred-to">To</Label>
+                  <Select value={preferredToStopId} onValueChange={setPreferredToStopId}>
+                    <SelectTrigger id="preferred-to">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STOP_OPTIONS.map((stop) => (
+                        <SelectItem key={stop.id} value={stop.id}>
+                          {stop.shortName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+              <div>
+                <p className="text-sm font-semibold">Commuter habits (optional)</p>
+                <p className="text-xs text-muted-foreground">
+                  Save your usual commute stops and time windows for going out and coming back.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="commuter-from">From</Label>
+                  <Select value={commuterFromStopId || "none"} onValueChange={(value) => setCommuterFromStopId(value === "none" ? "" : value)}>
+                    <SelectTrigger id="commuter-from">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not set</SelectItem>
+                      {STOP_OPTIONS.map((stop) => (
+                        <SelectItem key={stop.id} value={stop.id}>
+                          {stop.shortName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="commuter-to">To</Label>
+                  <Select value={commuterToStopId || "none"} onValueChange={(value) => setCommuterToStopId(value === "none" ? "" : value)}>
+                    <SelectTrigger id="commuter-to">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not set</SelectItem>
+                      {STOP_OPTIONS.map((stop) => (
+                        <SelectItem key={stop.id} value={stop.id}>
+                          {stop.shortName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="commuter-outbound-start">Outbound start</Label>
+                  <Input
+                    id="commuter-outbound-start"
+                    type="time"
+                    value={commuterOutboundStartTime}
+                    onChange={(event) => setCommuterOutboundStartTime(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="commuter-outbound-end">Outbound end</Label>
+                  <Input
+                    id="commuter-outbound-end"
+                    type="time"
+                    value={commuterOutboundEndTime}
+                    onChange={(event) => setCommuterOutboundEndTime(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="commuter-return-start">Return start</Label>
+                  <Input
+                    id="commuter-return-start"
+                    type="time"
+                    value={commuterReturnStartTime}
+                    onChange={(event) => setCommuterReturnStartTime(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="commuter-return-end">Return end</Label>
+                  <Input
+                    id="commuter-return-end"
+                    type="time"
+                    value={commuterReturnEndTime}
+                    onChange={(event) => setCommuterReturnEndTime(event.target.value)}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/70 p-3">
