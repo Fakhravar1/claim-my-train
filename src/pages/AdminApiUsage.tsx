@@ -16,6 +16,7 @@ const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
 type RangeOption = 7 | 30 | 90;
 
 type ChartPoint = {
+  dayKey: string;
   date: string;
   calls: number;
 };
@@ -125,6 +126,52 @@ const toStockholmDayKey = (isoTimestamp: string) => {
   return formatter.format(date);
 };
 
+const subtractDaysFromDayKey = (dayKey: string, days: number) => {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  if (!y || !m || !d) return dayKey;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+};
+
+const stockholmOffsetForDate = (date: Date) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+    timeZoneName: "shortOffset",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const offsetPart = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT+1";
+  const match = offsetPart.match(/^GMT([+-]\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return "+01:00";
+  const sign = match[1].startsWith("-") ? "-" : "+";
+  const absoluteHours = Math.abs(Number(match[1])).toString().padStart(2, "0");
+  const minutes = match[2] ?? "00";
+  return `${sign}${absoluteHours}:${minutes}`;
+};
+
+const getSinceTimestampForRange = (days: RangeOption) => {
+  const todayKey = toStockholmDayKey(new Date().toISOString());
+  const startDayKey = subtractDaysFromDayKey(todayKey, days - 1);
+  const [y, m, d] = startDayKey.split("-").map(Number);
+  if (!y || !m || !d) return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const offset = stockholmOffsetForDate(new Date(Date.UTC(y, m - 1, d, 12, 0, 0)));
+  return `${startDayKey}T00:00:00${offset}`;
+};
+
+const buildRangeDayKeys = (days: RangeOption) => {
+  const todayKey = toStockholmDayKey(new Date().toISOString());
+  const startDayKey = subtractDaysFromDayKey(todayKey, days - 1);
+  const [startY, startM, startD] = startDayKey.split("-").map(Number);
+  if (!startY || !startM || !startD) return [];
+  const start = new Date(Date.UTC(startY, startM - 1, startD));
+  return Array.from({ length: days }, (_, idx) => {
+    const date = new Date(start);
+    date.setUTCDate(start.getUTCDate() + idx);
+    return date.toISOString().slice(0, 10);
+  });
+};
+
 const AdminApiUsage = () => {
   const { user, loading } = useAuth();
   const [rangeDays, setRangeDays] = useState<RangeOption>(30);
@@ -166,19 +213,20 @@ const AdminApiUsage = () => {
       setLoadingUsage(true);
       setError(null);
       try {
-        const since = new Date();
-        since.setDate(since.getDate() - rangeDays);
+        const sinceTs = getSinceTimestampForRange(rangeDays);
 
         const { data: payload, error: queryError } = await supabase.rpc("get_admin_api_analytics", {
-          since_ts: since.toISOString(),
+          since_ts: sinceTs,
           timezone_name: STOCKHOLM_TIME_ZONE,
         });
 
         if (!queryError && payload) {
           const typed = payload as AnalyticsPayload;
-          const chartPoints: ChartPoint[] = (typed.daily_calls ?? []).map((row) => ({
-            date: formatDayLabel(row.day),
-            calls: row.calls,
+          const dailyMap = new Map((typed.daily_calls ?? []).map((row) => [row.day, row.calls]));
+          const chartPoints: ChartPoint[] = buildRangeDayKeys(rangeDays).map((dayKey) => ({
+            dayKey,
+            date: formatDayLabel(dayKey),
+            calls: dailyMap.get(dayKey) ?? 0,
           }));
 
           setData(chartPoints);
@@ -214,7 +262,7 @@ const AdminApiUsage = () => {
           const { data: rows, error: fallbackError } = await supabase
             .from("departures")
             .select("fetched_at")
-            .gte("fetched_at", since.toISOString())
+            .gte("fetched_at", sinceTs)
             .order("fetched_at", { ascending: true })
             .limit(50000);
           if (fallbackError) throw fallbackError;
@@ -229,10 +277,10 @@ const AdminApiUsage = () => {
             if (!dayKey) continue;
             countsByDay.set(dayKey, (countsByDay.get(dayKey) ?? 0) + 1);
           }
-          const sortedDays = Array.from(countsByDay.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-          const chartPoints: ChartPoint[] = sortedDays.map(([day, calls]) => ({
-            date: formatDayLabel(day),
-            calls,
+          const chartPoints: ChartPoint[] = buildRangeDayKeys(rangeDays).map((dayKey) => ({
+            dayKey,
+            date: formatDayLabel(dayKey),
+            calls: countsByDay.get(dayKey) ?? 0,
           }));
           setData(chartPoints);
           setFunnel([
@@ -281,7 +329,7 @@ const AdminApiUsage = () => {
 
   const totals = useMemo(() => {
     const totalCalls = data.reduce((sum, point) => sum + point.calls, 0);
-    const activeDays = data.length;
+    const activeDays = data.filter((point) => point.calls > 0).length;
     const avgPerActiveDay = activeDays > 0 ? totalCalls / activeDays : 0;
     return {
       totalCalls,
@@ -379,7 +427,9 @@ const AdminApiUsage = () => {
                     Active days
                     <CardHint text="Number of calendar days with at least one recorded API call." />
                   </p>
-                  <p className="mt-1 text-2xl font-semibold">{totals.activeDays.toLocaleString("sv-SE")}</p>
+                  <p className="mt-1 text-2xl font-semibold">
+                    {totals.activeDays.toLocaleString("sv-SE")} / {rangeDays}
+                  </p>
                 </Card>
                 <Card className="p-4">
                   <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">

@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { LogOut, LogIn, Settings, BarChart3 } from "lucide-react";
+import { LogOut, LogIn, Settings, BarChart3, UserCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const UserMenu = () => {
@@ -36,11 +36,17 @@ const UserMenu = () => {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <Avatar className="h-8 w-8">
+        <Button
+          variant="outline"
+          size="default"
+          className="h-11 rounded-full px-4 text-sm font-semibold shadow-sm shadow-primary/15"
+        >
+          <Avatar className="mr-2 h-7 w-7">
             <AvatarImage src={profile?.avatar_url ?? undefined} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
+          <UserCircle className="mr-1 h-4 w-4" />
+          <span>Account</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64" align="end">
