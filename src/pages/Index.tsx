@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 interface Departure {
   line: string;
@@ -47,6 +47,9 @@ interface EdgeFunctionResponse {
 
 const USE_LOCAL_FUNCTIONS = import.meta.env.VITE_USE_LOCAL_FUNCTIONS === "true";
 const LOCAL_FUNCTIONS_BASE_URL = (import.meta.env.VITE_LOCAL_FUNCTIONS_URL as string | undefined)?.replace(/\/$/, "");
+const DEFAULT_FROM_STOP_ID = STOPS.MALMO_C.id;
+const DEFAULT_TO_STOP_ID = STOPS.COPENHAGEN_H.id;
+const isValidStopId = (id: string | null) => Boolean(id && STOP_OPTIONS.some((stop) => stop.id === id));
 
 const invokeDeparturesFunction = async (
   direction: Direction,
@@ -82,11 +85,22 @@ const invokeDeparturesFunction = async (
 
 const Index = () => {
   const { profile } = useAuth();
+  const [searchParams] = useSearchParams();
+  const routeFromParam = searchParams.get("from");
+  const routeToParam = searchParams.get("to");
+  const initialFromStopId =
+    isValidStopId(routeFromParam) && routeFromParam !== routeToParam
+      ? (routeFromParam as string)
+      : DEFAULT_FROM_STOP_ID;
+  const initialToStopId =
+    isValidStopId(routeToParam) && routeToParam !== initialFromStopId
+      ? (routeToParam as string)
+      : DEFAULT_TO_STOP_ID;
   const [departures, setDepartures] = useState<Departure[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [fromStopId, setFromStopId] = useState<string>(STOPS.MALMO_C.id);
-  const [toStopId, setToStopId] = useState<string>(STOPS.COPENHAGEN_H.id);
+  const [fromStopId, setFromStopId] = useState<string>(initialFromStopId);
+  const [toStopId, setToStopId] = useState<string>(initialToStopId);
   const [selectedTrain, setSelectedTrain] = useState<string>("all");
   const [storedTrainNames, setStoredTrainNames] = useState<string[]>([]);
   const [historyOffsetMinutes, setHistoryOffsetMinutes] = useState<number>(0);
@@ -175,17 +189,25 @@ const Index = () => {
 
   useEffect(() => {
     fetchDepartures();
-    // Auto-refresh every 15 minutes
+    // Auto-refresh every 15 minutes for current route.
     const interval = setInterval(() => fetchDepartures(), 15 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [direction, historyOffsetMinutes, fromStopId, toStopId]);
+  }, [direction, fromStopId, toStopId]);
 
   const handleLoadEarlier = () => {
-    setHistoryOffsetMinutes((prev) => Math.min(prev + 60, 360));
+    setHistoryOffsetMinutes((prev) => {
+      const next = Math.min(prev + 60, 360);
+      void fetchDepartures(next);
+      return next;
+    });
   };
 
   const handleLoadLater = () => {
-    setHistoryOffsetMinutes((prev) => Math.max(prev - 60, 0));
+    setHistoryOffsetMinutes((prev) => {
+      const next = Math.max(prev - 60, 0);
+      void fetchDepartures(next);
+      return next;
+    });
   };
 
   const handleResetOffset = () => {
@@ -194,6 +216,7 @@ const Index = () => {
   };
 
   const handleFromChange = (value: string) => {
+    setHistoryOffsetMinutes(0);
     setFromStopId(value);
     if (value === toStopId) {
       const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
@@ -202,6 +225,7 @@ const Index = () => {
   };
 
   const handleToChange = (value: string) => {
+    setHistoryOffsetMinutes(0);
     setToStopId(value);
     if (value === fromStopId) {
       const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
@@ -224,6 +248,8 @@ const Index = () => {
 
   useEffect(() => {
     if (!profile) return;
+    const hasRouteParams = isValidStopId(routeFromParam) || isValidStopId(routeToParam);
+    if (hasRouteParams) return;
     if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
       setFromStopId(profile.preferred_from_stop_id);
     }
@@ -231,7 +257,7 @@ const Index = () => {
       setToStopId(profile.preferred_to_stop_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id]);
+  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id, routeFromParam, routeToParam]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -328,7 +354,7 @@ const Index = () => {
           </Card>
 
           <div className="mt-2 mb-4 flex justify-center">
-            <Link to="/delay-alerts" className="w-full sm:w-auto">
+            <Link to={`/delay-alerts?from=${encodeURIComponent(fromStopId)}&to=${encodeURIComponent(toStopId)}`} className="w-full sm:w-auto">
               <Button
                 size="lg"
                 className="w-full rounded-full px-8 py-6 text-base font-semibold shadow-lg shadow-primary/20 sm:w-auto"

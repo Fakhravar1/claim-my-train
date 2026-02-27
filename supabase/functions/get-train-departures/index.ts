@@ -102,12 +102,25 @@ const timeToSeconds = (time: string | null) => {
   if ([hh, mm, ss].some((v) => Number.isNaN(v))) return null;
   return hh * 3600 + mm * 60 + ss;
 };
+const delayMinutesFromRealtime = (dep: RealtimeDeparture) => {
+  const delaySeconds = Number(dep.delay ?? 0);
+  if (Number.isFinite(delaySeconds) && delaySeconds !== 0) {
+    return Math.round(delaySeconds / 60);
+  }
+  const realtimeSeconds = timeToSeconds(dep.realtime ? isoTime(dep.realtime) : null);
+  const scheduledSeconds = timeToSeconds(dep.scheduled ? isoTime(dep.scheduled) : null);
+  if (realtimeSeconds === null || scheduledSeconds === null) return 0;
+  return Math.round((realtimeSeconds - scheduledSeconds) / 60);
+};
 
 const COPENHAGEN_CORRIDOR_LINES = new Set(["802", "803", "804", "805", "806"]);
 const RESPONSE_CACHE_TTL_MS = 45_000;
 const STALE_CACHE_MAX_AGE_MS = 10 * 60_000;
 const DELAY_ALERT_MINUTES = 20;
 const MATCH_RATE_FOR_SECONDARY_WINDOW = 0.7;
+// Fixed collector horizon to keep UI data stable and avoid truncated lists.
+// 0, +60 and +120 minutes keeps calls bounded while exposing upcoming trips.
+const COLLECTOR_WINDOWS_MINUTES = [0, 60, 120];
 const responseCache = new Map<string, { storedAt: number; payload: EdgePayload }>();
 const getCachedPayload = (cacheKey: string, maxAgeMs: number): EdgePayload | null => {
   const entry = responseCache.get(cacheKey);
@@ -162,6 +175,9 @@ const isMalmo = (text: string) => {
 
 const stopById = (id: string) => Object.values(STOPS).find((stop) => stop.id === id);
 const stopSequence = STOP_OPTIONS.map((stop) => stop.id);
+const stopIndexById = new Map<string, number>(stopSequence.map((stopId, idx) => [stopId, idx]));
+const stopIdsForDirection = (direction: Direction) =>
+  direction === "malmo-departures" ? [...stopSequence] : [...stopSequence].reverse();
 const corridorPairsForDirection = (direction: Direction) => {
   const pairs: Array<{ originId: string; destinationId: string }> = [];
   for (let i = 0; i < stopSequence.length; i += 1) {
@@ -216,12 +232,13 @@ Deno.serve(async (req) => {
   let cacheKey = "";
 
   try {
-    const { direction, originId, destinationId, timeShiftMinutes = 0, mode } = await req.json() as {
+    const { direction, originId, destinationId, timeShiftMinutes = 0, mode, readFromCorridorWindows = false } = await req.json() as {
       direction: string;
       originId?: string;
       destinationId?: string;
       timeShiftMinutes?: number;
       mode?: string;
+      readFromCorridorWindows?: boolean;
     };
 
     const requestedShiftMinutes = Math.max(
@@ -279,47 +296,24 @@ Deno.serve(async (req) => {
         }
 
         const anchorTime = new Date(Date.now() - requestedShiftMinutes * 60_000);
-        const queryDateTime = formatDateTime(anchorTime);
-        const departuresUrl = `https://realtime-api.trafiklab.se/v1/departures/${collectOrigin.id}/${queryDateTime}?key=${apiKey}`;
-        const arrivalsUrl = `https://realtime-api.trafiklab.se/v1/arrivals/${collectDestination.id}/${queryDateTime}?key=${apiKey}`;
-        const departuresResponse = await fetch(departuresUrl);
-        const arrivalsResponse = await fetch(arrivalsUrl);
-        if (!departuresResponse.ok) {
-          throw new Error(`Collector departures API error: ${departuresResponse.status}`);
-        }
-        const departuresData: RealtimeResponse = await departuresResponse.json();
-        const arrivalsData: RealtimeResponse = arrivalsResponse.ok ? await arrivalsResponse.json() : { arrivals: [] };
-        const departuresPrimary = departuresData.departures ?? [];
-        const arrivalsPrimary = arrivalsData.arrivals ?? [];
-
-        const departuresByTripPrimary = new Set(
-          departuresPrimary
-            .map((dep) => tripKey(dep))
-            .filter((key) => Boolean(key))
-        );
-        const arrivalsByTripPrimary = new Set(
-          arrivalsPrimary
-            .map((arr) => tripKey(arr))
-            .filter((key) => Boolean(key))
-        );
-        const matchedPrimary = [...departuresByTripPrimary].filter((key) => arrivalsByTripPrimary.has(key)).length;
-        const matchRatePrimary = departuresByTripPrimary.size > 0 ? matchedPrimary / departuresByTripPrimary.size : 1;
-        const shouldFetchSecondary = matchRatePrimary < MATCH_RATE_FOR_SECONDARY_WINDOW;
-
-        let departuresMerged = [...departuresPrimary];
-        let arrivalsMerged = [...arrivalsPrimary];
-        if (shouldFetchSecondary) {
-          const departuresFutureAnchor = new Date(anchorTime.getTime() + 60 * 60_000);
-          const departuresFutureDateTime = formatDateTime(departuresFutureAnchor);
-          const arrivalsFutureDateTime = departuresFutureDateTime;
-          const departuresFutureUrl = `https://realtime-api.trafiklab.se/v1/departures/${collectOrigin.id}/${departuresFutureDateTime}?key=${apiKey}`;
-          const arrivalsFutureUrl = `https://realtime-api.trafiklab.se/v1/arrivals/${collectDestination.id}/${arrivalsFutureDateTime}?key=${apiKey}`;
-          const [depFutureResp, arrFutureResp] = await Promise.all([fetch(departuresFutureUrl), fetch(arrivalsFutureUrl)]);
-          const depFutureData: RealtimeResponse = depFutureResp.ok ? await depFutureResp.json() : { departures: [] };
-          const arrFutureData: RealtimeResponse = arrFutureResp.ok ? await arrFutureResp.json() : { arrivals: [] };
-          departuresMerged = departuresMerged.concat(depFutureData.departures ?? []);
-          arrivalsMerged = arrivalsMerged.concat(arrFutureData.arrivals ?? []);
-        }
+        const windowFetches = COLLECTOR_WINDOWS_MINUTES.map(async (shiftMinutes) => {
+          const ts = formatDateTime(new Date(anchorTime.getTime() + shiftMinutes * 60_000));
+          const departuresUrl = `https://realtime-api.trafiklab.se/v1/departures/${collectOrigin.id}/${ts}?key=${apiKey}`;
+          const arrivalsUrl = `https://realtime-api.trafiklab.se/v1/arrivals/${collectDestination.id}/${ts}?key=${apiKey}`;
+          const [depResp, arrResp] = await Promise.all([fetch(departuresUrl), fetch(arrivalsUrl)]);
+          if (!depResp.ok) {
+            throw new Error(`Collector departures API error (${shiftMinutes}m): ${depResp.status}`);
+          }
+          const depData: RealtimeResponse = await depResp.json();
+          const arrData: RealtimeResponse = arrResp.ok ? await arrResp.json() : { arrivals: [] };
+          return {
+            departures: depData.departures ?? [],
+            arrivals: arrData.arrivals ?? [],
+          };
+        });
+        const windowResults = await Promise.all(windowFetches);
+        const departuresMerged = windowResults.flatMap((res) => res.departures);
+        const arrivalsMerged = windowResults.flatMap((res) => res.arrivals);
 
         const corridorDepartures = departuresMerged
           .filter((dep) => normalizeText(dep.route?.transport_mode ?? '') === 'train')
@@ -327,6 +321,29 @@ Deno.serve(async (req) => {
         const corridorArrivals = arrivalsMerged
           .filter((arr) => normalizeText(arr.route?.transport_mode ?? '') === 'train')
           .filter((arr) => COPENHAGEN_CORRIDOR_LINES.has(String(arr.route?.designation ?? '').trim()));
+        const directionalStops = stopIdsForDirection(collectDirection);
+        const departuresByTripAndStop = new Map<string, Map<string, RealtimeDeparture>>();
+        for (const stopId of directionalStops) {
+          const stopDeparturesUrl = `https://realtime-api.trafiklab.se/v1/departures/${stopId}/${queryDateTime}?key=${apiKey}`;
+          const stopResp = await fetch(stopDeparturesUrl);
+          if (!stopResp.ok) continue;
+          const stopData: RealtimeResponse = await stopResp.json();
+          const stopDepartures = (stopData.departures ?? [])
+            .filter((dep) => normalizeText(dep.route?.transport_mode ?? '') === 'train')
+            .filter((dep) => COPENHAGEN_CORRIDOR_LINES.has(String(dep.route?.designation ?? '').trim()));
+          for (const stopDep of stopDepartures) {
+            const stopTripKey = tripKey(stopDep);
+            if (!stopTripKey) continue;
+            let byStop = departuresByTripAndStop.get(stopTripKey);
+            if (!byStop) {
+              byStop = new Map<string, RealtimeDeparture>();
+              departuresByTripAndStop.set(stopTripKey, byStop);
+            }
+            if (!byStop.has(stopId)) {
+              byStop.set(stopId, stopDep);
+            }
+          }
+        }
 
         const arrivalsByTrip = new Map<string, RealtimeDeparture>();
         for (const arr of corridorArrivals) {
@@ -341,28 +358,71 @@ Deno.serve(async (req) => {
           if (!key) continue;
           const matchArrival = arrivalsByTrip.get(key);
           if (!matchArrival) continue;
-          const depIso = dep.realtime || dep.scheduled;
-          const actualArrIso = matchArrival.realtime || matchArrival.scheduled || null;
-          const scheduledArrIso = matchArrival.scheduled || null;
-          const actualSec = timeToSeconds(actualArrIso ? isoTime(actualArrIso) : null);
-          const schedSec = timeToSeconds(scheduledArrIso ? isoTime(scheduledArrIso) : null);
-          const delayMinutes =
-            actualSec !== null && schedSec !== null
-              ? Math.round((actualSec - schedSec) / 60)
-              : 0;
+          const terminalActualArrIso = matchArrival.realtime || matchArrival.scheduled || null;
+          const terminalScheduledArrIso = matchArrival.scheduled || null;
+          const terminalDelayMinutes = delayMinutesFromRealtime(matchArrival);
           const depLine = dep.route?.designation || '';
           const depLineName = dep.route?.name || dep.route?.designation || 'Train';
+          const byStop = departuresByTripAndStop.get(key) ?? new Map<string, RealtimeDeparture>();
+          if (!byStop.has(collectOrigin.id)) byStop.set(collectOrigin.id, dep);
+          if (!byStop.has(collectDestination.id)) byStop.set(collectDestination.id, matchArrival);
+          const delayByStopIndex = new Map<number, number>();
+          for (const [stopId, stopDep] of byStop.entries()) {
+            const idx = stopIndexById.get(stopId);
+            if (typeof idx !== "number") continue;
+            const delayAtStop = delayMinutesFromRealtime(stopDep);
+            const existing = delayByStopIndex.get(idx);
+            if (typeof existing !== "number" || delayAtStop > existing) {
+              delayByStopIndex.set(idx, delayAtStop);
+            }
+          }
 
           for (const pair of pairs) {
             const o = stopById(pair.originId);
             const d = stopById(pair.destinationId);
             if (!o || !d) continue;
+            const originStopDep = byStop.get(o.id);
+            const destinationStopDep = byStop.get(d.id);
+            // Never mix timestamps from a different stop pair.
+            const pairDepartureIso =
+              originStopDep?.realtime ||
+              originStopDep?.scheduled ||
+              (o.id === collectOrigin.id ? dep.realtime || dep.scheduled : null);
+            const pairActualArrIso =
+              destinationStopDep?.realtime ||
+              destinationStopDep?.scheduled ||
+              (d.id === collectDestination.id ? terminalActualArrIso : null);
+            const pairScheduledArrIso =
+              destinationStopDep?.scheduled ||
+              (d.id === collectDestination.id ? terminalScheduledArrIso : null);
+            if (!pairDepartureIso) continue;
+            if (!pairActualArrIso && !pairScheduledArrIso) continue;
+            const originIdx = stopIndexById.get(o.id);
+            const destinationIdx = stopIndexById.get(d.id);
+            let pairDelayMinutes = terminalDelayMinutes;
+            if (typeof originIdx === "number" && typeof destinationIdx === "number") {
+              const segmentDelays: number[] = [];
+              if (collectDirection === "malmo-departures") {
+                for (let idx = originIdx + 1; idx <= destinationIdx; idx += 1) {
+                  const delay = delayByStopIndex.get(idx);
+                  if (typeof delay === "number") segmentDelays.push(delay);
+                }
+              } else {
+                for (let idx = originIdx - 1; idx >= destinationIdx; idx -= 1) {
+                  const delay = delayByStopIndex.get(idx);
+                  if (typeof delay === "number") segmentDelays.push(delay);
+                }
+              }
+              if (segmentDelays.length > 0) {
+                pairDelayMinutes = Math.max(...segmentDelays);
+              }
+            }
             const eventKey = [
               collectDirection,
               key,
               o.id,
               d.id,
-              depIso,
+              pairDepartureIso,
             ].join("|");
             windows.push({
               event_key: eventKey,
@@ -374,11 +434,11 @@ Deno.serve(async (req) => {
               origin_stop_name: o.name,
               destination_stop_id: d.id,
               destination_stop_name: d.name,
-              departure_datetime: depIso,
-              scheduled_arrival_datetime: scheduledArrIso,
-              actual_arrival_datetime: actualArrIso,
-              arrival_delay_minutes: delayMinutes,
-              claimable: delayMinutes >= DELAY_ALERT_MINUTES,
+              departure_datetime: pairDepartureIso,
+              scheduled_arrival_datetime: pairScheduledArrIso,
+              actual_arrival_datetime: pairActualArrIso,
+              arrival_delay_minutes: pairDelayMinutes,
+              claimable: pairDelayMinutes >= DELAY_ALERT_MINUTES,
             });
           }
         }
@@ -455,16 +515,22 @@ Deno.serve(async (req) => {
       throw new Error("Supabase env vars missing, cannot read corridor windows.");
     }
 
-    // UI read path: read from precomputed corridor windows only.
-    if (originId && destinationId) {
-      const rowsResp = await supabase
+    // Optional read path for precomputed corridor windows.
+    // Default behavior uses realtime API for live departures.
+    if (readFromCorridorWindows && originId && destinationId) {
+      const anchorIso = new Date(Date.now() - requestedShiftMinutes * 60_000).toISOString();
+      let query = supabase
         .from("claimable_corridor_windows")
         .select(
           "event_key,direction,trip_key,line,line_name,origin_stop_id,origin_stop_name,destination_stop_id,destination_stop_name,departure_datetime,scheduled_arrival_datetime,actual_arrival_datetime,arrival_delay_minutes,claimable,observed_at"
         )
         .eq("origin_stop_id", originId)
         .eq("destination_stop_id", destinationId)
-        .eq("direction", normalizedDirection)
+        .eq("direction", normalizedDirection);
+      if (requestedShiftMinutes > 0) {
+        query = query.lte("departure_datetime", anchorIso);
+      }
+      const rowsResp = await query
         .order("departure_datetime", { ascending: false })
         .limit(300);
       if (rowsResp.error) {

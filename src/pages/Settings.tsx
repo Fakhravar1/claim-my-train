@@ -155,7 +155,12 @@ const Settings = () => {
               Save your default claim details to prefill the claim flow faster.
             </p>
           </div>
-          <UserMenu />
+          <div className="flex items-center gap-2">
+            <Link to="/">
+              <Button type="button" variant="outline">Back to main page</Button>
+            </Link>
+            <UserMenu />
+          </div>
         </div>
 
         <Card className="p-5">
@@ -406,6 +411,9 @@ const Settings = () => {
               <Button type="submit" disabled={saving}>
                 {saving ? "Saving..." : "Save settings"}
               </Button>
+              <Link to="/">
+                <Button type="button" variant="outline">Back to main page</Button>
+              </Link>
               <Link to="/delay-alerts">
                 <Button type="button" variant="outline">Back to claimable delays</Button>
               </Link>
