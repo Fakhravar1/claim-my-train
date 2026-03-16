@@ -178,6 +178,14 @@ const stopSequence = STOP_OPTIONS.map((stop) => stop.id);
 const stopIndexById = new Map<string, number>(stopSequence.map((stopId, idx) => [stopId, idx]));
 const stopIdsForDirection = (direction: Direction) =>
   direction === "malmo-departures" ? [...stopSequence] : [...stopSequence].reverse();
+const pairMatchesDirection = (originId: string, destinationId: string, direction: Direction) => {
+  const originIdx = stopIndexById.get(originId);
+  const destinationIdx = stopIndexById.get(destinationId);
+  if (typeof originIdx !== "number" || typeof destinationIdx !== "number" || originIdx === destinationIdx) {
+    return false;
+  }
+  return direction === "malmo-departures" ? originIdx < destinationIdx : originIdx > destinationIdx;
+};
 const corridorPairsForDirection = (direction: Direction) => {
   const pairs: Array<{ originId: string; destinationId: string }> = [];
   for (let i = 0; i < stopSequence.length; i += 1) {
@@ -233,7 +241,7 @@ Deno.serve(async (req) => {
 
   try {
     const { direction, originId, destinationId, timeShiftMinutes = 0, mode, readFromCorridorWindows = false } = await req.json() as {
-      direction: string;
+      direction?: string;
       originId?: string;
       destinationId?: string;
       timeShiftMinutes?: number;
@@ -249,6 +257,7 @@ Deno.serve(async (req) => {
     );
     
     // Backward-compatible and fault-tolerant direction parsing.
+    const directionWasProvided = typeof direction === "string" && direction.trim().length > 0;
     const rawDirection = String(direction ?? "").trim().toLowerCase();
     const normalizedDirection: Direction = (() => {
       const malmoAliases = new Set([
@@ -282,11 +291,20 @@ Deno.serve(async (req) => {
 
     if (mode === "collect-corridor") {
       if (!supabase) throw new Error("Supabase env vars missing, cannot collect corridor.");
+      const requestedOrigin = originId ? stopById(originId) : null;
+      const requestedDestination = destinationId ? stopById(destinationId) : null;
+      const requestedPair =
+        requestedOrigin && requestedDestination && requestedOrigin.id !== requestedDestination.id
+          ? { originId: requestedOrigin.id, destinationId: requestedDestination.id }
+          : null;
+      const directionsToCollect: Direction[] = directionWasProvided
+        ? [normalizedDirection]
+        : ["malmo-departures", "hyllie-departures"];
       const collectOneDirection = async (collectDirection: Direction) => {
         const collectRoute = ROUTES[collectDirection];
         const collectOrigin = collectRoute.origin;
         const collectDestination = collectRoute.destination;
-        const collectCacheKey = `${collectDirection}|${requestedShiftMinutes}|${collectOrigin.id}|${collectDestination.id}|collect`;
+        const collectCacheKey = `${collectDirection}|${requestedShiftMinutes}|${collectOrigin.id}|${collectDestination.id}|collect|${requestedPair?.originId ?? "*"}|${requestedPair?.destinationId ?? "*"}`;
         const cachedCollector = getCachedPayload(collectCacheKey, RESPONSE_CACHE_TTL_MS);
         if (cachedCollector) return cachedCollector;
 
@@ -296,6 +314,7 @@ Deno.serve(async (req) => {
         }
 
         const anchorTime = new Date(Date.now() - requestedShiftMinutes * 60_000);
+        const queryDateTime = formatDateTime(anchorTime);
         const windowFetches = COLLECTOR_WINDOWS_MINUTES.map(async (shiftMinutes) => {
           const ts = formatDateTime(new Date(anchorTime.getTime() + shiftMinutes * 60_000));
           const departuresUrl = `https://realtime-api.trafiklab.se/v1/departures/${collectOrigin.id}/${ts}?key=${apiKey}`;
@@ -352,7 +371,11 @@ Deno.serve(async (req) => {
         }
 
         const windows: CorridorWindowRow[] = [];
-        const pairs = corridorPairsForDirection(collectDirection);
+        const pairs = requestedPair
+          ? (pairMatchesDirection(requestedPair.originId, requestedPair.destinationId, collectDirection)
+              ? [requestedPair]
+              : [])
+          : corridorPairsForDirection(collectDirection);
         for (const dep of corridorDepartures) {
           const key = tripKey(dep);
           if (!key) continue;
@@ -464,16 +487,14 @@ Deno.serve(async (req) => {
         return payload;
       };
 
-      const [malmoPayload, cphPayload] = await Promise.all([
-        collectOneDirection("malmo-departures"),
-        collectOneDirection("hyllie-departures"),
-      ]);
+      const collectedPayloads = await Promise.all(directionsToCollect.map((directionToCollect) => collectOneDirection(directionToCollect)));
+      const mergedDepartures = collectedPayloads.flatMap((payload) => payload.departures ?? []);
 
       return new Response(
         JSON.stringify({
-          direction: "both",
+          direction: directionsToCollect.length > 1 ? "both" : directionsToCollect[0],
           updatedAt: new Date().toISOString(),
-          departures: [...(malmoPayload.departures ?? []), ...(cphPayload.departures ?? [])],
+          departures: mergedDepartures,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
