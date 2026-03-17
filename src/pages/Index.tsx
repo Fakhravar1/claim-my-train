@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import DepartureCard from "@/components/DepartureCard";
 import UserMenu from "@/components/UserMenu";
 import { supabase } from "@/integrations/supabase/client";
-import { STOPS, Direction, STOP_OPTIONS, getDirectionForStops } from "@/constants/stops";
+import { STOPS, Direction, getDirectionForStops } from "@/constants/stops";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Select,
@@ -47,9 +47,10 @@ interface EdgeFunctionResponse {
 
 const USE_LOCAL_FUNCTIONS = import.meta.env.VITE_USE_LOCAL_FUNCTIONS === "true";
 const LOCAL_FUNCTIONS_BASE_URL = (import.meta.env.VITE_LOCAL_FUNCTIONS_URL as string | undefined)?.replace(/\/$/, "");
-const DEFAULT_FROM_STOP_ID = STOPS.MALMO_C.id;
+const ROUTE_STOP_OPTIONS = [STOPS.MALMO_TRIANGELN, STOPS.COPENHAGEN_H] as const;
+const DEFAULT_FROM_STOP_ID = STOPS.MALMO_TRIANGELN.id;
 const DEFAULT_TO_STOP_ID = STOPS.COPENHAGEN_H.id;
-const isValidStopId = (id: string | null) => Boolean(id && STOP_OPTIONS.some((stop) => stop.id === id));
+const isValidStopId = (id: string | null) => Boolean(id && ROUTE_STOP_OPTIONS.some((stop) => stop.id === id));
 
 const invokeDeparturesFunction = async (
   direction: Direction,
@@ -105,8 +106,8 @@ const Index = () => {
   const [storedTrainNames, setStoredTrainNames] = useState<string[]>([]);
   const [historyOffsetMinutes, setHistoryOffsetMinutes] = useState<number>(0);
   const { toast } = useToast();
-  const fromStop = STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? STOP_OPTIONS[0];
-  const toStop = STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? STOP_OPTIONS[STOP_OPTIONS.length - 1];
+  const fromStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? ROUTE_STOP_OPTIONS[0];
+  const toStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? ROUTE_STOP_OPTIONS[1];
   const direction: Direction = useMemo(
     () => getDirectionForStops(fromStopId, toStopId),
     [fromStopId, toStopId]
@@ -219,7 +220,7 @@ const Index = () => {
     setHistoryOffsetMinutes(0);
     setFromStopId(value);
     if (value === toStopId) {
-      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
       if (fallback) setToStopId(fallback.id);
     }
   };
@@ -228,9 +229,15 @@ const Index = () => {
     setHistoryOffsetMinutes(0);
     setToStopId(value);
     if (value === fromStopId) {
-      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
       if (fallback) setFromStopId(fallback.id);
     }
+  };
+
+  const handleReverseRoute = () => {
+    setHistoryOffsetMinutes(0);
+    setFromStopId(toStopId);
+    setToStopId(fromStopId);
   };
 
   const handleSearchRoute = () => {
@@ -250,10 +257,10 @@ const Index = () => {
     if (!profile) return;
     const hasRouteParams = isValidStopId(routeFromParam) || isValidStopId(routeToParam);
     if (hasRouteParams) return;
-    if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
+    if (isValidStopId(profile.preferred_from_stop_id) && profile.preferred_from_stop_id !== fromStopId) {
       setFromStopId(profile.preferred_from_stop_id);
     }
-    if (profile.preferred_to_stop_id && profile.preferred_to_stop_id !== toStopId) {
+    if (isValidStopId(profile.preferred_to_stop_id) && profile.preferred_to_stop_id !== toStopId) {
       setToStopId(profile.preferred_to_stop_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -319,7 +326,7 @@ const Index = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
+                      {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
                         <SelectItem key={stop.id} value={stop.id}>
                           {stop.shortName}
                         </SelectItem>
@@ -335,7 +342,7 @@ const Index = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
+                      {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
                         <SelectItem key={stop.id} value={stop.id}>
                           {stop.shortName}
                         </SelectItem>
@@ -345,7 +352,10 @@ const Index = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button onClick={handleReverseRoute} disabled={loading} variant="outline" className="min-w-36">
+                  Reverse direction
+                </Button>
                 <Button onClick={handleSearchRoute} disabled={loading} className="min-w-32">
                   Search route
                 </Button>
