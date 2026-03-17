@@ -22,7 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Direction, STOPS, STOP_OPTIONS, getDirectionForStops } from "@/constants/stops";
+import { Direction, STOPS, getDirectionForStops } from "@/constants/stops";
 
 interface Departure {
   line: string;
@@ -70,9 +70,10 @@ const CLAIM_AUTOFILL_LOCAL_URL =
 const CLAIM_AUTOFILL_TEST_DATE = "2026-02-14";
 const CLAIM_AUTOFILL_TEST_MOBILE = "0701234567";
 const CLAIM_AUTOFILL_TEST_TICKET_ID = "2Y3CE88";
-const DEFAULT_FROM_STOP_ID = STOPS.MALMO_C.id;
+const ROUTE_STOP_OPTIONS = [STOPS.MALMO_TRIANGELN, STOPS.COPENHAGEN_H] as const;
+const DEFAULT_FROM_STOP_ID = STOPS.MALMO_TRIANGELN.id;
 const DEFAULT_TO_STOP_ID = STOPS.COPENHAGEN_H.id;
-const isValidStopId = (id: string | null) => Boolean(id && STOP_OPTIONS.some((stop) => stop.id === id));
+const isValidStopId = (id: string | null) => Boolean(id && ROUTE_STOP_OPTIONS.some((stop) => stop.id === id));
 
 const isClaimOutsideTicketValidity = (
   departureDate: string,
@@ -153,8 +154,8 @@ const DelayAlerts = () => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const fromStop = STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? STOP_OPTIONS[0];
-  const toStop = STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? STOP_OPTIONS[STOP_OPTIONS.length - 1];
+  const fromStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? ROUTE_STOP_OPTIONS[0];
+  const toStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? ROUTE_STOP_OPTIONS[1];
   const directionScope: Direction = useMemo(
     () => getDirectionForStops(fromStopId, toStopId),
     [fromStopId, toStopId]
@@ -163,7 +164,7 @@ const DelayAlerts = () => {
   const handleFromChange = (value: string) => {
     setFromStopId(value);
     if (value === toStopId) {
-      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
       if (fallback) setToStopId(fallback.id);
     }
   };
@@ -171,9 +172,14 @@ const DelayAlerts = () => {
   const handleToChange = (value: string) => {
     setToStopId(value);
     if (value === fromStopId) {
-      const fallback = STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
       if (fallback) setFromStopId(fallback.id);
     }
+  };
+
+  const handleReverseRoute = () => {
+    setFromStopId(toStopId);
+    setToStopId(fromStopId);
   };
 
   const loadAlerts = async () => {
@@ -258,10 +264,10 @@ const DelayAlerts = () => {
     if (!profile) return;
     const hasRouteParams = isValidStopId(routeFromParam) || isValidStopId(routeToParam);
     if (hasRouteParams) return;
-    if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
+    if (isValidStopId(profile.preferred_from_stop_id) && profile.preferred_from_stop_id !== fromStopId) {
       setFromStopId(profile.preferred_from_stop_id);
     }
-    if (profile.preferred_to_stop_id && profile.preferred_to_stop_id !== toStopId) {
+    if (isValidStopId(profile.preferred_to_stop_id) && profile.preferred_to_stop_id !== toStopId) {
       setToStopId(profile.preferred_to_stop_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -381,7 +387,7 @@ const DelayAlerts = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
+                    {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
                       <SelectItem key={stop.id} value={stop.id}>
                         {stop.shortName}
                       </SelectItem>
@@ -396,7 +402,7 @@ const DelayAlerts = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
+                    {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
                       <SelectItem key={stop.id} value={stop.id}>
                         {stop.shortName}
                       </SelectItem>
@@ -406,7 +412,10 @@ const DelayAlerts = () => {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button onClick={handleReverseRoute} disabled={loading} variant="outline" className="min-w-36">
+                Reverse direction
+              </Button>
               <Button onClick={handleSearchRoute} disabled={loading} className="min-w-32">
                 Search route
               </Button>
