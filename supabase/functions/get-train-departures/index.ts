@@ -118,6 +118,8 @@ const RESPONSE_CACHE_TTL_MS = 45_000;
 const STALE_CACHE_MAX_AGE_MS = 10 * 60_000;
 const DELAY_ALERT_MINUTES = 20;
 const MATCH_RATE_FOR_SECONDARY_WINDOW = 0.7;
+const ARRIVAL_MATCH_MIN_TRAVEL_MINUTES = 5;
+const ARRIVAL_MATCH_MAX_TRAVEL_MINUTES = 240;
 // Fixed collector horizon to keep UI data stable and avoid truncated lists.
 // 0, +60 and +120 minutes keeps calls bounded while exposing upcoming trips.
 const COLLECTOR_WINDOWS_MINUTES = [0, 60, 120];
@@ -148,6 +150,54 @@ const departureKey = (dep: RealtimeDeparture) =>
     dep.route?.origin?.name ?? "",
     dep.route?.destination?.name ?? "",
   ].join("|");
+const parseIsoToMs = (iso: string | null | undefined) => {
+  if (!iso) return null;
+  const ts = Date.parse(iso);
+  return Number.isNaN(ts) ? null : ts;
+};
+const buildArrivalsByTrip = (arrivals: RealtimeDeparture[]) => {
+  const byTrip = new Map<string, RealtimeDeparture[]>();
+  for (const arr of arrivals) {
+    const key = tripKey(arr);
+    if (!key) continue;
+    const list = byTrip.get(key);
+    if (list) list.push(arr);
+    else byTrip.set(key, [arr]);
+  }
+  return byTrip;
+};
+const selectBestArrivalForDeparture = (
+  dep: RealtimeDeparture,
+  candidates: RealtimeDeparture[],
+) => {
+  const departureIso = dep.realtime || dep.scheduled || null;
+  const departureMs = parseIsoToMs(departureIso);
+  if (departureMs === null || candidates.length === 0) return null;
+
+  let best: RealtimeDeparture | null = null;
+  let bestDeltaMinutes = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const candidateAnchorIso = candidate.scheduled || candidate.realtime || null;
+    const candidateAnchorMs = parseIsoToMs(candidateAnchorIso);
+    if (candidateAnchorMs === null) continue;
+    const deltaMinutes = (candidateAnchorMs - departureMs) / 60_000;
+    if (
+      deltaMinutes < ARRIVAL_MATCH_MIN_TRAVEL_MINUTES ||
+      deltaMinutes > ARRIVAL_MATCH_MAX_TRAVEL_MINUTES
+    ) {
+      continue;
+    }
+    if (
+      deltaMinutes < bestDeltaMinutes ||
+      (deltaMinutes === bestDeltaMinutes && !best?.scheduled && Boolean(candidate.scheduled))
+    ) {
+      best = candidate;
+      bestDeltaMinutes = deltaMinutes;
+    }
+  }
+
+  return best;
+};
 
 const sourceFromRequest = (req: Request, mode?: string) => {
   if (mode === "collect-corridor") return "collector";
@@ -364,11 +414,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        const arrivalsByTrip = new Map<string, RealtimeDeparture>();
-        for (const arr of corridorArrivals) {
-          const key = tripKey(arr);
-          if (key && !arrivalsByTrip.has(key)) arrivalsByTrip.set(key, arr);
-        }
+        const arrivalsByTrip = buildArrivalsByTrip(corridorArrivals);
 
         const windows: CorridorWindowRow[] = [];
         const pairs = requestedPair
@@ -379,7 +425,7 @@ Deno.serve(async (req) => {
         for (const dep of corridorDepartures) {
           const key = tripKey(dep);
           if (!key) continue;
-          const matchArrival = arrivalsByTrip.get(key);
+          const matchArrival = selectBestArrivalForDeparture(dep, arrivalsByTrip.get(key) ?? []);
           if (!matchArrival) continue;
           const terminalActualArrIso = matchArrival.realtime || matchArrival.scheduled || null;
           const terminalScheduledArrIso = matchArrival.scheduled || null;
@@ -691,26 +737,21 @@ Deno.serve(async (req) => {
     const arrivalCandidates = arrivals
       .filter((arr) => normalizeText(arr.route?.transport_mode ?? '') === 'train')
       .filter((arr) => COPENHAGEN_CORRIDOR_LINES.has(String(arr.route?.designation ?? '').trim()));
-    const arrivalsByTrip = new Map<string, RealtimeDeparture>();
-    for (const arr of arrivalCandidates) {
-      const key = tripKey(arr);
-      if (key && !arrivalsByTrip.has(key)) {
-        arrivalsByTrip.set(key, arr);
-      }
-    }
-    const matchedDepartures = directionDepartures.filter((dep) => {
-      const key = tripKey(dep);
-      return Boolean(key && arrivalsByTrip.has(key));
-    });
-    const departuresToProcess = matchedDepartures.length > 0 ? matchedDepartures : directionDepartures;
+    const arrivalsByTrip = buildArrivalsByTrip(arrivalCandidates);
+    const departuresToProcess = directionDepartures;
 
     // Process departures and keep arrival ISO metadata for persistence checks.
+    let matchedArrivalCount = 0;
     const processedWithArrivalMeta = departuresToProcess.map((dep) => {
       const scheduledDate = isoDate(dep.scheduled);
       const scheduledTime = isoTime(dep.scheduled);
       const realtimeDate = isoDate(dep.realtime);
       const realtimeTime = isoTime(dep.realtime);
-      const matchedArrival = arrivalsByTrip.get(tripKey(dep));
+      const depTripKey = tripKey(dep);
+      const matchedArrival = depTripKey
+        ? selectBestArrivalForDeparture(dep, arrivalsByTrip.get(depTripKey) ?? [])
+        : null;
+      if (matchedArrival) matchedArrivalCount += 1;
       const actualArrivalIso = matchedArrival ? (matchedArrival.realtime || matchedArrival.scheduled || null) : null;
       const scheduledArrivalIso = matchedArrival ? (matchedArrival.scheduled || null) : null;
       const arrivalDate = actualArrivalIso ? isoDate(actualArrivalIso) : null;
@@ -757,6 +798,9 @@ Deno.serve(async (req) => {
       };
     });
     const processedDepartures = processedWithArrivalMeta.map((row) => row.payload);
+    console.log(
+      `Arrival matching: matched ${matchedArrivalCount}/${departuresToProcess.length} departures with valid destination arrivals`
+    );
 
     // Store train names and departures in database
     try {
