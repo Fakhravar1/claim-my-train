@@ -1,0 +1,45 @@
+version: 2
+
+sources:
+- name: raw 
+  schema: public
+  description: "Raw data from the source system, api from trafiklab" 
+  tables:
+  - name: raw_departures
+    description: "Departures from the source system, api from trafiklab"
+    columns:
+    - name: id
+      description: "Unique identifier for the departure event"
+    - name: scheduled
+    - name: realtime 
+    - name: arrival_delay 
+    - name: canceled 
+    - name: is_realtime 
+    - name: route__name 
+    - name: route__designation 
+    - name: route__transport_mode_code 
+    - name: route__transport_mode 
+    - name: route__direction 
+    - name: route__origin__id 
+    - name: route__origin__name 
+    - name: route__destination__id 
+    - name: route__destination__name 
+    - name: trip__trip_id
+    - name: trip__start_date
+    - name: trip__technical_number 
+    - name: agency__id 
+    - name: agency__name 
+    - name: agency__operator 
+    - name: stop__id 
+    - name: stop__name 
+    - name: stop__lat 
+    - name: stop__lon 
+    - name: scheduled_platform__id 
+    - name: scheduled_platform__designation 
+    - name: realtime_platform__id 
+    - name: realtime_platform__designation 
+    - name: alerts 
+    - name: ingested_at
+    # - name: UNIQUE ( trip__start_date, stop__id, scheduled, ingested_at)
+    
+
