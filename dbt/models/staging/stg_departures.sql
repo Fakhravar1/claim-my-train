@@ -29,6 +29,7 @@ id
 ,realtime_platform__id
 ,realtime_platform__designation
 ,alerts
+,event_type
 ,ingested_at 
 
 from {{ source('raw', 'raw_departures') }}

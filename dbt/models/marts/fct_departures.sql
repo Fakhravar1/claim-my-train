@@ -1,20 +1,52 @@
+with deduped as (
+    select
+        trip__trip_id,
+        trip__start_date,
+        stop__id,
+        stop__name,
+        route__name,
+        route__destination__name,
+        agency__name,
+        agency__operator,
+        scheduled,
+        realtime,
+        arrival_delay,
+        canceled,
+        event_type,
+        ingested_at,
+        row_number() over (
+            partition by trip__trip_id, trip__start_date, stop__id, event_type
+            order by ingested_at desc
+        ) as rn
+    from {{ ref('stg_departures') }}
+    where is_realtime = true
+    and route__transport_mode = 'TRAIN'
+)
+
 select
-    {{ dbt_utils.generate_surrogate_key(['stg.id', 'stg.scheduled']) }} as departure_key,
-    s.dim_station_id,
-    l.dim_line_id,
-    stg.trip__trip_id,
-    stg.trip__start_date,
-    stg.scheduled,
-    stg.realtime,
-    stg.arrival_delay,
-    stg.canceled,
-    stg.is_realtime,
-    stg.agency__id,
-    stg.ingested_at
-from {{ ref('stg_departures') }} stg
-left join {{ ref('dim_stations') }} s
-    on stg.stop__id = s.stop__id
-left join {{ ref('dim_line') }} l
-    on stg.route__origin__id = l.route__origin__id
-    and stg.route__destination__id = l.route__destination__id
-    and stg.route__transport_mode = l.route__transport_mode
+    {{ dbt_utils.generate_surrogate_key([
+        'trip__trip_id',
+        'trip__start_date',
+        'stop__id',
+        'event_type'
+    ]) }} as departure_key,
+    trip__trip_id,
+    trip__start_date,
+    stop__id,
+    stop__name,
+    row_number() over ( 
+        partition by trip__trip_id, trip__start_date 
+        order by scheduled
+    ) as stop_sequence,
+    route__name,
+    route__destination__name,
+    agency__name,
+    agency__operator,
+    scheduled,
+    realtime,
+    arrival_delay,
+    canceled,
+    event_type,
+    ingested_at
+from deduped
+where rn = 1

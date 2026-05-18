@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: fct_departures
+    description: "Stop-event grain. One row per (trip, start_date, stop_id) — represents a confirmed train arrival/departure observation."
+    columns:
+      - name: departure_key
+        description: "Surrogate key. MD5 hash of (trip_id, start_date, stop_id)."
+        tests:
+          - unique
+          - not_null
+      - name: trip__trip_id
+        tests:
+          - not_null
+      - name: stop__id
+        tests:
+          - not_null
+      - name: arrival_delay
+        description: "Delay in seconds vs scheduled arrival. Positive = late."
+    tests:
+      -  dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+          - trip__trip_id
+          - trip__start_date
+          - stop_sequence
+  - name: claimable_journeys
+    description: "Grain: one row per (trip, date, origin_stop, destination_stop) where origin precedes destination on the same trip. is_claimable reflects passenger-effective delay — i.e., delay accumulated between boarding and arrival, not the train's total delay. A train that's 20 min late at boarding but doesn't accumulate further delay is NOT claimable."
