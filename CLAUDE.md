@@ -14,7 +14,9 @@ A Supabase + dbt + Lovable-replaced frontend that automates train delay compensa
 
 **Sequencing principle:** Ship MVP first, then layer complexity. Do not abstract for hypothetical second operators before the first one works end-to-end.
 
-**Frontend data path (current):** Both Index.tsx and YellowAlerts.tsx query `public.v_passenger_journeys` (wrapper over `dbt_dev.fct_passenger_journeys`) via `src/hooks/useJourneys.ts`. Index.tsx shows recent journeys with no claimable filter; YellowAlerts.tsx filters `is_claimable=true`. Dropdowns on both pages and on Settings.tsx are driven by `src/hooks/useStations.ts` (GTFS IDs from `public.v_active_stations`). The legacy live-departures plumbing (the `get-train-departures` edge function, the `claim-collection-15m` cron, and tables `departures` / `train_names` / `yellow_alert_history` / `claimable_corridor_windows` / `api_call_events` / `stations_master`) has been retired. The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` maps in `shared/stops.ts` survive only for inbound URL-param normalization on legacy bookmarks; safe to drop once those bookmarks are confirmed extinct.
+**Frontend layout:** `/` is the marketing landing for signed-out visitors (`src/pages/Landing.tsx`); a `<ProtectedFromAuth>` wrapper redirects signed-in users to `/app`, where the journeys page lives (`src/pages/Index.tsx`). Three themed regional pages under `/regions/{skanetrafiken,sl,vasttrafik}` — only Skånetrafiken is live; SL and Västtrafik are themed placeholders with "Coming soon — try Skånetrafiken" CTAs pointing at `/app`. The landing + regional pages are lazy-loaded; their `landing-base.css` (~30 KB) only loads when those routes mount, via `useLandingStyles` injecting `<style>` tags so the in-app shadcn theme on `/app`, `/login`, `/settings`, `/delay-alerts` isn't clobbered.
+
+**Frontend data path:** `Index.tsx` (at `/app`) and `YellowAlerts.tsx` (at `/delay-alerts`) query `public.v_passenger_journeys` (wrapper over `dbt_dev.fct_passenger_journeys`) via `src/hooks/useJourneys.ts`. Index passes `onlyClaimable: false`; YellowAlerts passes `onlyClaimable: true`. Dropdowns on those pages plus Settings are driven by `src/hooks/useStations.ts` (GTFS IDs from `public.v_active_stations`). The legacy live-departures plumbing (the `get-train-departures` edge function, the `claim-collection-15m` cron, and tables `departures` / `train_names` / `yellow_alert_history` / `claimable_corridor_windows` / `api_call_events` / `stations_master`) has been retired. The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` maps in `shared/stops.ts` survive only for inbound URL-param normalization on legacy bookmarks.
 
 ---
 
@@ -114,6 +116,7 @@ C:\Users\arian\trafiklab\          ← repo root
 - `public.v_passenger_journeys` and `public.v_active_stations` are dbt-managed views (`dbt/models/marts/v_*.sql`) materialized into the `public` schema via the `generate_schema_name` macro override. Each model declares a `post_hook` that grants `select` to `anon` and `authenticated`. Curated column lists exclude internal grain plumbing (`origin_sequence`, `destination_sequence`, `destination_delay_seconds`, `dbt_scd_id`, `ingested_at`).
 - Frontend hooks `useStations` (`src/hooks/useStations.ts`) and `useJourneys` (`src/hooks/useJourneys.ts`) consume the public wrappers. Index.tsx, YellowAlerts.tsx, and Settings.tsx all use `useStations` for dropdowns; Index.tsx and YellowAlerts.tsx use `useJourneys` for the journey lists (Index with `onlyClaimable: false`, YellowAlerts with `onlyClaimable: true`).
 - `shared/stops.ts` includes a `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation map bridging Trafiklab sams-id (legacy `get-train-departures` edge function imports) and GTFS (everything in dbt and the frontend). Only used for inbound URL-param normalization in YellowAlerts/Index after the Index migration.
+- ✅ Marketing landing page at `/` (`src/pages/Landing.tsx`) with three regional pages under `/regions/{skanetrafiken,sl,vasttrafik}`. Skånetrafiken is the live region; SL and Västtrafik are themed placeholders ("Coming soon — try Skånetrafiken") for future operator scaffolding. Per-region visuals live in `src/themes/<slug>/` (HeroScene, SignupScene, Vehicle SVGs + `theme.css` token overrides). Landing CSS is scope-injected via `src/hooks/useLandingStyles.ts` so it doesn't bleed into the in-app shadcn theme on `/app` and friends.
 
 **Data volume:** ~22k journey rows currently, ~220 claimable. Three operators present: VR Sverige AB (Öresundståg, 880 trips), Pågatåg (1,866 trips), SJ AB (7 trips).
 
@@ -144,7 +147,9 @@ where origin_stop_id = :origin
 
 Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-computes `is_claimable`; the UI consumes it.
 
-**Status:** Both Index.tsx and YellowAlerts.tsx now query `public.v_passenger_journeys` via `src/hooks/useJourneys.ts`. Index passes `onlyClaimable: false` (shows everything on the route); YellowAlerts passes `onlyClaimable: true`. The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
+**Status:** Both Index.tsx (at `/app`) and YellowAlerts.tsx (at `/delay-alerts`) now query `public.v_passenger_journeys` via `src/hooks/useJourneys.ts`. Index passes `onlyClaimable: false` (shows everything on the route); YellowAlerts passes `onlyClaimable: true`. The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
+
+**Theme directories** (`src/themes/<slug>/`): the home for per-region visuals. Each region directory holds a `theme.css` token override plus three SVG components (`HeroScene.tsx`, `SignupScene.tsx`, `Vehicle.tsx`). Future operator additions follow the same pattern: create `src/themes/<new-slug>/`, drop those four files, add a `pages/regions/<NewSlug>.tsx` that mirrors the Skånetrafiken page, register the route in `App.tsx`, add a card to `OperatorPicker.tsx`. The landing's base CSS (`src/themes/landing-base.css`) is the shared canvas.
 
 ---
 
@@ -176,7 +181,7 @@ Build in this order. Do not skip ahead without explicit user decision.
 - `dim_stations` enrichment for the frontend (human-readable station names — most columns already present, verify completeness).
 - Add a dbt `relationships` test linking `fct_passenger_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
 - Pagination on YellowAlerts.tsx claimable journeys list (current 500-row hard limit saturates as stations grow).
-- Revisit Index.tsx hypothesis. Page was migrated off the live `get-train-departures` edge function to `v_passenger_journeys` — it now shows recent journeys on the route, no longer "live next departures." Kept as trust-building feature, but its product value is unclear vs. just sending users straight to YellowAlerts. Trigger to retire (or rescope): low engagement after first 50 real users, or the `SAMS_TO_GTFS` map outliving its only remaining use (legacy URL-param bookmarks) makes deletion strictly easier than maintenance.
+- ✅ ~~Revisit Index.tsx hypothesis.~~ Trigger fired: Index.tsx moved to `/app` behind auth; `/` now serves the marketing landing for signed-out visitors. Index's product role narrows from "front door" to "post-login dashboard."
 
 **v2 — "Could you have caught a better alternative":**
 - `user_journey_intents` table capturing recurring commute profile.

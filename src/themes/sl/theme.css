@@ -1,0 +1,23 @@
+/* sl — region theme tokens
+   Overrides the base palette from ../../../colors_and_type.css.
+   Lift this whole block into src/themes/sl/theme.css when porting to the codebase. */
+:root {
+    /* SL theme — Stockholm archipelago, lighter blue */
+      --cmt-forest:        #2E69B5;
+      --cmt-forest-deep:   #1F4D89;
+      --cmt-forest-darker: #14375E;
+      --cmt-sage:          #5E8CB8;
+      --cmt-sage-soft:     #C8DDF0;
+      --cmt-mist:          #EAF3FB;
+      --cmt-mist-deep:     #D4E5F4;
+      --cmt-sky:           #EAF3FB;
+      --cmt-sunflower:     #E08B4B;     /* Stockholm house ochre-orange */
+      --cmt-sunflower-deep:#C56A2A;
+      --cmt-earth:         #B5524E;     /* falu-red */
+      --cmt-earth-soft:    #D9B584;
+      --cmt-ink:           #14241B;
+      --cmt-ink-2:         #2C3E55;
+      --cmt-line:          #E1ECF5;
+      --sh-cta:            0 8px 24px rgba(46, 105, 181, 0.28);
+      --sh-cta-press:      0 2px 6px rgba(46, 105, 181, 0.34);
+  }
