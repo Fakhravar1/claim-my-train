@@ -1,0 +1,23 @@
+/* vasttrafik — region theme tokens
+   Overrides the base palette from ../../../colors_and_type.css.
+   Lift this whole block into src/themes/vasttrafik/theme.css when porting to the codebase. */
+:root {
+    /* Västtrafik theme — Göteborg sea & cranes */
+      --cmt-forest:        #1B4E8B;
+      --cmt-forest-deep:   #143A6B;
+      --cmt-forest-darker: #0E2748;
+      --cmt-sage:          #3F5670;
+      --cmt-sage-soft:     #6E8AA3;
+      --cmt-mist:          #D8EAF8;
+      --cmt-mist-deep:     #B0D6F0;
+      --cmt-sky:           #D8EAF8;
+      --cmt-sunflower:     #D14B3C;     /* Göteborg tram red */
+      --cmt-sunflower-deep:#A8392C;
+      --cmt-earth:         #2E5A8C;
+      --cmt-earth-soft:    #5E8CB8;
+      --cmt-ink:           #0E2748;
+      --cmt-ink-2:         #2C3E55;
+      --cmt-line:          #DDE6EE;
+      --sh-cta:            0 8px 24px rgba(27, 78, 139, 0.30);
+      --sh-cta-press:      0 2px 6px rgba(27, 78, 139, 0.34);
+  }
