@@ -47,15 +47,20 @@ User preferences are non-negotiable:
 ```
 C:\Users\arian\trafiklab\          ← repo root
 ├── dbt/                            ← dbt project root (dbt_project.yml lives here)
+│   ├── macros/
+│   │   └── generate_schema_name.sql        ← schema='public' override; lets dbt build wrappers in public, not dbt_dev_public
 │   ├── models/
 │   │   ├── staging/
 │   │   │   └── stg_departures.sql
+│   │   ├── dimensions/
+│   │   │   ├── dim_stations.sql
+│   │   │   ├── dim_active_stations.sql     ← stations referenced by fct_passenger_journeys (v1)
+│   │   │   └── dim_line.sql
 │   │   └── marts/
 │   │       ├── fct_departures.sql           ← stop-event grain (table)
 │   │       ├── fct_passenger_journeys.sql   ← journey-leg grain, v1 (table)
-│   │       ├── dim_stations.sql
-│   │       ├── dim_active_stations.sql      ← stations referenced by fact (v1)
-│   │       ├── dim_line.sql
+│   │       ├── v_active_stations.sql        ← public wrapper view (dbt-managed, schema='public')
+│   │       ├── v_passenger_journeys.sql     ← public wrapper view (dbt-managed, schema='public')
 │   │       └── _marts.yml                   ← model tests & docs
 │   ├── packages.yml                ← dbt_utils dependency
 │   └── dbt_project.yml
@@ -84,7 +89,7 @@ C:\Users\arian\trafiklab\          ← repo root
 - **No `CASE WHEN operator = '...'` branches in fact tables.** Operator-specific logic belongs in joined rule tables, not in fact SQL.
 - **Rules attach to claim authority + route characteristics, NOT to operator.** Operator concessions change; rules don't. The "operator-agnostic fact" pattern means `fct_passenger_journeys` carries `agency__operator` as descriptive context only — never as a rule key.
 - **Materialization strategy:** staging and dimensions are views; facts with expensive logic (dedup, self-joins) are tables with indexes on dominant query patterns. Per-model `{{ config(materialized='table') }}` in each file. Diagnose with `explain (analyze, buffers)` before changing materialization; never materialize speculatively.
-- **Presentation-layer wrapper views** in `public` (`v_passenger_journeys`, `v_active_stations`) are currently standalone Postgres objects, not dbt models. They wrap `dbt_dev.fct_passenger_journeys` and `dbt_dev.dim_active_stations`. Known limitation: changes to underlying dbt models that require drop-and-recreate may cascade-drop these wrappers. Recreation SQL is in §11.
+- **Presentation-layer wrapper views** in `public` (`v_passenger_journeys`, `v_active_stations`, future additions) are dbt models with `schema='public'`. The custom `generate_schema_name` macro in `dbt/macros/` makes the `schema='public'` config land objects directly in `public` instead of the dbt-default `dbt_dev_public`. Wrappers are part of the dbt DAG (via `ref(...)`), so they rebuild automatically when underlying facts/dims change. No manual recreation needed after materialization changes.
 
 ---
 
@@ -106,7 +111,7 @@ C:\Users\arian\trafiklab\          ← repo root
   ```
   Threshold is hardcoded 1200 seconds (20 minutes). Cancelled trains always claimable.
 - All dbt tests passing: unique journey_key, not_null on grain columns, unique combination of (trip_id, start_date, origin_stop_id, destination_stop_id).
-- `public.v_passenger_journeys` and `public.v_active_stations` views wrap the dbt-built objects, exposed to PostgREST with `select` granted to `anon` and `authenticated`. Curated column lists exclude internal grain plumbing (`origin_sequence`, `destination_sequence`, `destination_delay_seconds`, `dbt_scd_id`, `ingested_at`).
+- `public.v_passenger_journeys` and `public.v_active_stations` are dbt-managed views (`dbt/models/marts/v_*.sql`) materialized into the `public` schema via the `generate_schema_name` macro override. Each model declares a `post_hook` that grants `select` to `anon` and `authenticated`. Curated column lists exclude internal grain plumbing (`origin_sequence`, `destination_sequence`, `destination_delay_seconds`, `dbt_scd_id`, `ingested_at`).
 - Frontend hooks `useStations` (`src/hooks/useStations.ts`) and `useJourneys` (`src/hooks/useJourneys.ts`) consume the public wrappers. Index.tsx, YellowAlerts.tsx, and Settings.tsx all use `useStations` for dropdowns; Index.tsx and YellowAlerts.tsx use `useJourneys` for the journey lists (Index with `onlyClaimable: false`, YellowAlerts with `onlyClaimable: true`).
 - `shared/stops.ts` includes a `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation map bridging Trafiklab sams-id (legacy `get-train-departures` edge function imports) and GTFS (everything in dbt and the frontend). Only used for inbound URL-param normalization in YellowAlerts/Index after the Index migration.
 
@@ -171,7 +176,6 @@ Build in this order. Do not skip ahead without explicit user decision.
 - `dim_stations` enrichment for the frontend (human-readable station names — most columns already present, verify completeness).
 - Add a dbt `relationships` test linking `fct_passenger_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
 - Pagination on YellowAlerts.tsx claimable journeys list (current 500-row hard limit saturates as stations grow).
-- Move wrapper views into dbt as proper models with `schema='public'` and a `generate_schema_name` macro override. Eliminates cascade-drop risk from §10. Deferred from MVP because the macro override added friction during build.
 - Revisit Index.tsx hypothesis. Page was migrated off the live `get-train-departures` edge function to `v_passenger_journeys` — it now shows recent journeys on the route, no longer "live next departures." Kept as trust-building feature, but its product value is unclear vs. just sending users straight to YellowAlerts. Trigger to retire (or rescope): low engagement after first 50 real users, or the `SAMS_TO_GTFS` map outliving its only remaining use (legacy URL-param bookmarks) makes deletion strictly easier than maintenance.
 
 **v2 — "Could you have caught a better alternative":**
@@ -194,7 +198,6 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
 - **The 72-hour rule is not yet modeled.** v1 will produce false positives for trips with pre-announced service changes. Document this in user-facing UI ("Claim will be reviewed for pre-announced changes") until v1.5 lands.
 - **Lovable auto-commits keep diverging from local.** Frontend changes made in Lovable's UI are pushed to GitHub automatically. The user has decided to stop using Lovable for code editing; verify Lovable's GitHub integration is disconnected before committing significant frontend work.
 - **No analytics layer yet, by deliberate choice.** Metrics work is deferred until something usable ships. Don't volunteer dashboard work.
-- **Wrapper views are standalone Postgres objects, not dbt models.** `public.v_passenger_journeys` and `public.v_active_stations` are created by Supabase migrations, not by `dbt run`. Cascade-drop is possible when underlying dbt facts change shape (`dbt run --full-refresh` on a fact whose column list changed will drop dependents). Recovery SQL is in §11.
 
 ---
 
@@ -215,28 +218,6 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
         combination_of_columns: [...]
   ```
 
-### Wrapper view recreation
-
-If `public.v_passenger_journeys` or `public.v_active_stations` get cascade-dropped after `dbt run`, recreate with:
-
-```sql
-create or replace view public.v_passenger_journeys as
-select journey_key, trip__trip_id, trip__start_date,
-       origin_stop_id, destination_stop_id,
-       origin_stop_name, destination_stop_name,
-       origin_scheduled, origin_actual,
-       destination_scheduled, destination_actual,
-       destination_delay_minutes, is_claimable, canceled,
-       route__name, line_terminus, agency__operator
-from dbt_dev.fct_passenger_journeys;
-
-create or replace view public.v_active_stations as
-select dim_station_id, stop__id, station_name, stop__lat, stop__lon
-from dbt_dev.dim_active_stations;
-
-grant select on public.v_passenger_journeys to anon, authenticated;
-grant select on public.v_active_stations to anon, authenticated;
-```
 
 ---
 
