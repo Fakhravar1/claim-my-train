@@ -228,14 +228,20 @@ const Index = () => {
                   <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">From</span>
                   <Select value={fromStopId} onValueChange={handleFromChange}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Loading stations…">
+                        {fromStation?.name ?? "Loading stations…"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {stationOptions.filter((s) => s.id !== toStopId).map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
+                      {stationOptions.length === 0 ? (
+                        <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                      ) : (
+                        stationOptions.filter((s) => s.id !== toStopId).map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -244,14 +250,20 @@ const Index = () => {
                   <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">To</span>
                   <Select value={toStopId} onValueChange={handleToChange}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Loading stations…">
+                        {toStation?.name ?? "Loading stations…"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {stationOptions.filter((s) => s.id !== fromStopId).map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
+                      {stationOptions.length === 0 ? (
+                        <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                      ) : (
+                        stationOptions.filter((s) => s.id !== fromStopId).map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
