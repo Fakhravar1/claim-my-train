@@ -14,156 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      api_call_events: {
-        Row: {
-          destination_stop_id: string | null
-          destination_stop_name: string | null
-          direction: string
-          id: string
-          origin_stop_id: string | null
-          origin_stop_name: string | null
-          requested_at: string
-          source: string
-        }
-        Insert: {
-          destination_stop_id?: string | null
-          destination_stop_name?: string | null
-          direction: string
-          id?: string
-          origin_stop_id?: string | null
-          origin_stop_name?: string | null
-          requested_at?: string
-          source: string
-        }
-        Update: {
-          destination_stop_id?: string | null
-          destination_stop_name?: string | null
-          direction?: string
-          id?: string
-          origin_stop_id?: string | null
-          origin_stop_name?: string | null
-          requested_at?: string
-          source?: string
-        }
-        Relationships: []
-      }
-      claimable_corridor_windows: {
-        Row: {
-          actual_arrival_datetime: string | null
-          arrival_delay_minutes: number
-          claimable: boolean
-          departure_datetime: string
-          destination_stop_id: string
-          destination_stop_name: string
-          direction: string
-          event_key: string
-          expires_at: string
-          id: string
-          line: string
-          line_name: string
-          observed_at: string
-          origin_stop_id: string
-          origin_stop_name: string
-          scheduled_arrival_datetime: string | null
-          trip_key: string
-        }
-        Insert: {
-          actual_arrival_datetime?: string | null
-          arrival_delay_minutes?: number
-          claimable?: boolean
-          departure_datetime: string
-          destination_stop_id: string
-          destination_stop_name: string
-          direction: string
-          event_key: string
-          expires_at?: string
-          id?: string
-          line: string
-          line_name: string
-          observed_at?: string
-          origin_stop_id: string
-          origin_stop_name: string
-          scheduled_arrival_datetime?: string | null
-          trip_key: string
-        }
-        Update: {
-          actual_arrival_datetime?: string | null
-          arrival_delay_minutes?: number
-          claimable?: boolean
-          departure_datetime?: string
-          destination_stop_id?: string
-          destination_stop_name?: string
-          direction?: string
-          event_key?: string
-          expires_at?: string
-          id?: string
-          line?: string
-          line_name?: string
-          observed_at?: string
-          origin_stop_id?: string
-          origin_stop_name?: string
-          scheduled_arrival_datetime?: string | null
-          trip_key?: string
-        }
-        Relationships: []
-      }
-      departures: {
-        Row: {
-          arrival_date: string | null
-          arrival_station: string
-          arrival_time: string | null
-          created_at: string
-          delay_minutes: number | null
-          departure_date: string
-          departure_station: string
-          departure_time: string
-          fetched_at: string
-          id: string
-          is_delayed: boolean
-          line: string
-          line_name: string
-          operator: string
-          scheduled_time: string | null
-          track: string | null
-        }
-        Insert: {
-          arrival_date?: string | null
-          arrival_station: string
-          arrival_time?: string | null
-          created_at?: string
-          delay_minutes?: number | null
-          departure_date: string
-          departure_station: string
-          departure_time: string
-          fetched_at?: string
-          id?: string
-          is_delayed?: boolean
-          line: string
-          line_name: string
-          operator: string
-          scheduled_time?: string | null
-          track?: string | null
-        }
-        Update: {
-          arrival_date?: string | null
-          arrival_station?: string
-          arrival_time?: string | null
-          created_at?: string
-          delay_minutes?: number | null
-          departure_date?: string
-          departure_station?: string
-          departure_time?: string
-          fetched_at?: string
-          id?: string
-          is_delayed?: boolean
-          line?: string
-          line_name?: string
-          operator?: string
-          scheduled_time?: string | null
-          track?: string | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -341,102 +191,6 @@ export type Database = {
         }
         Relationships: []
       }
-      stations_master: {
-        Row: {
-          area_type: string | null
-          created_at: string | null
-          stop__id: string
-          stop__lat: number | null
-          stop__lon: number | null
-          stop__name: string | null
-        }
-        Insert: {
-          area_type?: string | null
-          created_at?: string | null
-          stop__id: string
-          stop__lat?: number | null
-          stop__lon?: number | null
-          stop__name?: string | null
-        }
-        Update: {
-          area_type?: string | null
-          created_at?: string | null
-          stop__id?: string
-          stop__lat?: number | null
-          stop__lon?: number | null
-          stop__name?: string | null
-        }
-        Relationships: []
-      }
-      train_names: {
-        Row: {
-          created_at: string
-          first_seen: string
-          id: string
-          last_seen: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          first_seen?: string
-          id?: string
-          last_seen?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          first_seen?: string
-          id?: string
-          last_seen?: string
-          name?: string
-        }
-        Relationships: []
-      }
-      yellow_alert_history: {
-        Row: {
-          actual_arrival_datetime: string
-          arrival_delay_minutes: number
-          arrival_station: string
-          created_at: string
-          departure_datetime: string
-          departure_station: string
-          direction: string
-          event_key: string
-          id: string
-          line: string
-          line_name: string
-          scheduled_arrival_datetime: string
-        }
-        Insert: {
-          actual_arrival_datetime: string
-          arrival_delay_minutes: number
-          arrival_station: string
-          created_at?: string
-          departure_datetime: string
-          departure_station: string
-          direction: string
-          event_key: string
-          id?: string
-          line: string
-          line_name: string
-          scheduled_arrival_datetime: string
-        }
-        Update: {
-          actual_arrival_datetime?: string
-          arrival_delay_minutes?: number
-          arrival_station?: string
-          created_at?: string
-          departure_datetime?: string
-          departure_station?: string
-          direction?: string
-          event_key?: string
-          id?: string
-          line?: string
-          line_name?: string
-          scheduled_arrival_datetime?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       v_active_stations: {
@@ -446,6 +200,20 @@ export type Database = {
           stop__id: string | null
           stop__lat: number | null
           stop__lon: number | null
+        }
+        Insert: {
+          dim_station_id?: string | null
+          station_name?: string | null
+          stop__id?: string | null
+          stop__lat?: number | null
+          stop__lon?: number | null
+        }
+        Update: {
+          dim_station_id?: string | null
+          station_name?: string | null
+          stop__id?: string | null
+          stop__lat?: number | null
+          stop__lon?: number | null
         }
         Relationships: []
       }
@@ -469,23 +237,49 @@ export type Database = {
           trip__start_date: string | null
           trip__trip_id: string | null
         }
+        Insert: {
+          agency__operator?: string | null
+          canceled?: boolean | null
+          destination_actual?: string | null
+          destination_delay_minutes?: number | null
+          destination_scheduled?: string | null
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          is_claimable?: boolean | null
+          journey_key?: string | null
+          line_terminus?: string | null
+          origin_actual?: string | null
+          origin_scheduled?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          route__name?: string | null
+          trip__start_date?: string | null
+          trip__trip_id?: string | null
+        }
+        Update: {
+          agency__operator?: string | null
+          canceled?: boolean | null
+          destination_actual?: string | null
+          destination_delay_minutes?: number | null
+          destination_scheduled?: string | null
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          is_claimable?: boolean | null
+          journey_key?: string | null
+          line_terminus?: string | null
+          origin_actual?: string | null
+          origin_scheduled?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          route__name?: string | null
+          trip__start_date?: string | null
+          trip__trip_id?: string | null
+        }
         Relationships: []
       }
     }
     Functions: {
-      delete_old_departures: { Args: never; Returns: undefined }
-      get_admin_api_analytics: {
-        Args: { since_ts: string; timezone_name?: string }
-        Returns: Json
-      }
-      get_api_usage_daily: {
-        Args: { since_ts: string; timezone_name?: string }
-        Returns: {
-          calls: number
-          day: string
-        }[]
-      }
-      trigger_claim_collection: { Args: never; Returns: undefined }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never

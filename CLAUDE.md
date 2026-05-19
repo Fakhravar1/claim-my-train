@@ -14,7 +14,7 @@ A Supabase + dbt + Lovable-replaced frontend that automates train delay compensa
 
 **Sequencing principle:** Ship MVP first, then layer complexity. Do not abstract for hypothetical second operators before the first one works end-to-end.
 
-**Frontend data path (current):** Both Index.tsx and YellowAlerts.tsx query `public.v_passenger_journeys` (wrapper over `dbt_dev.fct_passenger_journeys`) via `src/hooks/useJourneys.ts`. Index.tsx shows recent journeys with no claimable filter; YellowAlerts.tsx filters `is_claimable=true`. Dropdowns on both pages and on Settings.tsx are driven by `src/hooks/useStations.ts` (GTFS IDs from `public.v_active_stations`). The `get-train-departures` edge function and `claimable_corridor_windows` table are no longer read by the frontend — both are slated for decommission (see §9). The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation maps in `shared/stops.ts` are now only used for inbound URL-param compatibility (legacy bookmarks); remove once you're confident no external links rely on sams-id.
+**Frontend data path (current):** Both Index.tsx and YellowAlerts.tsx query `public.v_passenger_journeys` (wrapper over `dbt_dev.fct_passenger_journeys`) via `src/hooks/useJourneys.ts`. Index.tsx shows recent journeys with no claimable filter; YellowAlerts.tsx filters `is_claimable=true`. Dropdowns on both pages and on Settings.tsx are driven by `src/hooks/useStations.ts` (GTFS IDs from `public.v_active_stations`). The legacy live-departures plumbing (the `get-train-departures` edge function, the `claim-collection-15m` cron, and tables `departures` / `train_names` / `yellow_alert_history` / `claimable_corridor_windows` / `api_call_events` / `stations_master`) has been retired. The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` maps in `shared/stops.ts` survive only for inbound URL-param normalization on legacy bookmarks; safe to drop once those bookmarks are confirmed extinct.
 
 ---
 
@@ -139,7 +139,7 @@ where origin_stop_id = :origin
 
 Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-computes `is_claimable`; the UI consumes it.
 
-**Status:** Both Index.tsx and YellowAlerts.tsx now query `public.v_passenger_journeys` via `src/hooks/useJourneys.ts`. Index passes `onlyClaimable: false` (shows everything on the route); YellowAlerts passes `onlyClaimable: true`. The `get-train-departures` edge function and `claimable_corridor_windows` table have no frontend consumers; decommission in §9. All three pages' dropdowns are powered by `useStations()`.
+**Status:** Both Index.tsx and YellowAlerts.tsx now query `public.v_passenger_journeys` via `src/hooks/useJourneys.ts`. Index passes `onlyClaimable: false` (shows everything on the route); YellowAlerts passes `onlyClaimable: true`. The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
 
 ---
 
@@ -153,7 +153,7 @@ Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-
 - ❌ Auto-submit any claim to Skånetrafiken. Manual user review before submission, always. Skånetrafiken §1.10 says false claims will be polisanmäld.
 - ❌ Apply Lovable-style auto-commits to dbt files. dbt logic is high-stakes and requires deliberate review. If an AI agent touched `models/marts/fct_departures.sql` autonomously, that's a bug.
 - ❌ Treat the rebase ritual as routine. If git divergence keeps happening, the workflow is broken — fix the workflow (separate repos, branch separation, or disable Lovable GitHub sync).
-- ❌ Pass stop IDs across the Index ↔ YellowAlerts boundary (or any frontend ↔ edge-function boundary) without translating via `SAMS_TO_GTFS` / `GTFS_TO_SAMS`. Index.tsx + `get-train-departures` speak Trafiklab sams-id; YellowAlerts + `fct_passenger_journeys` speak GTFS. The two namespaces are not interchangeable; assuming they are silently returns empty result sets.
+- ❌ Reintroduce sams-id anywhere in new code. The legacy live-departures pipeline that used Trafiklab sams-id was retired. The frontend now speaks GTFS end-to-end. `SAMS_TO_GTFS` / `GTFS_TO_SAMS` in `shared/stops.ts` exist only as a one-way safety net for legacy URL bookmarks (`/delay-alerts?from=740000003`) — translate inbound, never emit.
 
 ---
 
@@ -170,7 +170,6 @@ Build in this order. Do not skip ahead without explicit user decision.
 - 72-hour pre-announcement rule (Lag 2015:953). If service change was announced ≥3 dygn before scheduled departure, delay is measured against amended timetable, not original. Requires `snap_gtfs_static_trips` (dbt snapshot, SCD-2) and join logic. Currently produces false positives.
 - `dim_stations` enrichment for the frontend (human-readable station names — most columns already present, verify completeness).
 - Add a dbt `relationships` test linking `fct_passenger_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
-- Decommission the `get-train-departures` edge function and `public.claimable_corridor_windows` table. As of the Index.tsx migration to `v_passenger_journeys`, neither is read by the frontend. Before deleting: verify `fct_passenger_journeys` covers the same time horizon and edge cases the edge function handled (transport-mode filtering, corridor-line filtering, dedup) — see `supabase/functions/get-train-departures/index.ts` lines 338-342, 650-657, 690-705, 802-806 for the logic to confirm is preserved in dbt. Also remove `SAMS_TO_GTFS` / `GTFS_TO_SAMS` from `shared/stops.ts` once the edge function is gone (its sams-id imports from `shared/stops.ts` are the last consumer).
 - Pagination on YellowAlerts.tsx claimable journeys list (current 500-row hard limit saturates as stations grow).
 - Move wrapper views into dbt as proper models with `schema='public'` and a `generate_schema_name` macro override. Eliminates cascade-drop risk from §10. Deferred from MVP because the macro override added friction during build.
 - Revisit Index.tsx hypothesis. Page was migrated off the live `get-train-departures` edge function to `v_passenger_journeys` — it now shows recent journeys on the route, no longer "live next departures." Kept as trust-building feature, but its product value is unclear vs. just sending users straight to YellowAlerts. Trigger to retire (or rescope): low engagement after first 50 real users, or the `SAMS_TO_GTFS` map outliving its only remaining use (legacy URL-param bookmarks) makes deletion strictly easier than maintenance.

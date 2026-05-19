@@ -300,14 +300,20 @@ const Settings = () => {
                       <Label htmlFor="preferred-from">From</Label>
                       <Select value={preferredFromStopId} onValueChange={setPreferredFromStopId}>
                         <SelectTrigger id="preferred-from">
-                          <SelectValue />
+                          <SelectValue placeholder="Loading stations…">
+                            {stopOptions.find((s) => s.id === preferredFromStopId)?.name ?? "Loading stations…"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {stopOptions.map((stop) => (
-                            <SelectItem key={stop.id} value={stop.id}>
-                              {stop.name}
-                            </SelectItem>
-                          ))}
+                          {stopOptions.length === 0 ? (
+                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                          ) : (
+                            stopOptions.map((stop) => (
+                              <SelectItem key={stop.id} value={stop.id}>
+                                {stop.name}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -315,14 +321,20 @@ const Settings = () => {
                       <Label htmlFor="preferred-to">To</Label>
                       <Select value={preferredToStopId} onValueChange={setPreferredToStopId}>
                         <SelectTrigger id="preferred-to">
-                          <SelectValue />
+                          <SelectValue placeholder="Loading stations…">
+                            {stopOptions.find((s) => s.id === preferredToStopId)?.name ?? "Loading stations…"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {stopOptions.map((stop) => (
-                            <SelectItem key={stop.id} value={stop.id}>
-                              {stop.name}
-                            </SelectItem>
-                          ))}
+                          {stopOptions.length === 0 ? (
+                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                          ) : (
+                            stopOptions.map((stop) => (
+                              <SelectItem key={stop.id} value={stop.id}>
+                                {stop.name}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -341,15 +353,23 @@ const Settings = () => {
                       <Label htmlFor="commuter-from">From</Label>
                       <Select value={commuterFromStopId || "none"} onValueChange={(value) => setCommuterFromStopId(value === "none" ? "" : value)}>
                         <SelectTrigger id="commuter-from">
-                          <SelectValue />
+                          <SelectValue placeholder="Loading stations…">
+                            {commuterFromStopId
+                              ? stopOptions.find((s) => s.id === commuterFromStopId)?.name ?? "Loading stations…"
+                              : "Not set"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Not set</SelectItem>
-                          {stopOptions.map((stop) => (
-                            <SelectItem key={stop.id} value={stop.id}>
-                              {stop.name}
-                            </SelectItem>
-                          ))}
+                          {stopOptions.length === 0 ? (
+                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                          ) : (
+                            stopOptions.map((stop) => (
+                              <SelectItem key={stop.id} value={stop.id}>
+                                {stop.name}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -357,15 +377,23 @@ const Settings = () => {
                       <Label htmlFor="commuter-to">To</Label>
                       <Select value={commuterToStopId || "none"} onValueChange={(value) => setCommuterToStopId(value === "none" ? "" : value)}>
                         <SelectTrigger id="commuter-to">
-                          <SelectValue />
+                          <SelectValue placeholder="Loading stations…">
+                            {commuterToStopId
+                              ? stopOptions.find((s) => s.id === commuterToStopId)?.name ?? "Loading stations…"
+                              : "Not set"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Not set</SelectItem>
-                          {stopOptions.map((stop) => (
-                            <SelectItem key={stop.id} value={stop.id}>
-                              {stop.name}
-                            </SelectItem>
-                          ))}
+                          {stopOptions.length === 0 ? (
+                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                          ) : (
+                            stopOptions.map((stop) => (
+                              <SelectItem key={stop.id} value={stop.id}>
+                                {stop.name}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
