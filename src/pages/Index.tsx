@@ -1,13 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RefreshCw, Train, Clock3 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import DepartureCard from "@/components/DepartureCard";
 import UserMenu from "@/components/UserMenu";
-import { supabase } from "@/integrations/supabase/client";
-import { STOPS, Direction, getDirectionForStops } from "@/constants/stops";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   Select,
   SelectContent,
@@ -15,286 +12,195 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Link, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { SAMS_TO_GTFS } from "@/constants/stops";
+import { useStations } from "@/hooks/useStations";
+import { useJourneys, type Journey } from "@/hooks/useJourneys";
 
 interface Departure {
   line: string;
   operator: string;
   lineName: string;
-  transportCategory?: string;
-  departureStationId?: string;
   departureStation: string;
   arrivalStation: string;
   departureTime: string;
   departureDate: string;
-  scheduledTime?: string;
   arrivalTime: string | null;
   arrivalDate: string | null;
   scheduledArrivalTime?: string | null;
   isArrivalDelayed?: boolean;
   isArrivalEarly?: boolean;
   arrivalDelayMinutes?: number;
-  track?: string;
   isDelayed: boolean;
   delayMinutes?: number;
+  __canceled?: boolean;
+  __journeyKey?: string;
 }
 
-interface EdgeFunctionResponse {
-  direction: string;
-  updatedAt: string;
-  departures: Departure[];
-}
+// GTFS IDs (dim_active_stations). 1587 = Malmö Triangeln, 25315 = København H.
+const DEFAULT_FROM_STOP_ID = "1587";
+const DEFAULT_TO_STOP_ID = "25315";
 
-const USE_LOCAL_FUNCTIONS = import.meta.env.VITE_USE_LOCAL_FUNCTIONS === "true";
-const LOCAL_FUNCTIONS_BASE_URL = (import.meta.env.VITE_LOCAL_FUNCTIONS_URL as string | undefined)?.replace(/\/$/, "");
-const ROUTE_STOP_OPTIONS = [STOPS.MALMO_TRIANGELN, STOPS.COPENHAGEN_H] as const;
-const DEFAULT_FROM_STOP_ID = STOPS.MALMO_TRIANGELN.id;
-const DEFAULT_TO_STOP_ID = STOPS.COPENHAGEN_H.id;
-const isValidStopId = (id: string | null) => Boolean(id && ROUTE_STOP_OPTIONS.some((stop) => stop.id === id));
+const normalizeStopParam = (raw: string | null): string | null => {
+  if (!raw) return null;
+  return SAMS_TO_GTFS[raw] ?? raw; // identity if already GTFS
+};
 
-const invokeDeparturesFunction = async (
-  direction: Direction,
-  timeShiftMinutes: number,
-  originId?: string,
-  destinationId?: string
-): Promise<EdgeFunctionResponse> => {
-  if (USE_LOCAL_FUNCTIONS && LOCAL_FUNCTIONS_BASE_URL) {
-    const response = await fetch(`${LOCAL_FUNCTIONS_BASE_URL}/get-train-departures`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ direction, timeShiftMinutes, originId, destinationId }),
-    });
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
 
-    if (!response.ok) {
-      const details = await response.text();
-      throw new Error(`Local function error ${response.status}: ${details}`);
-    }
+const stockholmDateFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
-    return (await response.json()) as EdgeFunctionResponse;
-  }
+const stockholmTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
 
-  const { data, error } = await supabase.functions.invoke("get-train-departures", {
-    body: { direction, timeShiftMinutes, originId, destinationId },
-  });
+const toStockholmDate = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso.split("T")[0] ?? "";
+  return stockholmDateFormatter.format(parsed);
+};
 
-  if (error) {
-    throw error;
-  }
+const toStockholmTime = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso.split("T")[1]?.slice(0, 8) ?? "";
+  return stockholmTimeFormatter.format(parsed);
+};
 
-  return data as EdgeFunctionResponse;
+const journeyToDeparture = (j: Journey): Departure => {
+  const departureIso = j.origin_scheduled ?? "";
+  const scheduledArrivalIso = j.destination_scheduled;
+  const actualArrivalIso = j.destination_actual ?? j.destination_scheduled;
+  const delay = j.destination_delay_minutes ?? 0;
+  return {
+    line: j.route__name ?? "",
+    operator: j.agency__operator ?? "",
+    lineName: j.line_terminus ?? "",
+    departureStation: j.origin_stop_name ?? "",
+    arrivalStation: j.destination_stop_name ?? "",
+    departureTime: toStockholmTime(departureIso),
+    departureDate: toStockholmDate(departureIso),
+    arrivalTime: toStockholmTime(actualArrivalIso),
+    arrivalDate: toStockholmDate(actualArrivalIso),
+    scheduledArrivalTime: scheduledArrivalIso ? toStockholmTime(scheduledArrivalIso) : null,
+    isArrivalDelayed: delay > 0,
+    isArrivalEarly: delay < 0,
+    arrivalDelayMinutes: delay,
+    isDelayed: delay > 0,
+    delayMinutes: delay,
+    __canceled: Boolean(j.canceled),
+    __journeyKey: j.journey_key ?? undefined,
+  };
 };
 
 const Index = () => {
   const { profile } = useAuth();
   const [searchParams] = useSearchParams();
-  const routeFromParam = searchParams.get("from");
-  const routeToParam = searchParams.get("to");
+  const routeFromParam = normalizeStopParam(searchParams.get("from"));
+  const routeToParam = normalizeStopParam(searchParams.get("to"));
   const initialFromStopId =
-    isValidStopId(routeFromParam) && routeFromParam !== routeToParam
-      ? (routeFromParam as string)
-      : DEFAULT_FROM_STOP_ID;
+    routeFromParam && routeFromParam !== routeToParam ? routeFromParam : DEFAULT_FROM_STOP_ID;
   const initialToStopId =
-    isValidStopId(routeToParam) && routeToParam !== initialFromStopId
-      ? (routeToParam as string)
-      : DEFAULT_TO_STOP_ID;
-  const [departures, setDepartures] = useState<Departure[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    routeToParam && routeToParam !== initialFromStopId ? routeToParam : DEFAULT_TO_STOP_ID;
   const [fromStopId, setFromStopId] = useState<string>(initialFromStopId);
   const [toStopId, setToStopId] = useState<string>(initialToStopId);
-  const [selectedTrain, setSelectedTrain] = useState<string>("all");
-  const [storedTrainNames, setStoredTrainNames] = useState<string[]>([]);
-  const [historyOffsetMinutes, setHistoryOffsetMinutes] = useState<number>(0);
-  const { toast } = useToast();
-  const fromStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? ROUTE_STOP_OPTIONS[0];
-  const toStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? ROUTE_STOP_OPTIONS[1];
-  const direction: Direction = useMemo(
-    () => getDirectionForStops(fromStopId, toStopId),
-    [fromStopId, toStopId]
+
+  const { data: stations = [] } = useStations();
+  const stationOptions = useMemo(
+    () =>
+      stations
+        .filter((s) => s.stop__id && s.station_name)
+        .map((s) => ({ id: s.stop__id as string, name: s.station_name as string })),
+    [stations]
   );
 
-  const fetchDepartures = async (offsetMinutes = historyOffsetMinutes) => {
-    const clampedOffset = Math.max(0, Math.min(360, offsetMinutes));
-    setLoading(true);
-    try {
-      const response = await invokeDeparturesFunction(direction, clampedOffset, fromStopId, toStopId);
-      
-      setDepartures(response.departures ?? []);
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Error fetching departures:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch departure information",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  // Fetch stored train names on component mount
-  useEffect(() => {
-    const fetchStoredTrainNames = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('train_names')
-          .select('name')
-          .order('last_seen', { ascending: false });
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          setStoredTrainNames(data.map(item => item.name));
-          console.log(`Loaded ${data.length} stored train names`);
-        }
-      } catch (error) {
-        console.error('Error fetching stored train names:', error);
-      }
-    };
-    
-    fetchStoredTrainNames();
+  const lookbackStart = useMemo(() => {
+    // 60-day window — matches the YellowAlerts page and Skånetrafiken's reklamation deadline.
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 60);
+    return d.toISOString().slice(0, 10);
   }, []);
 
-  // Merge stored train names with current departures
-  const trainNames = useMemo(() => {
-    const currentNames = departures
-      .map(d => d.lineName)
-      .filter(name => name.toLowerCase().includes('tåg'));
-    
-    // Merge and deduplicate
-    const allNames = [...new Set([...storedTrainNames, ...currentNames])];
-    return allNames.sort();
-  }, [departures, storedTrainNames]);
+  const {
+    data: journeys = [],
+    isLoading: loading,
+    dataUpdatedAt,
+    refetch,
+  } = useJourneys({
+    fromStopId,
+    toStopId,
+    sinceDate: lookbackStart,
+    onlyClaimable: false,
+  });
 
-  const availableTrainNames = useMemo(() => trainNames, [trainNames]);
+  const departures = useMemo<Departure[]>(() => journeys.map(journeyToDeparture), [journeys]);
 
-  // Reset selections if they become invalid after cross-filtering
-  useEffect(() => {
-    if (selectedTrain !== "all" && !availableTrainNames.includes(selectedTrain)) {
-      setSelectedTrain("all");
-    }
-  }, [availableTrainNames, selectedTrain]);
-
-  // Filter departures based on selected train
-  const filteredDepartures = useMemo(() => {
-    let filtered = departures;
-    
-    if (selectedTrain !== "all") {
-      filtered = filtered.filter(d => d.lineName === selectedTrain);
-    }
-
-    return filtered;
-  }, [departures, selectedTrain]);
-
-  useEffect(() => {
-    fetchDepartures();
-    // Auto-refresh every 15 minutes for current route.
-    const interval = setInterval(() => fetchDepartures(), 15 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [direction, fromStopId, toStopId]);
-
-  const handleLoadEarlier = () => {
-    setHistoryOffsetMinutes((prev) => {
-      const next = Math.min(prev + 60, 360);
-      void fetchDepartures(next);
-      return next;
-    });
-  };
-
-  const handleLoadLater = () => {
-    setHistoryOffsetMinutes((prev) => {
-      const next = Math.max(prev - 60, 0);
-      void fetchDepartures(next);
-      return next;
-    });
-  };
-
-  const handleResetOffset = () => {
-    setHistoryOffsetMinutes(0);
-    fetchDepartures(0);
-  };
+  const fromStation = stationOptions.find((s) => s.id === fromStopId);
+  const toStation = stationOptions.find((s) => s.id === toStopId);
 
   const handleFromChange = (value: string) => {
-    setHistoryOffsetMinutes(0);
     setFromStopId(value);
     if (value === toStopId) {
-      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = stationOptions.find((s) => s.id !== value);
       if (fallback) setToStopId(fallback.id);
     }
   };
 
   const handleToChange = (value: string) => {
-    setHistoryOffsetMinutes(0);
     setToStopId(value);
     if (value === fromStopId) {
-      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = stationOptions.find((s) => s.id !== value);
       if (fallback) setFromStopId(fallback.id);
     }
   };
 
   const handleReverseRoute = () => {
-    setHistoryOffsetMinutes(0);
     setFromStopId(toStopId);
     setToStopId(fromStopId);
   };
 
-  const handleSearchRoute = () => {
-    setHistoryOffsetMinutes(0);
-    fetchDepartures(0);
-  };
-
-  const offsetLabel =
-    historyOffsetMinutes > 0
-      ? `Showing departures from ~${historyOffsetMinutes} minutes earlier`
-      : "Showing latest departures";
-  const canLoadEarlier = historyOffsetMinutes < 360;
-  const canLoadLater = historyOffsetMinutes > 0;
-  const backendLabel = USE_LOCAL_FUNCTIONS && LOCAL_FUNCTIONS_BASE_URL ? `Local backend: ${LOCAL_FUNCTIONS_BASE_URL}` : null;
-
   useEffect(() => {
     if (!profile) return;
-    const hasRouteParams = isValidStopId(routeFromParam) || isValidStopId(routeToParam);
+    const hasRouteParams = Boolean(routeFromParam || routeToParam);
     if (hasRouteParams) return;
-    if (isValidStopId(profile.preferred_from_stop_id) && profile.preferred_from_stop_id !== fromStopId) {
+    if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
       setFromStopId(profile.preferred_from_stop_id);
     }
-    if (isValidStopId(profile.preferred_to_stop_id) && profile.preferred_to_stop_id !== toStopId) {
+    if (profile.preferred_to_stop_id && profile.preferred_to_stop_id !== toStopId) {
       setToStopId(profile.preferred_to_stop_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id, routeFromParam, routeToParam]);
 
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-5xl">
-        {/* Header */}
         <div className="mb-10">
           <div className="mb-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Live departures</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Departures</p>
             <h1 className="text-4xl font-semibold tracking-tight text-foreground">Claim My Train</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Find delayed departures and claim what you&apos;re owed.
+              Recent journeys on this route. Claimable rows are highlighted.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-5">
-            <div className="flex items-center gap-2 flex-wrap">
-              {historyOffsetMinutes > 0 && (
-                <Button
-                  onClick={handleResetOffset}
-                  variant="ghost"
-                  size="sm"
-                  disabled={loading}
-                >
-                  Back to latest
-                </Button>
-              )}
-            </div>
+            <div />
             <div className="flex items-center gap-2">
               <UserMenu />
               <Button
-                onClick={() => fetchDepartures()}
+                onClick={() => void refetch()}
                 disabled={loading}
                 variant="default"
                 size="icon"
@@ -304,8 +210,7 @@ const Index = () => {
               </Button>
             </div>
           </div>
-          
-          {/* Direction Selector */}
+
           <Card className="mb-4 p-5">
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
@@ -313,7 +218,7 @@ const Index = () => {
                 <div className="flex flex-col">
                   <span className="text-sm text-muted-foreground">Route</span>
                   <span className="font-semibold text-foreground">
-                    {fromStop.shortName} to {toStop.shortName}
+                    {fromStation?.name ?? "—"} to {toStation?.name ?? "—"}
                   </span>
                 </div>
               </div>
@@ -326,9 +231,9 @@ const Index = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
-                        <SelectItem key={stop.id} value={stop.id}>
-                          {stop.shortName}
+                      {stationOptions.filter((s) => s.id !== toStopId).map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -342,9 +247,9 @@ const Index = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
-                        <SelectItem key={stop.id} value={stop.id}>
-                          {stop.shortName}
+                      {stationOptions.filter((s) => s.id !== fromStopId).map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -356,7 +261,7 @@ const Index = () => {
                 <Button onClick={handleReverseRoute} disabled={loading} variant="outline" className="min-w-36">
                   Reverse direction
                 </Button>
-                <Button onClick={handleSearchRoute} disabled={loading} className="min-w-32">
+                <Button onClick={() => void refetch()} disabled={loading} className="min-w-32">
                   Search route
                 </Button>
               </div>
@@ -374,83 +279,42 @@ const Index = () => {
             </Link>
           </div>
 
-          {/* Train Filter */}
-          {availableTrainNames.length > 0 && (
-            <Card className="mb-4 p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Filter by train:</span>
-                <Select value={selectedTrain} onValueChange={setSelectedTrain}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Show all trains" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Show all</SelectItem>
-                    {availableTrainNames.map((name) => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </Card>
-          )}
-
         </div>
 
-        {/* Last updated */}
         <div className="mb-5 text-sm text-muted-foreground">
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col">
               <div className="flex items-center gap-2 text-foreground">
                 <Clock3 className="h-4 w-4 text-primary" />
-                <span className="text-base font-semibold">Last updated {lastUpdated.toLocaleTimeString("sv-SE")}</span>
+                <span className="text-base font-semibold">
+                  {lastUpdated ? `Last updated ${lastUpdated.toLocaleTimeString("sv-SE")}` : "Loading…"}
+                </span>
               </div>
               <span className="text-xs text-muted-foreground">Times are shown in local Swedish time.</span>
-              {backendLabel && <span className="text-xs text-muted-foreground">{backendLabel}</span>}
-              <span className="text-xs text-muted-foreground">{offsetLabel}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={handleLoadLater}
-                disabled={loading || !canLoadLater}
-                variant="outline"
-                size="sm"
-              >
-                Load later
-              </Button>
-              <Button
-                onClick={handleLoadEarlier}
-                disabled={loading || !canLoadEarlier}
-                variant="outline"
-                size="sm"
-              >
-                Load earlier
-              </Button>
+              <span className="text-xs text-muted-foreground">
+                Source: <code>public.v_passenger_journeys</code> (last 60 days).
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Departures list */}
         <div className="space-y-4">
           {loading && departures.length === 0 ? (
             <div className="text-center py-12">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground">Loading departures...</p>
             </div>
-          ) : filteredDepartures.length === 0 ? (
+          ) : departures.length === 0 ? (
             <Card className="p-8 text-center">
-              <p className="text-muted-foreground">
-                {selectedTrain === "all" ? "No departures found" : "No departures match the selected train"}
-              </p>
+              <p className="text-muted-foreground">No journeys found on this route in the last 60 days.</p>
             </Card>
           ) : (
-            filteredDepartures.map((departure, index) => {
-              const previousDeparture = index > 0 ? filteredDepartures[index - 1] : null;
+            departures.map((departure, index) => {
+              const previousDeparture = index > 0 ? departures[index - 1] : null;
               const hasDateBoundary = !previousDeparture || previousDeparture.departureDate !== departure.departureDate;
 
               return (
-                <div key={`${departure.line}-${departure.departureDate}-${departure.departureTime}-${index}`} className="space-y-3">
+                <div key={departure.__journeyKey ?? `${departure.line}-${departure.departureDate}-${departure.departureTime}-${index}`} className="space-y-3">
                   {hasDateBoundary && (
                     <div className="flex items-center gap-3 py-1">
                       <div className="h-px flex-1 bg-border/80" />
@@ -458,6 +322,11 @@ const Index = () => {
                         {departure.departureDate}
                       </span>
                       <div className="h-px flex-1 bg-border/80" />
+                    </div>
+                  )}
+                  {departure.__canceled && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-destructive">
+                      Cancelled
                     </div>
                   )}
                   <DepartureCard departure={departure} />

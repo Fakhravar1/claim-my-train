@@ -22,13 +22,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Direction, STOPS, getDirectionForStops } from "@/constants/stops";
+import { SAMS_TO_GTFS, GTFS_TO_SAMS } from "@/constants/stops";
+import { useStations } from "@/hooks/useStations";
+import { useJourneys, type Journey } from "@/hooks/useJourneys";
 
 interface Departure {
   line: string;
   operator: string;
   lineName: string;
-  transportCategory?: string;
   departureStationId?: string;
   departureStation: string;
   arrivalStation: string;
@@ -44,22 +45,8 @@ interface Departure {
   track?: string;
   isDelayed: boolean;
   delayMinutes?: number;
-  __offsetMinutes?: number;
-  __direction?: Direction;
-}
-
-interface CorridorWindowHistoryRow {
-  direction: Direction;
-  line: string;
-  line_name: string;
-  origin_stop_name: string;
-  destination_stop_name: string;
-  departure_datetime: string;
-  scheduled_arrival_datetime: string | null;
-  actual_arrival_datetime: string | null;
-  arrival_delay_minutes: number;
-  claimable: boolean;
-  observed_at: string;
+  __canceled?: boolean;
+  __journeyKey?: string;
 }
 
 const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
@@ -70,10 +57,16 @@ const CLAIM_AUTOFILL_LOCAL_URL =
 const CLAIM_AUTOFILL_TEST_DATE = "2026-02-14";
 const CLAIM_AUTOFILL_TEST_MOBILE = "0701234567";
 const CLAIM_AUTOFILL_TEST_TICKET_ID = "2Y3CE88";
-const ROUTE_STOP_OPTIONS = [STOPS.MALMO_TRIANGELN, STOPS.COPENHAGEN_H] as const;
-const DEFAULT_FROM_STOP_ID = STOPS.MALMO_TRIANGELN.id;
-const DEFAULT_TO_STOP_ID = STOPS.COPENHAGEN_H.id;
-const isValidStopId = (id: string | null) => Boolean(id && ROUTE_STOP_OPTIONS.some((stop) => stop.id === id));
+
+// GTFS IDs (dim_active_stations). See SAMS_TO_GTFS / GTFS_TO_SAMS for the bridge to the
+// Trafiklab sams-id namespace still used by Index.tsx and the get-train-departures edge function.
+const DEFAULT_FROM_STOP_ID = "1587"; // Malmö Triangeln
+const DEFAULT_TO_STOP_ID = "25315";  // København H
+
+const normalizeStopParam = (raw: string | null): string | null => {
+  if (!raw) return null;
+  return SAMS_TO_GTFS[raw] ?? raw; // identity if already GTFS
+};
 
 const isClaimOutsideTicketValidity = (
   departureDate: string,
@@ -115,56 +108,113 @@ const stockholmTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
   hour12: false,
 });
 
-const toStockholmDate = (isoDateTime: string) => {
-  const parsed = new Date(isoDateTime);
-  if (Number.isNaN(parsed.getTime())) {
-    return isoDateTime.split("T")[0] ?? "";
-  }
+const toStockholmDate = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso.split("T")[0] ?? "";
   return stockholmDateFormatter.format(parsed);
 };
 
-const toStockholmTime = (isoDateTime: string) => {
-  const parsed = new Date(isoDateTime);
-  if (Number.isNaN(parsed.getTime())) {
-    return isoDateTime.split("T")[1]?.slice(0, 8) ?? "";
-  }
+const toStockholmTime = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso.split("T")[1]?.slice(0, 8) ?? "";
   return stockholmTimeFormatter.format(parsed);
+};
+
+const journeyToDeparture = (j: Journey): Departure => {
+  const departureIso = j.origin_scheduled ?? "";
+  const scheduledArrivalIso = j.destination_scheduled;
+  const actualArrivalIso = j.destination_actual ?? j.destination_scheduled;
+  return {
+    line: j.route__name ?? "",
+    operator: j.agency__operator ?? "",
+    lineName: j.line_terminus ?? "",
+    departureStation: j.origin_stop_name ?? "",
+    arrivalStation: j.destination_stop_name ?? "",
+    departureTime: toStockholmTime(departureIso),
+    departureDate: toStockholmDate(departureIso),
+    arrivalTime: toStockholmTime(actualArrivalIso),
+    arrivalDate: toStockholmDate(actualArrivalIso),
+    scheduledArrivalTime: scheduledArrivalIso ? toStockholmTime(scheduledArrivalIso) : null,
+    isArrivalDelayed: (j.destination_delay_minutes ?? 0) > 0,
+    isArrivalEarly: (j.destination_delay_minutes ?? 0) < 0,
+    arrivalDelayMinutes: j.destination_delay_minutes ?? 0,
+    isDelayed: false,
+    delayMinutes: 0,
+    __canceled: Boolean(j.canceled),
+    __journeyKey: j.journey_key ?? undefined,
+  };
 };
 
 const DelayAlerts = () => {
   const [searchParams] = useSearchParams();
-  const routeFromParam = searchParams.get("from");
-  const routeToParam = searchParams.get("to");
+  const routeFromParam = normalizeStopParam(searchParams.get("from"));
+  const routeToParam = normalizeStopParam(searchParams.get("to"));
   const initialFromStopId =
-    isValidStopId(routeFromParam) && routeFromParam !== routeToParam
-      ? (routeFromParam as string)
-      : DEFAULT_FROM_STOP_ID;
+    routeFromParam && routeFromParam !== routeToParam ? routeFromParam : DEFAULT_FROM_STOP_ID;
   const initialToStopId =
-    isValidStopId(routeToParam) && routeToParam !== initialFromStopId
-      ? (routeToParam as string)
-      : DEFAULT_TO_STOP_ID;
-  const [loading, setLoading] = useState(false);
+    routeToParam && routeToParam !== initialFromStopId ? routeToParam : DEFAULT_TO_STOP_ID;
   const [fromStopId, setFromStopId] = useState<string>(initialFromStopId);
   const [toStopId, setToStopId] = useState<string>(initialToStopId);
-  const [alerts, setAlerts] = useState<Departure[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<Departure | null>(null);
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
   const [claimActionStatus, setClaimActionStatus] = useState("");
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const fromStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === fromStopId) ?? ROUTE_STOP_OPTIONS[0];
-  const toStop = ROUTE_STOP_OPTIONS.find((stop) => stop.id === toStopId) ?? ROUTE_STOP_OPTIONS[1];
-  const directionScope: Direction = useMemo(
-    () => getDirectionForStops(fromStopId, toStopId),
-    [fromStopId, toStopId]
+
+  const { data: stations = [] } = useStations();
+  const stationOptions = useMemo(
+    () =>
+      stations
+        .filter((s) => s.stop__id && s.station_name)
+        .map((s) => ({ id: s.stop__id as string, name: s.station_name as string })),
+    [stations]
   );
+
+  const lookbackStart = useMemo(() => {
+    // 60-day window matches Skånetrafiken's reklamation deadline.
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 60);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
+  const {
+    data: journeys = [],
+    isLoading: loading,
+    dataUpdatedAt,
+    refetch,
+  } = useJourneys({
+    fromStopId,
+    toStopId,
+    sinceDate: lookbackStart,
+    onlyClaimable: true,
+  });
+
+  const alerts = useMemo<Departure[]>(() => {
+    const mapped = journeys.map(journeyToDeparture);
+    const dedup = new Map<string, Departure>();
+    for (const dep of mapped) {
+      const key =
+        dep.__journeyKey ??
+        [dep.line, dep.departureDate, dep.departureTime, dep.scheduledArrivalTime ?? ""].join("|");
+      if (!dedup.has(key)) dedup.set(key, dep);
+    }
+    return Array.from(dedup.values()).sort((a, b) => {
+      const aKey = `${a.departureDate}T${a.departureTime}`;
+      const bKey = `${b.departureDate}T${b.departureTime}`;
+      return bKey.localeCompare(aKey);
+    });
+  }, [journeys]);
+
+  const fromStation = stationOptions.find((s) => s.id === fromStopId);
+  const toStation = stationOptions.find((s) => s.id === toStopId);
 
   const handleFromChange = (value: string) => {
     setFromStopId(value);
     if (value === toStopId) {
-      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = stationOptions.find((s) => s.id !== value);
       if (fallback) setToStopId(fallback.id);
     }
   };
@@ -172,7 +222,7 @@ const DelayAlerts = () => {
   const handleToChange = (value: string) => {
     setToStopId(value);
     if (value === fromStopId) {
-      const fallback = ROUTE_STOP_OPTIONS.find((stop) => stop.id !== value);
+      const fallback = stationOptions.find((s) => s.id !== value);
       if (fallback) setFromStopId(fallback.id);
     }
   };
@@ -182,99 +232,21 @@ const DelayAlerts = () => {
     setToStopId(fromStopId);
   };
 
-  const loadAlerts = async () => {
-    setLoading(true);
-    try {
-      const lookbackStart = new Date(Date.now() - 30 * 24 * 60 * 60_000);
-      const { data: historyRows } = await supabase
-        .from("claimable_corridor_windows")
-        .select(
-          "direction,line,line_name,origin_stop_name,destination_stop_name,departure_datetime,scheduled_arrival_datetime,actual_arrival_datetime,arrival_delay_minutes,claimable,observed_at"
-        )
-        .eq("origin_stop_id", fromStopId)
-        .eq("destination_stop_id", toStopId)
-        .eq("direction", directionScope)
-        .eq("claimable", true)
-        .gte("observed_at", lookbackStart.toISOString())
-        .order("observed_at", { ascending: false })
-        .limit(1000);
-
-      const history = (historyRows as CorridorWindowHistoryRow[] | null) ?? [];
-      const dedup = new Map<string, Departure>();
-      for (const dep of history
-        .filter((row) => row.arrival_delay_minutes >= 20)
-        .map((row) => {
-          const departureDate = toStockholmDate(row.departure_datetime);
-          const departureTime = toStockholmTime(row.departure_datetime);
-          const arrivalIso = row.actual_arrival_datetime ?? row.scheduled_arrival_datetime ?? row.departure_datetime;
-          const arrivalDate = toStockholmDate(arrivalIso);
-          const arrivalTime = toStockholmTime(arrivalIso);
-          const scheduledArrivalTime = row.scheduled_arrival_datetime
-            ? toStockholmTime(row.scheduled_arrival_datetime)
-            : null;
-          return {
-            line: row.line,
-            operator: "",
-            lineName: row.line_name,
-            departureStation: row.origin_stop_name,
-            arrivalStation: row.destination_stop_name,
-            departureTime,
-            departureDate,
-            scheduledTime: undefined,
-            arrivalTime,
-            arrivalDate,
-            scheduledArrivalTime,
-            isArrivalDelayed: row.arrival_delay_minutes > 0,
-            isArrivalEarly: row.arrival_delay_minutes < 0,
-            arrivalDelayMinutes: row.arrival_delay_minutes,
-            isDelayed: false,
-            delayMinutes: 0,
-            __direction: row.direction,
-          } as Departure;
-        })) {
-        const key = [
-          dep.__direction ?? "",
-          dep.line,
-          dep.departureDate,
-          dep.departureTime,
-          dep.scheduledArrivalTime ?? "",
-          dep.arrivalTime ?? "",
-        ].join("|");
-        if (!dedup.has(key)) dedup.set(key, dep);
-      }
-
-      const sorted = Array.from(dedup.values()).sort((a, b) => {
-        const aKey = `${a.departureDate}T${a.departureTime}`;
-        const bKey = `${b.departureDate}T${b.departureTime}`;
-        return bKey.localeCompare(aKey);
-      });
-      setAlerts(sorted);
-      setLastUpdated(new Date());
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadAlerts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directionScope, fromStopId, toStopId]);
-
   useEffect(() => {
     if (!profile) return;
-    const hasRouteParams = isValidStopId(routeFromParam) || isValidStopId(routeToParam);
+    const hasRouteParams = Boolean(routeFromParam || routeToParam);
     if (hasRouteParams) return;
-    if (isValidStopId(profile.preferred_from_stop_id) && profile.preferred_from_stop_id !== fromStopId) {
+    if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
       setFromStopId(profile.preferred_from_stop_id);
     }
-    if (isValidStopId(profile.preferred_to_stop_id) && profile.preferred_to_stop_id !== toStopId) {
+    if (profile.preferred_to_stop_id && profile.preferred_to_stop_id !== toStopId) {
       setToStopId(profile.preferred_to_stop_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id, routeFromParam, routeToParam]);
 
   const handleSearchRoute = () => {
-    void loadAlerts();
+    void refetch();
   };
 
   const openClaimFormWithFallback = async (dep: Departure) => {
@@ -343,7 +315,11 @@ const DelayAlerts = () => {
     navigate(`/login?next=${encodeURIComponent("/delay-alerts")}`);
   };
 
-  const backendLabel = useMemo(() => "Source: precomputed corridor windows", []);
+  // Back-to-departures link points at Index.tsx, which still speaks sams-id.
+  const backFromSams = GTFS_TO_SAMS[fromStopId] ?? fromStopId;
+  const backToSams = GTFS_TO_SAMS[toStopId] ?? toStopId;
+
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -352,12 +328,12 @@ const DelayAlerts = () => {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Saved delay history</p>
             <h1 className="text-4xl font-semibold tracking-tight text-foreground">Claimable Delays</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Yellow alerts: delays from 20 to 39 minutes. Orange alerts: delays of 40 minutes or more.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Yellow alerts: delays from 20 to 39 minutes. Orange alerts: delays of 40 minutes or more. Cancellations always claimable.</p>
           </div>
           <div className="flex items-center gap-2">
             <UserMenu />
             <Button
-              onClick={loadAlerts}
+              onClick={() => void refetch()}
               disabled={loading}
               variant="default"
               size="icon"
@@ -375,7 +351,7 @@ const DelayAlerts = () => {
               <div className="flex flex-col">
                 <span className="text-sm text-muted-foreground">Route</span>
                 <span className="font-semibold text-foreground">
-                  {fromStop.shortName} to {toStop.shortName}
+                  {fromStation?.name ?? "—"} to {toStation?.name ?? "—"}
                 </span>
               </div>
             </div>
@@ -387,9 +363,9 @@ const DelayAlerts = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== toStopId).map((stop) => (
-                      <SelectItem key={stop.id} value={stop.id}>
-                        {stop.shortName}
+                    {stationOptions.filter((s) => s.id !== toStopId).map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -402,9 +378,9 @@ const DelayAlerts = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ROUTE_STOP_OPTIONS.filter((stop) => stop.id !== fromStopId).map((stop) => (
-                      <SelectItem key={stop.id} value={stop.id}>
-                        {stop.shortName}
+                    {stationOptions.filter((s) => s.id !== fromStopId).map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -422,12 +398,12 @@ const DelayAlerts = () => {
             </div>
           </div>
           <div className="mt-3 text-xs text-muted-foreground">
-            This page reads only from persisted delay history in Supabase (last 30 days). {backendLabel}
+            This page reads claimable journeys from <code>public.v_passenger_journeys</code> (60-day window).
           </div>
         </Card>
 
         <div className="mt-2 mb-4 flex justify-center">
-          <Link to={`/?from=${encodeURIComponent(fromStopId)}&to=${encodeURIComponent(toStopId)}`} className="w-full sm:w-auto">
+          <Link to={`/?from=${encodeURIComponent(backFromSams)}&to=${encodeURIComponent(backToSams)}`} className="w-full sm:w-auto">
             <Button
               size="lg"
               className="w-full rounded-full px-8 py-6 text-base font-semibold shadow-lg shadow-primary/20 sm:w-auto"
@@ -452,7 +428,7 @@ const DelayAlerts = () => {
               const isNewDay = !!prev && prev.departureDate !== dep.departureDate;
 
               return (
-                <div key={`${dep.line}-${dep.departureDate}-${dep.departureTime}-${idx}`} className="space-y-2">
+                <div key={dep.__journeyKey ?? `${dep.line}-${dep.departureDate}-${dep.departureTime}-${idx}`} className="space-y-2">
                   {isNewDay && (
                     <div className="my-4 flex items-center gap-3">
                       <div className="h-px flex-1 bg-border" />
@@ -460,6 +436,11 @@ const DelayAlerts = () => {
                         Day change: {prev?.departureDate} {"->"} {dep.departureDate}
                       </span>
                       <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+                  {dep.__canceled && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-destructive">
+                      Cancelled
                     </div>
                   )}
                   <DepartureCard departure={dep} />
@@ -523,6 +504,9 @@ const DelayAlerts = () => {
                       <p><span className="font-semibold">Scheduled arrival:</span> {selectedAlert.scheduledArrivalTime ?? "-"}</p>
                       <p><span className="font-semibold">Actual arrival:</span> {selectedAlert.arrivalTime ?? "-"}</p>
                       <p><span className="font-semibold">Delay:</span> +{selectedAlert.arrivalDelayMinutes ?? 0} min</p>
+                      {selectedAlert.__canceled && (
+                        <p className="font-semibold text-destructive">Trip was cancelled.</p>
+                      )}
                     </Card>
                   </>
                 );

@@ -9,7 +9,7 @@ import UserMenu from "@/components/UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { STOP_OPTIONS } from "@/constants/stops";
+import { useStations } from "@/hooks/useStations";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -27,6 +27,14 @@ const toIsoDate = (value: string | null | undefined) => {
 const Settings = () => {
   const { user, profile, loading } = useAuth();
   const { toast } = useToast();
+  const { data: stations = [] } = useStations();
+  const stopOptions = useMemo(
+    () =>
+      stations
+        .filter((s) => s.stop__id && s.station_name)
+        .map((s) => ({ id: s.stop__id as string, name: s.station_name as string })),
+    [stations]
+  );
   const CLAIM_VALUE_SEK = 100;
 
   const [claimEmail, setClaimEmail] = useState("");
@@ -36,8 +44,9 @@ const Settings = () => {
   const [claimsDoneCount, setClaimsDoneCount] = useState(0);
   const [isPeriodTicket, setIsPeriodTicket] = useState(false);
   const [ticketValidUntil, setTicketValidUntil] = useState("");
-  const [preferredFromStopId, setPreferredFromStopId] = useState("740000003");
-  const [preferredToStopId, setPreferredToStopId] = useState("860000626");
+  // GTFS IDs (see dim_active_stations). 3 = Malmö Centralstation, 25315 = København H.
+  const [preferredFromStopId, setPreferredFromStopId] = useState("3");
+  const [preferredToStopId, setPreferredToStopId] = useState("25315");
   const [commuterFromStopId, setCommuterFromStopId] = useState("");
   const [commuterToStopId, setCommuterToStopId] = useState("");
   const [commuterOutboundStartTime, setCommuterOutboundStartTime] = useState("");
@@ -54,8 +63,8 @@ const Settings = () => {
     setClaimsDoneCount(profile?.claims_done_count ?? 0);
     setIsPeriodTicket(profile?.is_period_ticket ?? false);
     setTicketValidUntil(toIsoDate(profile?.ticket_valid_until));
-    setPreferredFromStopId(profile?.preferred_from_stop_id ?? "740000003");
-    setPreferredToStopId(profile?.preferred_to_stop_id ?? "860000626");
+    setPreferredFromStopId(profile?.preferred_from_stop_id ?? "3");
+    setPreferredToStopId(profile?.preferred_to_stop_id ?? "25315");
     setCommuterFromStopId(profile?.commuter_from_stop_id ?? "");
     setCommuterToStopId(profile?.commuter_to_stop_id ?? "");
     setCommuterOutboundStartTime(profile?.commuter_outbound_start_time ?? "");
@@ -294,9 +303,9 @@ const Settings = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {STOP_OPTIONS.map((stop) => (
+                          {stopOptions.map((stop) => (
                             <SelectItem key={stop.id} value={stop.id}>
-                              {stop.shortName}
+                              {stop.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -309,9 +318,9 @@ const Settings = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {STOP_OPTIONS.map((stop) => (
+                          {stopOptions.map((stop) => (
                             <SelectItem key={stop.id} value={stop.id}>
-                              {stop.shortName}
+                              {stop.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -336,9 +345,9 @@ const Settings = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Not set</SelectItem>
-                          {STOP_OPTIONS.map((stop) => (
+                          {stopOptions.map((stop) => (
                             <SelectItem key={stop.id} value={stop.id}>
-                              {stop.shortName}
+                              {stop.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -352,9 +361,9 @@ const Settings = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Not set</SelectItem>
-                          {STOP_OPTIONS.map((stop) => (
+                          {stopOptions.map((stop) => (
                             <SelectItem key={stop.id} value={stop.id}>
-                              {stop.shortName}
+                              {stop.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

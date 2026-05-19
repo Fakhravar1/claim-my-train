@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "WebFetch(domain:www.trafiklab.se)"
+      "WebFetch(domain:www.trafiklab.se)",
+      "mcp__a443261b-ab04-44a2-a207-cbd838f804ed__list_projects",
+      "Bash(gh repo *)",
+      "Bash(git ls-remote *)",
+      "mcp__a443261b-ab04-44a2-a207-cbd838f804ed__list_tables",
+      "mcp__a443261b-ab04-44a2-a207-cbd838f804ed__list_edge_functions",
+      "Bash(npm --version)",
+      "Bash(npx tsc *)",
+      "Bash(cp \"/c/Users/arian/Desktop/CLAUDE.md\" \"C:/Users/arian/trafiklab/.claude/worktrees/youthful-knuth-fae20a/CLAUDE.md\" && ls -la CLAUDE.md)",
+      "mcp__a443261b-ab04-44a2-a207-cbd838f804ed__execute_sql",
+      "mcp__a443261b-ab04-44a2-a207-cbd838f804ed__generate_typescript_types",
+      "mcp__a443261b-ab04-44a2-a207-cbd838f804ed__apply_migration",
+      "PowerShell(scoop install gh 2>&1)",
+      "Bash(git credential *)",
+      "Bash(git add *)"
     ]
   }
 }

@@ -14,60 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      departures: {
+      api_call_events: {
         Row: {
-          arrival_date: string | null
-          arrival_station: string
-          arrival_time: string | null
-          created_at: string
-          delay_minutes: number | null
-          departure_date: string
-          departure_station: string
-          departure_time: string
-          fetched_at: string
+          destination_stop_id: string | null
+          destination_stop_name: string | null
+          direction: string
           id: string
-          is_delayed: boolean
-          line: string
-          line_name: string
-          operator: string
-          scheduled_time: string | null
-          track: string | null
+          origin_stop_id: string | null
+          origin_stop_name: string | null
+          requested_at: string
+          source: string
         }
         Insert: {
-          arrival_date?: string | null
-          arrival_station: string
-          arrival_time?: string | null
-          created_at?: string
-          delay_minutes?: number | null
-          departure_date: string
-          departure_station: string
-          departure_time: string
-          fetched_at?: string
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          direction: string
           id?: string
-          is_delayed?: boolean
-          line: string
-          line_name: string
-          operator: string
-          scheduled_time?: string | null
-          track?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          requested_at?: string
+          source: string
         }
         Update: {
-          arrival_date?: string | null
-          arrival_station?: string
-          arrival_time?: string | null
-          created_at?: string
-          delay_minutes?: number | null
-          departure_date?: string
-          departure_station?: string
-          departure_time?: string
-          fetched_at?: string
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          direction?: string
           id?: string
-          is_delayed?: boolean
-          line?: string
-          line_name?: string
-          operator?: string
-          scheduled_time?: string | null
-          track?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          requested_at?: string
+          source?: string
         }
         Relationships: []
       }
@@ -128,6 +104,63 @@ export type Database = {
           origin_stop_name?: string
           scheduled_arrival_datetime?: string | null
           trip_key?: string
+        }
+        Relationships: []
+      }
+      departures: {
+        Row: {
+          arrival_date: string | null
+          arrival_station: string
+          arrival_time: string | null
+          created_at: string
+          delay_minutes: number | null
+          departure_date: string
+          departure_station: string
+          departure_time: string
+          fetched_at: string
+          id: string
+          is_delayed: boolean
+          line: string
+          line_name: string
+          operator: string
+          scheduled_time: string | null
+          track: string | null
+        }
+        Insert: {
+          arrival_date?: string | null
+          arrival_station: string
+          arrival_time?: string | null
+          created_at?: string
+          delay_minutes?: number | null
+          departure_date: string
+          departure_station: string
+          departure_time: string
+          fetched_at?: string
+          id?: string
+          is_delayed?: boolean
+          line: string
+          line_name: string
+          operator: string
+          scheduled_time?: string | null
+          track?: string | null
+        }
+        Update: {
+          arrival_date?: string | null
+          arrival_station?: string
+          arrival_time?: string | null
+          created_at?: string
+          delay_minutes?: number | null
+          departure_date?: string
+          departure_station?: string
+          departure_time?: string
+          fetched_at?: string
+          id?: string
+          is_delayed?: boolean
+          line?: string
+          line_name?: string
+          operator?: string
+          scheduled_time?: string | null
+          track?: string | null
         }
         Relationships: []
       }
@@ -203,6 +236,138 @@ export type Database = {
         }
         Relationships: []
       }
+      raw_departures: {
+        Row: {
+          agency__id: string | null
+          agency__name: string | null
+          agency__operator: string | null
+          alerts: Json | null
+          arrival_delay: number | null
+          canceled: boolean | null
+          event_type: string | null
+          id: string
+          ingested_at: string
+          is_realtime: boolean | null
+          realtime: string | null
+          realtime_platform__designation: string | null
+          realtime_platform__id: string | null
+          route__designation: string | null
+          route__destination__id: string | null
+          route__destination__name: string | null
+          route__direction: string | null
+          route__name: string | null
+          route__origin__id: string | null
+          route__origin__name: string | null
+          route__transport_mode: string | null
+          route__transport_mode_code: number | null
+          scheduled: string
+          scheduled_platform__designation: string | null
+          scheduled_platform__id: string | null
+          stop__id: string
+          stop__lat: number | null
+          stop__lon: number | null
+          stop__name: string | null
+          trip__start_date: string
+          trip__technical_number: number | null
+          trip__trip_id: string
+        }
+        Insert: {
+          agency__id?: string | null
+          agency__name?: string | null
+          agency__operator?: string | null
+          alerts?: Json | null
+          arrival_delay?: number | null
+          canceled?: boolean | null
+          event_type?: string | null
+          id?: string
+          ingested_at?: string
+          is_realtime?: boolean | null
+          realtime?: string | null
+          realtime_platform__designation?: string | null
+          realtime_platform__id?: string | null
+          route__designation?: string | null
+          route__destination__id?: string | null
+          route__destination__name?: string | null
+          route__direction?: string | null
+          route__name?: string | null
+          route__origin__id?: string | null
+          route__origin__name?: string | null
+          route__transport_mode?: string | null
+          route__transport_mode_code?: number | null
+          scheduled: string
+          scheduled_platform__designation?: string | null
+          scheduled_platform__id?: string | null
+          stop__id: string
+          stop__lat?: number | null
+          stop__lon?: number | null
+          stop__name?: string | null
+          trip__start_date: string
+          trip__technical_number?: number | null
+          trip__trip_id: string
+        }
+        Update: {
+          agency__id?: string | null
+          agency__name?: string | null
+          agency__operator?: string | null
+          alerts?: Json | null
+          arrival_delay?: number | null
+          canceled?: boolean | null
+          event_type?: string | null
+          id?: string
+          ingested_at?: string
+          is_realtime?: boolean | null
+          realtime?: string | null
+          realtime_platform__designation?: string | null
+          realtime_platform__id?: string | null
+          route__designation?: string | null
+          route__destination__id?: string | null
+          route__destination__name?: string | null
+          route__direction?: string | null
+          route__name?: string | null
+          route__origin__id?: string | null
+          route__origin__name?: string | null
+          route__transport_mode?: string | null
+          route__transport_mode_code?: number | null
+          scheduled?: string
+          scheduled_platform__designation?: string | null
+          scheduled_platform__id?: string | null
+          stop__id?: string
+          stop__lat?: number | null
+          stop__lon?: number | null
+          stop__name?: string | null
+          trip__start_date?: string
+          trip__technical_number?: number | null
+          trip__trip_id?: string
+        }
+        Relationships: []
+      }
+      stations_master: {
+        Row: {
+          area_type: string | null
+          created_at: string | null
+          stop__id: string
+          stop__lat: number | null
+          stop__lon: number | null
+          stop__name: string | null
+        }
+        Insert: {
+          area_type?: string | null
+          created_at?: string | null
+          stop__id: string
+          stop__lat?: number | null
+          stop__lon?: number | null
+          stop__name?: string | null
+        }
+        Update: {
+          area_type?: string | null
+          created_at?: string | null
+          stop__id?: string
+          stop__lat?: number | null
+          stop__lon?: number | null
+          stop__name?: string | null
+        }
+        Relationships: []
+      }
       train_names: {
         Row: {
           created_at: string
@@ -274,17 +439,51 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_active_stations: {
+        Row: {
+          dim_station_id: string | null
+          station_name: string | null
+          stop__id: string | null
+          stop__lat: number | null
+          stop__lon: number | null
+        }
+        Relationships: []
+      }
+      v_passenger_journeys: {
+        Row: {
+          agency__operator: string | null
+          canceled: boolean | null
+          destination_actual: string | null
+          destination_delay_minutes: number | null
+          destination_scheduled: string | null
+          destination_stop_id: string | null
+          destination_stop_name: string | null
+          is_claimable: boolean | null
+          journey_key: string | null
+          line_terminus: string | null
+          origin_actual: string | null
+          origin_scheduled: string | null
+          origin_stop_id: string | null
+          origin_stop_name: string | null
+          route__name: string | null
+          trip__start_date: string | null
+          trip__trip_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       delete_old_departures: { Args: never; Returns: undefined }
-      get_api_usage_daily: {
-        Args: { since_ts: string; timezone_name?: string }
-        Returns: { day: string; calls: number }[]
-      }
       get_admin_api_analytics: {
         Args: { since_ts: string; timezone_name?: string }
         Returns: Json
+      }
+      get_api_usage_daily: {
+        Args: { since_ts: string; timezone_name?: string }
+        Returns: {
+          calls: number
+          day: string
+        }[]
       }
       trigger_claim_collection: { Args: never; Returns: undefined }
     }
