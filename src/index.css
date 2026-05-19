@@ -2,95 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
+   All colors MUST be HSL.
+
+   These tokens are the in-app theme (post-sign-in surfaces: /app, /login,
+   /settings, /delay-alerts). They mirror the Skåne palette defined in
+   src/themes/landing-base.css so the in-app feel matches the marketing
+   surface and the Skånetrafiken regional page. The landing routes load
+   landing-base.css separately via the useLandingStyles hook — that file is
+   the source of truth for the hex tokens; values here are HSL conversions
+   of the same cmt-* palette.
 */
 
 @layer base {
   :root {
-    --background: 28 70% 95%;
-    --foreground: 222 22% 16%;
+    /* Surfaces & ink (cmt-white, cmt-paper, cmt-ink) */
+    --background: 60 40% 98%;        /* #FCFCF8 — warm off-white */
+    --foreground: 146 29% 11%;       /* #14241B — dark forest ink */
 
-    --card: 32 78% 98%;
-    --card-foreground: 222 22% 16%;
+    --card: 0 0% 100%;               /* #FFFFFF — pure white card */
+    --card-foreground: 146 29% 11%;
 
-    --popover: 32 78% 98%;
-    --popover-foreground: 222 22% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 146 29% 11%;
 
-    --primary: 16 86% 56%;
-    --primary-foreground: 0 0% 100%;
+    /* Brand (cmt-forest, cmt-forest-deep) */
+    --primary: 152 56% 28%;          /* #1F6F4A — deep forest */
+    --primary-foreground: 60 40% 98%;
 
-    --secondary: 24 72% 88%;
-    --secondary-foreground: 220 22% 22%;
+    /* Soft surfaces (cmt-mist, cmt-mist-deep) */
+    --secondary: 86 47% 93%;         /* #EFF6E6 — mist */
+    --secondary-foreground: 153 58% 19%; /* #154E34 — forest-deep */
 
-    --muted: 28 32% 92%;
-    --muted-foreground: 220 10% 42%;
+    --muted: 86 41% 87%;             /* #DFEBCF — mist-deep */
+    --muted-foreground: 131 7% 45%;  /* #6B7B6E — muted gray-green */
 
-    --accent: 334 76% 83%;
-    --accent-foreground: 332 42% 24%;
+    /* Accent (cmt-sunflower) */
+    --accent: 47 87% 66%;            /* #F4D35E — sunflower */
+    --accent-foreground: 152 59% 14%; /* #0E3724 — forest-darker */
 
-    --destructive: 1 77% 57%;
-    --destructive-foreground: 0 0% 100%;
+    /* Status (cmt-danger) */
+    --destructive: 2 41% 51%;        /* #B5524E — danger */
+    --destructive-foreground: 60 40% 98%;
 
-    --border: 24 46% 76%;
-    --input: 24 54% 84%;
-    --ring: 16 86% 56%;
+    /* Borders / inputs / focus ring */
+    --border: 85 21% 89%;            /* #E4E9DD — hairline */
+    --input: 85 21% 89%;
+    --ring: 152 56% 28%;             /* forest ring */
 
     --radius: 0.75rem;
 
-    --sidebar-background: 28 70% 95%;
-
-    --sidebar-foreground: 222 22% 16%;
-
-    --sidebar-primary: 16 86% 56%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 24 72% 88%;
-
-    --sidebar-accent-foreground: 220 24% 24%;
-
-    --sidebar-border: 24 46% 76%;
-
-    --sidebar-ring: 16 86% 56%;
+    /* Sidebar tokens (used by shadcn's sidebar component; the app doesn't
+       currently have a sidebar, but kept for consistency). */
+    --sidebar-background: 60 40% 98%;
+    --sidebar-foreground: 146 29% 11%;
+    --sidebar-primary: 152 56% 28%;
+    --sidebar-primary-foreground: 60 40% 98%;
+    --sidebar-accent: 86 47% 93%;
+    --sidebar-accent-foreground: 153 58% 19%;
+    --sidebar-border: 85 21% 89%;
+    --sidebar-ring: 152 56% 28%;
   }
 
   .dark {
-    --background: 226 26% 10%;
-    --foreground: 30 40% 96%;
+    --background: 152 30% 8%;
+    --foreground: 60 40% 96%;
 
-    --card: 226 24% 13%;
-    --card-foreground: 30 40% 96%;
+    --card: 152 24% 12%;
+    --card-foreground: 60 40% 96%;
 
-    --popover: 226 24% 13%;
-    --popover-foreground: 30 40% 96%;
+    --popover: 152 24% 12%;
+    --popover-foreground: 60 40% 96%;
 
-    --primary: 16 92% 66%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 101 31% 55%;          /* sage — brightens on dark */
+    --primary-foreground: 152 59% 14%;
 
-    --secondary: 228 26% 22%;
-    --secondary-foreground: 30 40% 96%;
+    --secondary: 152 22% 18%;
+    --secondary-foreground: 60 40% 96%;
 
-    --muted: 226 18% 20%;
-    --muted-foreground: 30 14% 72%;
+    --muted: 152 18% 16%;
+    --muted-foreground: 86 12% 70%;
 
-    --accent: 336 46% 34%;
-    --accent-foreground: 24 84% 93%;
+    --accent: 47 70% 50%;
+    --accent-foreground: 152 59% 14%;
 
-    --destructive: 1 70% 56%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 2 41% 51%;
+    --destructive-foreground: 60 40% 96%;
 
-    --border: 226 18% 24%;
-    --input: 226 18% 22%;
-    --ring: 16 92% 66%;
-    --sidebar-background: 226 26% 10%;
-    --sidebar-foreground: 30 40% 96%;
-    --sidebar-primary: 16 92% 66%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 226 20% 18%;
-    --sidebar-accent-foreground: 30 40% 96%;
-    --sidebar-border: 226 18% 24%;
-    --sidebar-ring: 16 92% 66%;
+    --border: 152 18% 20%;
+    --input: 152 18% 18%;
+    --ring: 101 31% 55%;
+
+    --sidebar-background: 152 30% 8%;
+    --sidebar-foreground: 60 40% 96%;
+    --sidebar-primary: 101 31% 55%;
+    --sidebar-primary-foreground: 152 59% 14%;
+    --sidebar-accent: 152 22% 18%;
+    --sidebar-accent-foreground: 60 40% 96%;
+    --sidebar-border: 152 18% 20%;
+    --sidebar-ring: 101 31% 55%;
   }
 }
 
@@ -102,10 +112,12 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
     font-family: "Inter", "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+    /* Warm cream → mist tint → white, with a soft sage glow top-left and
+       a sunflower glow top-right. Mirrors the Skåne landing's hero feel. */
     background-image:
-      radial-gradient(1200px 520px at 12% -8%, hsl(16 100% 74% / 0.72), transparent 64%),
-      radial-gradient(980px 460px at 96% -14%, hsl(336 100% 78% / 0.58), transparent 62%),
-      linear-gradient(180deg, hsl(27 95% 94%) 0%, hsl(28 62% 96%) 45%, hsl(0 0% 99%) 100%);
+      radial-gradient(1200px 520px at 12% -8%, hsl(101 31% 75% / 0.45), transparent 64%),
+      radial-gradient(980px 460px at 96% -14%, hsl(47 87% 80% / 0.40), transparent 62%),
+      linear-gradient(180deg, hsl(60 40% 98%) 0%, hsl(86 47% 96%) 45%, hsl(0 0% 100%) 100%);
     background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     text-rendering: geometricPrecision;
