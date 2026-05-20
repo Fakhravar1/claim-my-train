@@ -1,0 +1,63 @@
+name: dbt run
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'   # every 15 min — matches raw_departures ingestion
+  workflow_dispatch:          # so you can trigger manually for the first test
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: dbt-run          # prevents overlapping runs if one is slow
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dbt
+        run: pip install dbt-postgres==1.11.8
+
+      - name: Configure profile
+        env:
+          PG_HOST:     ${{ secrets.SUPABASE_DB_HOST }}
+          PG_PORT:     ${{ secrets.SUPABASE_DB_PORT }}
+          PG_USER:     ${{ secrets.SUPABASE_DB_USER }}
+          PG_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PG_DBNAME:   ${{ secrets.SUPABASE_DB_NAME }}
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<'YAML'
+          trafiklab:
+            outputs:
+              dev:
+                type: postgres
+                host:     "{{ env_var('PG_HOST') }}"
+                port:     "{{ env_var('PG_PORT') | int }}"
+                user:     "{{ env_var('PG_USER') }}"
+                password: "{{ env_var('PG_PASSWORD') }}"
+                dbname:   "{{ env_var('PG_DBNAME') }}"
+                schema:   dbt_dev
+                threads:  2
+                sslmode:  require
+            target: dev
+          YAML
+
+      - name: dbt deps
+        working-directory: dbt
+        run: dbt deps
+
+      - name: dbt build
+        working-directory: dbt
+        env:
+          PG_HOST:     ${{ secrets.SUPABASE_DB_HOST }}
+          PG_PORT:     ${{ secrets.SUPABASE_DB_PORT }}
+          PG_USER:     ${{ secrets.SUPABASE_DB_USER }}
+          PG_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PG_DBNAME:   ${{ secrets.SUPABASE_DB_NAME }}
+        run: dbt build
