@@ -16,7 +16,19 @@
       "mcp__a443261b-ab04-44a2-a207-cbd838f804ed__apply_migration",
       "PowerShell(scoop install gh 2>&1)",
       "Bash(git credential *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npm install *)",
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(gh pr create --title 'Move departures board to /regions/skanetrafiken, adopt Skåne design system' --body ' *)",
+      "Bash(gh auth *)",
+      "Bash(gh pr *)",
+      "Bash(git checkout *)",
+      "Bash(git branch *)",
+      "Bash(git fetch *)",
+      "Bash(git worktree *)",
+      "Bash(git push *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
