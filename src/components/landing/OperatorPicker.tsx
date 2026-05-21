@@ -67,8 +67,8 @@ export default function OperatorPicker() {
             </span>
           </Link>
 
-          {/* SL — coming soon */}
-          <Link className="op-card op-card--sl op-card--coming" to="/regions/sl" aria-label="SL preview — coming soon">
+          {/* SL — coming soon (no route yet; inert card) */}
+          <div className="op-card op-card--sl op-card--coming" role="presentation" aria-label="SL — coming soon">
             <span className="op-card__badge">Coming soon</span>
             <span className="op-card__scene" aria-hidden="true">
               <svg viewBox="0 0 280 160" preserveAspectRatio="xMidYMid slice">
@@ -116,18 +116,12 @@ export default function OperatorPicker() {
             <span className="op-card__body">
               <span className="op-card__name">SL</span>
               <span className="op-card__region">Stockholm · Tunnelbana &amp; Pendeltåg</span>
-              <span className="op-card__cta">
-                Preview
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14" />
-                  <path d="m13 6 6 6-6 6" />
-                </svg>
-              </span>
+              <span className="op-card__cta">Coming soon</span>
             </span>
-          </Link>
+          </div>
 
-          {/* Västtrafik — coming soon */}
-          <Link className="op-card op-card--vt op-card--coming" to="/regions/vasttrafik" aria-label="Västtrafik preview — coming soon">
+          {/* Västtrafik — coming soon (no route yet; inert card) */}
+          <div className="op-card op-card--vt op-card--coming" role="presentation" aria-label="Västtrafik — coming soon">
             <span className="op-card__badge">Coming soon</span>
             <span className="op-card__scene" aria-hidden="true">
               <svg viewBox="0 0 280 160" preserveAspectRatio="xMidYMid slice">
@@ -170,15 +164,9 @@ export default function OperatorPicker() {
             <span className="op-card__body">
               <span className="op-card__name">Västtrafik</span>
               <span className="op-card__region">Västra Götaland · Spårvagn &amp; tåg</span>
-              <span className="op-card__cta">
-                Preview
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14" />
-                  <path d="m13 6 6 6-6 6" />
-                </svg>
-              </span>
+              <span className="op-card__cta">Coming soon</span>
             </span>
-          </Link>
+          </div>
         </div>
       </div>
     </section>
