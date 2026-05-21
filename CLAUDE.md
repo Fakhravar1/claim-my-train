@@ -37,9 +37,10 @@ User preferences are non-negotiable:
 ## 3. Tech stack
 
 - **Database / backend:** Supabase (Postgres 17), project ID `jnfwmdirvnqfpfhtipld`, region `eu-west-1`.
-- **Data modeling:** dbt Core 1.11.8, run locally from `C:\Users\arian\trafiklab\dbt`. Uses `dbt-utils` package. Postgres adapter.
-- **Frontend:** Currently in `src/` (React/TypeScript, originally built in Lovable, now being taken over via Claude Code). Stack appears to be Vite + React + Tailwind + shadcn/ui based on file structure.
-- **Data source:** Trafiklab GTFS-RT feed → ingested to `public.raw_departures` via Supabase edge function (`collect-raw-departures`).
+- **Data modeling:** dbt — local dev uses `dbt-core==1.11.8` from `C:\Users\arian\trafiklab\dbt`; CI uses `dbt-postgres==1.10.0` (which pulls dbt-core ~1.10.x). Adapter is on a separate release schedule from core since dbt 1.8 — `dbt-postgres==1.11.8` doesn't exist. Uses `dbt-utils` package. Minor version drift between local and CI is acceptable for our model SQL.
+- **dbt orchestration:** GitHub Actions workflow (`.github/workflows/dbt-run.yml`) runs `dbt build` on a `*/15` schedule plus `workflow_dispatch`. Secrets `SUPABASE_DB_{HOST,PORT,USER,PASSWORD,NAME}` hold the **session-pooler** connection string (port 5432) — not the transaction pooler (port 6543), which breaks dbt's multi-statement transactions and DDL. Reality check: GitHub's free-tier scheduled actions are best-effort with significant jitter — typical observed cadence is 1–4 hours between runs, not 15 min. Acceptable for the 60-day reklamation horizon; if sub-hour freshness ever matters, switch to Render Cron / Modal / a self-hosted runner.
+- **Frontend:** `src/` (React/TypeScript + Vite + Tailwind + shadcn/ui). Marketing landing at `/` (`src/pages/Landing.tsx`); journeys app at `/app` behind auth (`src/pages/Index.tsx`). Three themed regional pages under `/regions/{skanetrafiken,sl,vasttrafik}` — Skånetrafiken is live; SL and Västtrafik are placeholders. Landing CSS is scope-injected via `src/hooks/useLandingStyles.ts`. In-app shadcn theme in `src/index.css` was retuned to the Skåne palette (forest green + warm cream + sunflower) so /app feels continuous with the landing.
+- **Data source:** Trafiklab GTFS-RT feed → ingested to `public.raw_departures` every 15 min by pg_cron job `collect-raw-departures-15m`, which POSTs to the `collect-raw-departures` Supabase edge function.
 - **Auth:** Supabase Auth, user profiles in `public.profiles`.
 
 ---
@@ -48,6 +49,9 @@ User preferences are non-negotiable:
 
 ```
 C:\Users\arian\trafiklab\          ← repo root
+├── .github/
+│   └── workflows/
+│       └── dbt-run.yml             ← scheduled dbt build on GitHub Actions
 ├── dbt/                            ← dbt project root (dbt_project.yml lives here)
 │   ├── macros/
 │   │   └── generate_schema_name.sql        ← schema='public' override; lets dbt build wrappers in public, not dbt_dev_public
@@ -97,8 +101,37 @@ C:\Users\arian\trafiklab\          ← repo root
 
 ## 6. Current state (v1, working as of latest commit)
 
+**Dataflow (what auto-updates vs what doesn't):**
+
+```
+Trafiklab GTFS-RT
+       │
+       │ (pg_cron `collect-raw-departures-15m`, every 15 min,
+       │  POSTs to collect-raw-departures edge function)
+       ▼
+public.raw_departures (table — cron writes here)
+       │
+       │ stg_departures (view — live, recomputes on every SELECT)
+       │
+       │ (dbt build, every ~15 min via GitHub Actions —
+       │  in practice 1–4 hours apart due to GH scheduling jitter)
+       ▼
+dbt_dev.fct_departures (table)
+dbt_dev.fct_passenger_journeys (table)
+dbt_dev.dim_active_stations (table)
+       │
+       │ public.v_passenger_journeys, public.v_active_stations
+       │ (dbt-managed views — reads of these go straight to the underlying
+       │  tables, so freshness = "last dbt build" not "last raw insert")
+       ▼
+Frontend (useStations, useJourneys hooks via Supabase JS client)
+```
+
+**Critical fact about freshness:** dimension and staging models are views (always live), but the facts and `dim_active_stations` are materialized tables (stale until the next `dbt build` runs). The frontend cannot show a claimable journey until the scheduled Action has processed the new raw row into `fct_passenger_journeys`. Currently 1–4 hours of GH scheduling drift between ingest and visibility.
+
 **Working:**
 - `raw_departures` ingestion from Trafiklab GTFS-RT.
+- Scheduled `dbt build` via `.github/workflows/dbt-run.yml` keeps `fct_*` and `dim_active_stations` tables fresh. Triggers: `schedule: */15` + `workflow_dispatch` (for manual runs from the Actions tab). Logs visible per-run in the GitHub Actions UI.
 - `stg_departures` cleaning layer.
 - `fct_departures` and `fct_passenger_journeys` are tables (not views) with indexes on dominant query patterns:
   - `fct_departures`: `(trip__trip_id, trip__start_date, stop_sequence)` and `(event_type, stop__id)`.
@@ -181,6 +214,7 @@ Build in this order. Do not skip ahead without explicit user decision.
 - `dim_stations` enrichment for the frontend (human-readable station names — most columns already present, verify completeness).
 - Add a dbt `relationships` test linking `fct_passenger_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
 - Pagination on YellowAlerts.tsx claimable journeys list (current 500-row hard limit saturates as stations grow).
+- Evaluate alternative dbt orchestrator if GitHub free-tier scheduled-action cadence (currently 1–4 hours between runs vs configured 15 min) becomes a problem. Easiest swap: **Render Cron Jobs** (free tier 100 hrs/month, very reliable, wrap dbt in a Dockerfile + 1 YAML). Other options: Modal (Python-native), Fly.io scheduled machines, or a self-hosted GitHub runner on always-on hardware. Edge functions and pg_cron cannot run dbt directly (Deno + Postgres SQL respectively; dbt is Python).
 - ✅ ~~Revisit Index.tsx hypothesis.~~ Trigger fired: Index.tsx moved to `/app` behind auth; `/` now serves the marketing landing for signed-out visitors. Index's product role narrows from "front door" to "post-login dashboard."
 
 **v2 — "Could you have caught a better alternative":**
@@ -203,6 +237,7 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
 - **The 72-hour rule is not yet modeled.** v1 will produce false positives for trips with pre-announced service changes. Document this in user-facing UI ("Claim will be reviewed for pre-announced changes") until v1.5 lands.
 - **Lovable auto-commits keep diverging from local.** Frontend changes made in Lovable's UI are pushed to GitHub automatically. The user has decided to stop using Lovable for code editing; verify Lovable's GitHub integration is disconnected before committing significant frontend work.
 - **No analytics layer yet, by deliberate choice.** Metrics work is deferred until something usable ships. Don't volunteer dashboard work.
+- **Data-freshness lag.** Ingestion to `raw_departures` is every 15 min, but downstream `fct_*` tables only update when `dbt build` runs via GitHub Actions — actual cadence 1–4 hours on free tier. A claimable journey ingested at 12:00 may not appear at `/delay-alerts` until 14:00 or later. Acceptable for the 60-day reklamation deadline, but worth knowing if user-perceived "live" matters later (see §9 v1.5 orchestrator alternatives).
 
 ---
 
@@ -222,6 +257,19 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
       arguments:
         combination_of_columns: [...]
   ```
+
+### Debugging the scheduled dbt build
+
+The workflow at `.github/workflows/dbt-run.yml` runs `dbt build` against the Supabase session pooler. If the frontend stops showing fresh journeys:
+
+1. **Check recent Action runs** — GitHub repo → Actions → "dbt run". Failed runs show a red ✗; click in to see step output.
+2. **Common failure modes:**
+   - `Could not find a version that satisfies the requirement dbt-postgres==X.Y.Z` — pin in the workflow is wrong; check available versions on PyPI. The adapter version is **not** the same as dbt-core's version (see §3).
+   - `connection refused` or `password authentication failed` — DB password rotated, or `SUPABASE_DB_*` secrets are stale. Get a fresh connection string from Supabase dashboard → Connect → Session pooler.
+   - `prepared statement "X" already exists` — workflow is pointing at the **transaction pooler** (port 6543) instead of session pooler (5432). Fix the `SUPABASE_DB_HOST` / `SUPABASE_DB_PORT` secrets.
+   - `relation "public.v_passenger_journeys" does not exist` after a `dbt run --full-refresh` — the dbt DAG should rebuild these, but check `dbt build` step output. If it persists, the §11 wrapper recreation SQL (below) is the manual fallback.
+3. **Manually trigger a run** to test fixes: Actions → "dbt run" → Run workflow → main → Run workflow.
+4. **Trigger from CLI:** `gh workflow run dbt-run.yml --repo Fakhravar1/claim-my-train`.
 
 
 ---
