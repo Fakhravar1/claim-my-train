@@ -16,7 +16,7 @@ type Props = {
 function DefaultGoogleCTA() {
   const { signInWithGoogle } = useAuth();
   return (
-    <button type="button" className="cmt-btn cmt-btn--lg" onClick={() => signInWithGoogle("/app")}>
+    <button type="button" className="cmt-btn cmt-btn--lg" onClick={() => signInWithGoogle("/regions/skanetrafiken")}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
         <path d="M21.35 11.1H12v3.83h5.51c-.5 2.6-2.7 4.07-5.5 4.07-3.27 0-5.91-2.65-5.91-5.91s2.64-5.91 5.91-5.91c1.41 0 2.68.5 3.69 1.32l2.78-2.78C16.78 4.32 14.55 3.4 12 3.4 6.93 3.4 2.8 7.53 2.8 12.6S6.93 21.8 12 21.8c5.27 0 9.6-3.84 9.6-9.6 0-.42-.04-.86-.13-1.27z" />
       </svg>

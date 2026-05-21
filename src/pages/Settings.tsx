@@ -451,7 +451,7 @@ const Settings = () => {
               <Link to="/">
                 <Button type="button" variant="outline">Back to main page</Button>
               </Link>
-              <Link to="/delay-alerts">
+              <Link to="/regions/skanetrafiken/delay-alerts">
                 <Button type="button" variant="outline">Back to claimable delays</Button>
               </Link>
             </div>

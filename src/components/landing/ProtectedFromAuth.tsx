@@ -6,6 +6,6 @@ import type { ReactElement } from "react";
 export default function ProtectedFromAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (user) return <Navigate to="/app" replace />;
+  if (user) return <Navigate to="/regions/skanetrafiken" replace />;
   return children;
 }
