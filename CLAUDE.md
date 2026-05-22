@@ -14,9 +14,9 @@ A Supabase + dbt + Lovable-replaced frontend that automates train delay compensa
 
 **Sequencing principle:** Ship MVP first, then layer complexity. Do not abstract for hypothetical second operators before the first one works end-to-end.
 
-**Frontend layout:** `/` is the marketing landing for signed-out visitors (`src/pages/Landing.tsx`); a `<ProtectedFromAuth>` wrapper redirects signed-in users to `/app`, where the journeys page lives (`src/pages/Index.tsx`). Three themed regional pages under `/regions/{skanetrafiken,sl,vasttrafik}` — only Skånetrafiken is live; SL and Västtrafik are themed placeholders with "Coming soon — try Skånetrafiken" CTAs pointing at `/app`. The landing + regional pages are lazy-loaded; their `landing-base.css` (~30 KB) only loads when those routes mount, via `useLandingStyles` injecting `<style>` tags so the in-app shadcn theme on `/app`, `/login`, `/settings`, `/delay-alerts` isn't clobbered.
+**Frontend layout:** `/` is the marketing landing for signed-out visitors (`src/pages/Landing.tsx`); a `<ProtectedFromAuth>` wrapper redirects signed-in users to `/regions/skanetrafiken` (the departures cards page). The cards page itself is **public** — both `/regions/skanetrafiken` and `/regions/skanetrafiken/delay-alerts` are reachable without sign-in; claim filing still requires auth. There are no separate regional marketing pages anymore — `/regions/sl` and `/regions/vasttrafik` were dropped, and the OperatorPicker on the landing marks them inert "Coming soon" cards. The departures pages have their own design-system look (decorative Skåne weather band, cmt-* tokens) injected via `src/hooks/useAppShellStyles.ts` + `src/themes/regional-app-base.css`, scoped to the region routes so `/login` and `/settings` keep the shadcn theme. The landing keeps the older `src/hooks/useLandingStyles.ts` + `src/themes/landing-base.css` pair on the same scoping pattern. All routes that ship inline SVG payloads (landing, both region pages) are lazy-loaded.
 
-**Frontend data path:** `Index.tsx` (at `/app`) and `YellowAlerts.tsx` (at `/delay-alerts`) query `public.v_passenger_journeys` (wrapper over `dbt_dev.fct_passenger_journeys`) via `src/hooks/useJourneys.ts`. Index passes `onlyClaimable: false`; YellowAlerts passes `onlyClaimable: true`. Dropdowns on those pages plus Settings are driven by `src/hooks/useStations.ts` (GTFS IDs from `public.v_active_stations`). The legacy live-departures plumbing (the `get-train-departures` edge function, the `claim-collection-15m` cron, and tables `departures` / `train_names` / `yellow_alert_history` / `claimable_corridor_windows` / `api_call_events` / `stations_master`) has been retired. The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` maps in `shared/stops.ts` survive only for inbound URL-param normalization on legacy bookmarks.
+**Frontend data path:** `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`) and `SkanetrafikenDelayAlerts.tsx` (at `/regions/skanetrafiken/delay-alerts`) query `public.v_passenger_journeys` (wrapper over `dbt_dev.fct_passenger_journeys`) via `src/hooks/useJourneys.ts`. Departures page passes `onlyClaimable: false`; delay-alerts passes `onlyClaimable: true`. The route card on both pages has a Date field that **defaults to today** and drives `useJourneys` `sinceDate` — we query a single day at a time, not the full 60-day window, so the initial payload is small. Dropdowns on those pages plus Settings are driven by `src/hooks/useStations.ts` (GTFS IDs from `public.v_active_stations`). The legacy live-departures plumbing (the `get-train-departures` edge function, the `claim-collection-15m` cron, and tables `departures` / `train_names` / `yellow_alert_history` / `claimable_corridor_windows` / `api_call_events` / `stations_master`) has been retired. The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` maps in `shared/stops.ts` survive only for inbound URL-param normalization on legacy bookmarks (e.g. `?from=740000003` on the old `/delay-alerts` paths).
 
 ---
 
@@ -39,7 +39,7 @@ User preferences are non-negotiable:
 - **Database / backend:** Supabase (Postgres 17), project ID `jnfwmdirvnqfpfhtipld`, region `eu-west-1`.
 - **Data modeling:** dbt — local dev uses `dbt-core==1.11.8` from `C:\Users\arian\trafiklab\dbt`; CI uses `dbt-postgres==1.10.0` (which pulls dbt-core ~1.10.x). Adapter is on a separate release schedule from core since dbt 1.8 — `dbt-postgres==1.11.8` doesn't exist. Uses `dbt-utils` package. Minor version drift between local and CI is acceptable for our model SQL.
 - **dbt orchestration:** GitHub Actions workflow (`.github/workflows/dbt-run.yml`) runs `dbt build` on a `*/15` schedule plus `workflow_dispatch`. Secrets `SUPABASE_DB_{HOST,PORT,USER,PASSWORD,NAME}` hold the **session-pooler** connection string (port 5432) — not the transaction pooler (port 6543), which breaks dbt's multi-statement transactions and DDL. Reality check: GitHub's free-tier scheduled actions are best-effort with significant jitter — typical observed cadence is 1–4 hours between runs, not 15 min. Acceptable for the 60-day reklamation horizon; if sub-hour freshness ever matters, switch to Render Cron / Modal / a self-hosted runner.
-- **Frontend:** `src/` (React/TypeScript + Vite + Tailwind + shadcn/ui). Marketing landing at `/` (`src/pages/Landing.tsx`); journeys app at `/app` behind auth (`src/pages/Index.tsx`). Three themed regional pages under `/regions/{skanetrafiken,sl,vasttrafik}` — Skånetrafiken is live; SL and Västtrafik are placeholders. Landing CSS is scope-injected via `src/hooks/useLandingStyles.ts`. In-app shadcn theme in `src/index.css` was retuned to the Skåne palette (forest green + warm cream + sunflower) so /app feels continuous with the landing.
+- **Frontend:** `src/` (React/TypeScript + Vite + Tailwind + shadcn/ui). Marketing landing at `/` (`src/pages/Landing.tsx`). Skåne departures board at `/regions/skanetrafiken` (`src/pages/regions/SkanetrafikenApp.tsx`), claimable delays at `/regions/skanetrafiken/delay-alerts` (`src/pages/regions/SkanetrafikenDelayAlerts.tsx`) — both public, both styled with the design-system look injected via `src/hooks/useAppShellStyles.ts` + `src/themes/regional-app-base.css`. `/regions/sl` and `/regions/vasttrafik` no longer exist; SL / Västtrafik appear as inert "Coming soon" cards on the landing's OperatorPicker. Shared region UI lives in `src/components/region/` (`SkaneBand.tsx`, `RegionDepartureCard.tsx`, `RegionUserMenu.tsx`). Landing CSS is scope-injected via `src/hooks/useLandingStyles.ts`. In-app shadcn theme in `src/index.css` is retuned to the Skåne palette (forest green + warm cream + sunflower) so `/login` / `/settings` feel continuous with the cards page.
 - **Data source:** Trafiklab GTFS-RT feed → ingested to `public.raw_departures` every 15 min by pg_cron job `collect-raw-departures-15m`, which POSTs to the `collect-raw-departures` Supabase edge function.
 - **Auth:** Supabase Auth, user profiles in `public.profiles`.
 
@@ -147,9 +147,9 @@ Frontend (useStations, useJourneys hooks via Supabase JS client)
   Threshold is hardcoded 1200 seconds (20 minutes). Cancelled trains always claimable.
 - All dbt tests passing: unique journey_key, not_null on grain columns, unique combination of (trip_id, start_date, origin_stop_id, destination_stop_id).
 - `public.v_passenger_journeys` and `public.v_active_stations` are dbt-managed views (`dbt/models/marts/v_*.sql`) materialized into the `public` schema via the `generate_schema_name` macro override. Each model declares a `post_hook` that grants `select` to `anon` and `authenticated`. Curated column lists exclude internal grain plumbing (`origin_sequence`, `destination_sequence`, `destination_delay_seconds`, `dbt_scd_id`, `ingested_at`).
-- Frontend hooks `useStations` (`src/hooks/useStations.ts`) and `useJourneys` (`src/hooks/useJourneys.ts`) consume the public wrappers. Index.tsx, YellowAlerts.tsx, and Settings.tsx all use `useStations` for dropdowns; Index.tsx and YellowAlerts.tsx use `useJourneys` for the journey lists (Index with `onlyClaimable: false`, YellowAlerts with `onlyClaimable: true`).
-- `shared/stops.ts` includes a `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation map bridging Trafiklab sams-id (legacy `get-train-departures` edge function imports) and GTFS (everything in dbt and the frontend). Only used for inbound URL-param normalization in YellowAlerts/Index after the Index migration.
-- ✅ Marketing landing page at `/` (`src/pages/Landing.tsx`) with three regional pages under `/regions/{skanetrafiken,sl,vasttrafik}`. Skånetrafiken is the live region; SL and Västtrafik are themed placeholders ("Coming soon — try Skånetrafiken") for future operator scaffolding. Per-region visuals live in `src/themes/<slug>/` (HeroScene, SignupScene, Vehicle SVGs + `theme.css` token overrides). Landing CSS is scope-injected via `src/hooks/useLandingStyles.ts` so it doesn't bleed into the in-app shadcn theme on `/app` and friends.
+- Frontend hooks `useStations` (`src/hooks/useStations.ts`) and `useJourneys` (`src/hooks/useJourneys.ts`) consume the public wrappers. SkanetrafikenApp.tsx, SkanetrafikenDelayAlerts.tsx, and Settings.tsx all use `useStations` for dropdowns; the two region pages use `useJourneys` for the journey lists (departures with `onlyClaimable: false`, delay-alerts with `onlyClaimable: true`). Both region pages default the date filter to today and pass it as `sinceDate`.
+- `shared/stops.ts` includes a `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation map bridging Trafiklab sams-id (legacy `get-train-departures` edge function imports) and GTFS (everything in dbt and the frontend). Only used for inbound URL-param normalization on the region pages, for legacy bookmarks that pre-date the GTFS migration.
+- ✅ Marketing landing page at `/` (`src/pages/Landing.tsx`). Skåne departures + claimable-delays pages at `/regions/skanetrafiken` and `/regions/skanetrafiken/delay-alerts`. SL and Västtrafik no longer have routes; they appear as inert "Coming soon" cards on the landing's OperatorPicker. `src/themes/skanetrafiken/theme.css` carries the Skåne token overrides (Pågatåg purple, rapeseed yellow); the per-region marketing SVGs (`HeroScene.tsx`, `SignupScene.tsx`, `Vehicle.tsx`) were dropped when the regional marketing pages were removed. Decorative band SVG for the region cards page lives in `src/components/region/SkaneBand.tsx`. Region CSS is injected via `src/hooks/useAppShellStyles.ts` so it doesn't bleed into the shadcn theme on `/login` and `/settings`.
 
 **Data volume:** ~22k journey rows currently, ~220 claimable. Three operators present: VR Sverige AB (Öresundståg, 880 trips), Pågatåg (1,866 trips), SJ AB (7 trips).
 
@@ -159,12 +159,13 @@ Frontend (useStations, useJourneys hooks via Supabase JS client)
 
 The frontend was being built in Lovable's UI, then partially via Cursor. Now being taken over via Claude Code. The user wants to STOP Lovable's auto-commit interfering with our work.
 
-**Existing pages (likely needing rework):**
-- `src/pages/Index.tsx`
-- `src/pages/Settings.tsx`
-- `src/pages/YellowAlerts.tsx`
+**Pages:**
+- `src/pages/Landing.tsx` — marketing landing at `/`
+- `src/pages/regions/SkanetrafikenApp.tsx` — Skåne departures cards page at `/regions/skanetrafiken`
+- `src/pages/regions/SkanetrafikenDelayAlerts.tsx` — claimable delays at `/regions/skanetrafiken/delay-alerts`
+- `src/pages/Settings.tsx`, `src/pages/Login.tsx`, `src/pages/NotFound.tsx`
 
-**Hooks:** `src/hooks/useStations.ts` (already exists).
+**Hooks:** `src/hooks/useStations.ts`, `src/hooks/useJourneys.ts`, `src/hooks/useAppShellStyles.ts` (region pages), `src/hooks/useLandingStyles.ts` (landing).
 
 **Supabase types:** `src/integrations/supabase/types.ts` (auto-generated; regenerate when schema changes).
 
@@ -180,9 +181,20 @@ where origin_stop_id = :origin
 
 Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-computes `is_claimable`; the UI consumes it.
 
-**Status:** Both Index.tsx (at `/app`) and YellowAlerts.tsx (at `/delay-alerts`) now query `public.v_passenger_journeys` via `src/hooks/useJourneys.ts`. Index passes `onlyClaimable: false` (shows everything on the route); YellowAlerts passes `onlyClaimable: true`. The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
+**Status:** Both `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`) and `SkanetrafikenDelayAlerts.tsx` (at `/regions/skanetrafiken/delay-alerts`) query `public.v_passenger_journeys` via `src/hooks/useJourneys.ts`. Departures page passes `onlyClaimable: false` (shows everything on the route); delay-alerts passes `onlyClaimable: true`. The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
 
-**Theme directories** (`src/themes/<slug>/`): the home for per-region visuals. Each region directory holds a `theme.css` token override plus three SVG components (`HeroScene.tsx`, `SignupScene.tsx`, `Vehicle.tsx`). Future operator additions follow the same pattern: create `src/themes/<new-slug>/`, drop those four files, add a `pages/regions/<NewSlug>.tsx` that mirrors the Skånetrafiken page, register the route in `App.tsx`, add a card to `OperatorPicker.tsx`. The landing's base CSS (`src/themes/landing-base.css`) is the shared canvas.
+**Theme + region-component layout:**
+- `src/themes/landing-base.css` — base CSS tokens (cmt-* palette, Fraunces/Inter type) used by the landing.
+- `src/themes/regional-app-base.css` — shell CSS for region departures pages (decorative band, app-shell, app-card, dep card v2 layout). Injected via `useAppShellStyles()`.
+- `src/themes/skanetrafiken/theme.css` — region-specific token overrides (Pågatåg purple, rapeseed yellow). Loaded as `extra` argument to `useAppShellStyles()`.
+- `src/components/region/` — shared region UI (`SkaneBand.tsx`, `RegionDepartureCard.tsx`, `RegionUserMenu.tsx`).
+
+**Pattern for adding a new operator's departures page (e.g. SL when ready):**
+1. Create `src/themes/sl/theme.css` with the SL palette overrides.
+2. (Optional) Add a decorative band SVG component in `src/components/region/`, e.g. `SLBand.tsx`.
+3. Copy `SkanetrafikenApp.tsx` → `SLApp.tsx`, swap the theme CSS import and the band component, point `useAppShellStyles()` at the new theme.
+4. Register `/regions/sl` and `/regions/sl/delay-alerts` in `App.tsx`.
+5. Convert the inert "Coming soon" card in `OperatorPicker.tsx` back into a `<Link>`.
 
 ---
 
@@ -196,7 +208,7 @@ Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-
 - ❌ Auto-submit any claim to Skånetrafiken. Manual user review before submission, always. Skånetrafiken §1.10 says false claims will be polisanmäld.
 - ❌ Apply Lovable-style auto-commits to dbt files. dbt logic is high-stakes and requires deliberate review. If an AI agent touched `models/marts/fct_departures.sql` autonomously, that's a bug.
 - ❌ Treat the rebase ritual as routine. If git divergence keeps happening, the workflow is broken — fix the workflow (separate repos, branch separation, or disable Lovable GitHub sync).
-- ❌ Reintroduce sams-id anywhere in new code. The legacy live-departures pipeline that used Trafiklab sams-id was retired. The frontend now speaks GTFS end-to-end. `SAMS_TO_GTFS` / `GTFS_TO_SAMS` in `shared/stops.ts` exist only as a one-way safety net for legacy URL bookmarks (`/delay-alerts?from=740000003`) — translate inbound, never emit.
+- ❌ Reintroduce sams-id anywhere in new code. The legacy live-departures pipeline that used Trafiklab sams-id was retired. The frontend now speaks GTFS end-to-end. `SAMS_TO_GTFS` / `GTFS_TO_SAMS` in `shared/stops.ts` exist only as a one-way safety net for legacy URL bookmarks (e.g. `?from=740000003` on the old `/delay-alerts` path or its `/regions/skanetrafiken/...` successor) — translate inbound, never emit.
 
 ---
 
@@ -213,9 +225,9 @@ Build in this order. Do not skip ahead without explicit user decision.
 - 72-hour pre-announcement rule (Lag 2015:953). If service change was announced ≥3 dygn before scheduled departure, delay is measured against amended timetable, not original. Requires `snap_gtfs_static_trips` (dbt snapshot, SCD-2) and join logic. Currently produces false positives.
 - `dim_stations` enrichment for the frontend (human-readable station names — most columns already present, verify completeness).
 - Add a dbt `relationships` test linking `fct_passenger_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
-- Pagination on YellowAlerts.tsx claimable journeys list (current 500-row hard limit saturates as stations grow).
+- Pagination on `SkanetrafikenDelayAlerts.tsx` claimable journeys list (current 500-row hard limit in `useJourneys` saturates as stations grow). Less urgent now that the date filter defaults to a single day — but still a real ceiling when a user picks a date with high traffic.
 - Evaluate alternative dbt orchestrator if GitHub free-tier scheduled-action cadence (currently 1–4 hours between runs vs configured 15 min) becomes a problem. Easiest swap: **Render Cron Jobs** (free tier 100 hrs/month, very reliable, wrap dbt in a Dockerfile + 1 YAML). Other options: Modal (Python-native), Fly.io scheduled machines, or a self-hosted GitHub runner on always-on hardware. Edge functions and pg_cron cannot run dbt directly (Deno + Postgres SQL respectively; dbt is Python).
-- ✅ ~~Revisit Index.tsx hypothesis.~~ Trigger fired: Index.tsx moved to `/app` behind auth; `/` now serves the marketing landing for signed-out visitors. Index's product role narrows from "front door" to "post-login dashboard."
+- ✅ ~~Revisit Index.tsx hypothesis.~~ Resolved: `Index.tsx` (at `/app`) was replaced by `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`). The page is now public — discovery doesn't require auth, only claim filing does. Signed-in visitors of `/` still get bounced to the cards page via `<ProtectedFromAuth>`, but the redirect target is now the region URL.
 
 **v2 — "Could you have caught a better alternative":**
 - `user_journey_intents` table capturing recurring commute profile.
@@ -237,7 +249,7 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
 - **The 72-hour rule is not yet modeled.** v1 will produce false positives for trips with pre-announced service changes. Document this in user-facing UI ("Claim will be reviewed for pre-announced changes") until v1.5 lands.
 - **Lovable auto-commits keep diverging from local.** Frontend changes made in Lovable's UI are pushed to GitHub automatically. The user has decided to stop using Lovable for code editing; verify Lovable's GitHub integration is disconnected before committing significant frontend work.
 - **No analytics layer yet, by deliberate choice.** Metrics work is deferred until something usable ships. Don't volunteer dashboard work.
-- **Data-freshness lag.** Ingestion to `raw_departures` is every 15 min, but downstream `fct_*` tables only update when `dbt build` runs via GitHub Actions — actual cadence 1–4 hours on free tier. A claimable journey ingested at 12:00 may not appear at `/delay-alerts` until 14:00 or later. Acceptable for the 60-day reklamation deadline, but worth knowing if user-perceived "live" matters later (see §9 v1.5 orchestrator alternatives).
+- **Data-freshness lag.** Ingestion to `raw_departures` is every 15 min, but downstream `fct_*` tables only update when `dbt build` runs via GitHub Actions — actual cadence 1–4 hours on free tier. A claimable journey ingested at 12:00 may not appear at `/regions/skanetrafiken/delay-alerts` until 14:00 or later. Acceptable for the 60-day reklamation deadline, but worth knowing if user-perceived "live" matters later (see §9 v1.5 orchestrator alternatives).
 
 ---
 
