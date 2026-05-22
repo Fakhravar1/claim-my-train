@@ -1,4 +1,11 @@
-{{ config(materialized='view') }}
+{{ config(
+    materialized='table',
+    indexes=[
+      {'columns': ['trip__start_date']},
+      {'columns': ['origin_stop_id', 'destination_stop_id', 'trip__start_date']},
+      {'columns': ['is_claimable'], 'unique': false}
+    ]
+) }}
 
 with departures as (
     select *

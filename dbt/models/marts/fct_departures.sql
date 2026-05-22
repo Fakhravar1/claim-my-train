@@ -1,3 +1,11 @@
+{{ config(
+    materialized='table',
+    indexes=[
+      {'columns': ['trip__trip_id', 'trip__start_date', 'event_type', 'stop_sequence']},
+      {'columns': ['event_type', 'stop__id']}
+    ]
+) }}
+
 with deduped as (
     select
         trip__trip_id,
