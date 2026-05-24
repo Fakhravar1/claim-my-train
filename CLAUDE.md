@@ -134,8 +134,8 @@ Frontend (useStations, useJourneys hooks via Supabase JS client)
 - Scheduled `dbt build` via `.github/workflows/dbt-run.yml` keeps `fct_*` and `dim_active_stations` tables fresh. Triggers: `schedule: */15` + `workflow_dispatch` (for manual runs from the Actions tab). Logs visible per-run in the GitHub Actions UI.
 - `stg_departures` cleaning layer.
 - `fct_departures` and `fct_passenger_journeys` are tables (not views) with indexes on dominant query patterns:
-  - `fct_departures`: `(trip__trip_id, trip__start_date, stop_sequence)` and `(event_type, stop__id)`.
-  - `fct_passenger_journeys`: `(origin_stop_id, destination_stop_id, trip__start_date)` plus a partial index on `(is_claimable) where is_claimable = true`.
+  - `fct_departures`: `(trip__trip_id, trip__start_date, event_type, stop_sequence)` and `(event_type, stop__id)`. The composite includes `event_type` so the planner avoids re-filtering during the journey self-join.
+  - `fct_passenger_journeys`: `(trip__start_date)`, `(origin_stop_id, destination_stop_id, trip__start_date)`, and `(is_claimable)`. The date-only index serves the common "user landed on the page, no stops picked yet" query (the composite cannot, due to leftmost-prefix). `is_claimable` is a full B-tree, not partial — dbt-postgres `indexes` config has no `WHERE` clause support, and full B-tree is fine at ~22k rows.
   Frontend query time dropped from ~6s to sub-50ms post-materialization.
 - `dim_stations`, `dim_line` views.
 - `dim_active_stations` view filters `dim_stations` to stops appearing as origin or destination in `fct_passenger_journeys`. Source for the frontend stations dropdown.
