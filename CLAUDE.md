@@ -6,7 +6,9 @@ Standing project context. Read at the start of every session.
 
 ## 1. What this project is
 
-A Supabase + dbt + Lovable-replaced frontend that automates train delay compensation claims for Swedish public-transport commuters.
+A Supabase + dbt + React frontend (hosted by Lovable) that automates train delay compensation claims for Swedish public-transport commuters.
+
+**Hosting (important):** production frontend is served by **Lovable** at `https://claim-my-train.lovable.app` (canonical entry: `/regions/skanetrafiken/delay-alerts`). Lovable deploys from a **separate companion GitHub repo** it owns — `Fakhravar1/claim-my-train-ab5b0f74` — NOT the working repo `Fakhravar1/claim-my-train`. The two repos are not linked by Git; keeping them in sync is a manual mirror-push step (see §11 "Publishing frontend changes to production"). If the companion repo drifts behind, prod silently runs stale code. As of 2026-05-26 the companion is at `5cc59632`; working main is at `2f73f05f` — 4 commits ahead. Prod is stale until mirrored. Code editing in Lovable's web UI is no longer used (see §10) — the companion repo is host-only, not an editing surface.
 
 **MVP scope (current focus):** Malmö C ↔ Copenhagen H corridor, Skånetrafiken JoJo periodbiljett holders, regional regime (Lag 2015:953), 20-min delay threshold. Single operator (VR Sverige AB operating Öresundståg under Skånetrafiken contract).
 
@@ -247,7 +249,7 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
 ## 10. Known gaps
 
 - **The 72-hour rule is not yet modeled.** v1 will produce false positives for trips with pre-announced service changes. Document this in user-facing UI ("Claim will be reviewed for pre-announced changes") until v1.5 lands.
-- **Lovable auto-commits keep diverging from local.** Frontend changes made in Lovable's UI are pushed to GitHub automatically. The user has decided to stop using Lovable for code editing; verify Lovable's GitHub integration is disconnected before committing significant frontend work.
+- **Lovable host repo is decoupled from the working repo.** Production is served by Lovable from a companion repo (`Fakhravar1/claim-my-train-ab5b0f74`) that is *not* a Git remote of the working repo (`Fakhravar1/claim-my-train`). Frontend changes do NOT reach production until they are mirror-pushed to the companion repo's `main` (procedure in §11). Code editing in Lovable's web UI is disabled in practice — treat the companion repo as deploy-target-only. Historical context: when Lovable's editor was used, it would auto-commit back, causing divergence — that's no longer the failure mode; the new failure mode is *forgetting to mirror* and silently running stale prod.
 - **No analytics layer yet, by deliberate choice.** Metrics work is deferred until something usable ships. Don't volunteer dashboard work.
 - **Data-freshness lag.** Ingestion to `raw_departures` is every 15 min, but downstream `fct_*` tables only update when `dbt build` runs via GitHub Actions — actual cadence 1–4 hours on free tier. A claimable journey ingested at 12:00 may not appear at `/regions/skanetrafiken/delay-alerts` until 14:00 or later. Acceptable for the 60-day reklamation deadline, but worth knowing if user-perceived "live" matters later (see §9 v1.5 orchestrator alternatives).
 
@@ -269,6 +271,29 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
       arguments:
         combination_of_columns: [...]
   ```
+
+### Publishing frontend changes to production
+
+Production is hosted by Lovable from the companion repo `Fakhravar1/claim-my-train-ab5b0f74`. Pushes to `Fakhravar1/claim-my-train` main do **not** redeploy prod. After any frontend change lands on working main, mirror it to the companion repo to publish:
+
+**One-time setup** — add the companion repo as a second remote:
+```powershell
+git remote add lovable https://github.com/Fakhravar1/claim-my-train-ab5b0f74.git
+git fetch lovable
+```
+
+**Each release** — after the change is on working `main`:
+```powershell
+git push lovable main:main
+```
+
+Lovable picks up the push and redeploys within ~1–2 min. Verify at `https://claim-my-train.lovable.app/regions/skanetrafiken/delay-alerts`.
+
+Notes:
+- Mirror the whole repo, not just `src/`. Lovable's build needs `package.json`, `vite.config.ts`, `index.html`, theme CSS, etc.
+- Backend-only changes (dbt models, Supabase migrations, edge functions, GH Actions) do **not** need a mirror push — they don't affect the built bundle. Mirror only when `src/`, `index.html`, `package.json`, `tailwind.config.ts`, `vite.config.ts`, `public/`, or `shared/` changed.
+- If `git push lovable` is rejected as non-fast-forward, the companion repo has been edited out-of-band (e.g. via Lovable's UI). Investigate before force-pushing — that drift is the §10 failure mode.
+- Long-term, decide between (a) keeping this manual mirror, (b) reconnecting Lovable's GitHub integration to the working repo if Lovable supports re-pointing, or (c) moving hosting to Vercel/Netlify directly off the working repo and retiring the companion entirely.
 
 ### Debugging the scheduled dbt build
 

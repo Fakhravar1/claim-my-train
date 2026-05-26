@@ -7,6 +7,12 @@ on:
 
 jobs:
   run:
+    # Belt-and-suspenders: this file gets mirrored to the Lovable companion
+    # repo (Fakhravar1/claim-my-train-ab5b0f74). The companion has no Supabase
+    # secrets and isn't supposed to run dbt anyway. Repo guard ensures the job
+    # only executes on the working repo, even if someone re-enables the
+    # workflow on the companion or fires it via workflow_dispatch there.
+    if: github.repository == 'Fakhravar1/claim-my-train'
     runs-on: ubuntu-latest
     concurrency:
       group: dbt-run          # prevents overlapping runs if one is slow

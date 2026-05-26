@@ -1,0 +1,36 @@
+name: Mirror to Lovable
+
+# Lovable hosts production from a separate companion repo
+# (Fakhravar1/claim-my-train-ab5b0f74). Every push to working main needs to
+# reach the companion or prod silently runs stale code (see CLAUDE.md §10/§11).
+# This action mirrors the whole repo — Lovable only redeploys when the built
+# bundle actually changes, so backend-only commits produce a no-op redeploy.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    # Don't run if the workflow file itself somehow gets executed on the
+    # companion repo (e.g. it gets re-enabled there). Working repo only.
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: mirror-to-lovable
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history; companion needs the same ancestry
+
+      - name: Push to Lovable companion repo
+        env:
+          PAT: ${{ secrets.LOVABLE_MIRROR_PAT }}
+        run: |
+          if [ -z "${PAT}" ]; then
+            echo "::error::LOVABLE_MIRROR_PAT secret is not set. See CLAUDE.md §11 for setup."
+            exit 1
+          fi
+          git push "https://x-access-token:${PAT}@github.com/Fakhravar1/claim-my-train-ab5b0f74.git" main:main
