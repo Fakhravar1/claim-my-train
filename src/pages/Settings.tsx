@@ -222,6 +222,40 @@ const Settings = () => {
                     placeholder="19700901-3975"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="street-address">Street address</Label>
+                  <Input
+                    id="street-address"
+                    value={streetAddress}
+                    onChange={(event) => setStreetAddress(event.target.value)}
+                    placeholder="Storgatan 1"
+                    autoComplete="street-address"
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="postal-code">Postal code</Label>
+                    <Input
+                      id="postal-code"
+                      value={postalCode}
+                      onChange={(event) => setPostalCode(event.target.value)}
+                      placeholder="211 20"
+                      autoComplete="postal-code"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City</Label>
+                    <Input
+                      id="city"
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      placeholder="Malmö"
+                      autoComplete="address-level2"
+                    />
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="ticket" className="space-y-4">
