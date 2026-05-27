@@ -63,6 +63,9 @@ const Settings = () => {
     setClaimMobile(profile?.claim_mobile ?? "");
     setClaimTicketId(profile?.claim_ticket_id ?? "");
     setClaimPersonnummer(profile?.claim_personnummer ?? "");
+    setStreetAddress(profile?.street_address ?? "");
+    setPostalCode(profile?.postal_code ?? "");
+    setCity(profile?.city ?? "");
     setClaimsDoneCount(profile?.claims_done_count ?? 0);
     setIsPeriodTicket(profile?.is_period_ticket ?? false);
     setTicketValidUntil(toIsoDate(profile?.ticket_valid_until));
