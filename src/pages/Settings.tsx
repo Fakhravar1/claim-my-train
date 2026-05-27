@@ -41,6 +41,9 @@ const Settings = () => {
   const [claimMobile, setClaimMobile] = useState("");
   const [claimTicketId, setClaimTicketId] = useState("");
   const [claimPersonnummer, setClaimPersonnummer] = useState("");
+  const [streetAddress, setStreetAddress] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [city, setCity] = useState("");
   const [claimsDoneCount, setClaimsDoneCount] = useState(0);
   const [isPeriodTicket, setIsPeriodTicket] = useState(false);
   const [ticketValidUntil, setTicketValidUntil] = useState("");
