@@ -1,96 +1,37 @@
+## 1. Email + password authentication
 
-# Add Google Login with User Profiles
+**Login page (`src/pages/Login.tsx`)**
+- Add tabs: "Sign in" / "Create account", each with email + password fields.
+- Sign in → `supabase.auth.signInWithPassword({ email, password })`.
+- Sign up → `supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + '/login?next=...' } })`. The existing `handle_new_user` trigger creates the profile row automatically.
+- Keep the existing Google button above the form, separated by a divider.
+- Validate with zod (email format, password ≥ 8 chars). Show toast on auth errors.
 
-## Overview
-Add Google OAuth sign-in using Supabase Auth, with a `profiles` table to store user data, and integrate login/logout into the app UI.
+**Supabase config**
+- Email provider is on by default; no migration needed for that. Email confirmation stays on (default) — user must click the link before signing in. We surface that in a toast after signup.
 
-## What You Need to Do First (in Supabase Dashboard)
-Before the code changes will work, you need to set up Google as an OAuth provider:
+## 2. Personal info: address fields
 
-1. Go to the **Google Cloud Console** and create OAuth credentials (Web application type)
-2. Set the **Authorized redirect URL** to: `https://jnfwmdirvnqfpfhtipld.supabase.co/auth/v1/callback`
-3. Set the **Authorized JavaScript origins** to your site URL (e.g. `https://claim-my-train.lovable.app`)
-4. Copy the **Client ID** and **Client Secret**
-5. Go to your **Supabase Dashboard > Authentication > Providers > Google** and paste them in
-6. Under **Authentication > URL Configuration**, set:
-   - Site URL: `https://claim-my-train.lovable.app`
-   - Redirect URLs: `https://claim-my-train.lovable.app`
+**Migration** — add three nullable columns to `public.profiles`:
+- `street_address text`
+- `postal_code text`
+- `city text`
 
-## Code Changes
+No RLS changes (existing "Users can update own profile" policy covers them). Types in `src/integrations/supabase/types.ts` regenerate after the migration.
 
-### 1. Database Migration -- Create `profiles` table
-Create a `profiles` table linked to `auth.users` with auto-creation on signup:
+**AuthContext (`src/contexts/AuthContext.tsx`)**
+- Extend `Profile` interface and the `select(...)` column lists to include the three new fields.
 
-```sql
-CREATE TABLE public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT,
-  full_name TEXT,
-  avatar_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+**Settings page (`src/pages/Settings.tsx`)**
+- In the "Personal info" tab, after Personnummer, add three inputs: Street address, Postal code, City (postal code + city on one row on `md+`).
+- Wire local state + `useEffect` hydrate + include in the `profiles` upsert in `handleSubmit`.
 
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+## Technical notes
 
-CREATE POLICY "Users can view own profile"
-  ON public.profiles FOR SELECT
-  USING (auth.uid() = id);
+- No changes to edge functions, dbt, or region pages.
+- Google sign-in flow is untouched.
+- Auth-state listener in `AuthContext` already handles password sessions — no changes needed there.
 
-CREATE POLICY "Users can update own profile"
-  ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
+## Open question
 
--- Auto-create profile on signup
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = 'public'
-AS $$
-BEGIN
-  INSERT INTO public.profiles (id, email, full_name, avatar_url)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'avatar_url'
-  );
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_new_user();
-```
-
-### 2. Create Auth Context (`src/contexts/AuthContext.tsx`)
-- Provide `user`, `session`, `profile`, `signInWithGoogle()`, `signOut()`, and `loading` state
-- Use `onAuthStateChange` listener (set up before `getSession()`)
-- Fetch profile from the `profiles` table after login
-
-### 3. Create Login Page (`src/pages/Login.tsx`)
-- Simple page with a "Sign in with Google" button
-- Redirect to home after successful login
-
-### 4. Create User Menu Component (`src/components/UserMenu.tsx`)
-- Show user avatar and name when logged in (from profile data)
-- Dropdown with "Sign out" option
-- Show "Sign in" button when logged out
-
-### 5. Update `src/App.tsx`
-- Wrap app in `AuthProvider`
-- Add `/login` route
-- Optionally protect routes (or keep public with login as optional)
-
-### 6. Update `src/pages/Index.tsx`
-- Add the `UserMenu` component to the header area
-
-### Files Created/Modified
-- **New**: `src/contexts/AuthContext.tsx`
-- **New**: `src/pages/Login.tsx`
-- **New**: `src/components/UserMenu.tsx`
-- **Modified**: `src/App.tsx` (add AuthProvider + login route)
-- **Modified**: `src/pages/Index.tsx` (add UserMenu to header)
-- **Migration**: Create `profiles` table with RLS + trigger
+Should sign-up require **email confirmation** (current Supabase default — user clicks link, then can sign in), or do you want it disabled so accounts work immediately? Default is more secure; disabling is friendlier for testing. I'll go with the default unless you say otherwise.
