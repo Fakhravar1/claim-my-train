@@ -23,7 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history; companion needs the same ancestry
+          fetch-depth: 0          # full history; companion needs the same ancestry
+          persist-credentials: false  # don't set http.extraheader, otherwise the
+                                  # checkout's GITHUB_TOKEN overrides the PAT we
+                                  # put in the push URL and GitHub returns
+                                  # "Repository not found" against the companion.
 
       - name: Push to Lovable companion repo
         env:
