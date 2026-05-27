@@ -22,6 +22,9 @@ interface Profile {
   commuter_return_start_time: string | null;
   commuter_return_end_time: string | null;
   ticket_valid_until: string | null;
+  street_address: string | null;
+  postal_code: string | null;
+  city: string | null;
 }
 
 interface AuthContextType {
