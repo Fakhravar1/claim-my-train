@@ -2,6 +2,8 @@
     materialized='table',
     indexes=[
       {'columns': ['trip__start_date']},
+      {'columns': ['origin_local_date']},
+      {'columns': ['origin_stop_id', 'destination_stop_id', 'origin_local_date']},
       {'columns': ['origin_stop_id', 'destination_stop_id', 'trip__start_date']},
       {'columns': ['is_claimable'], 'unique': false}
     ]
@@ -45,6 +47,10 @@ select
     origin.realtime           as origin_actual,
     dest.scheduled            as destination_scheduled,
     dest.realtime             as destination_actual,
+
+    -- calendar day the origin departure physically runs, in Stockholm local time.
+    -- distinct from trip__start_date (GTFS service date) for post-midnight trips.
+    (origin.scheduled at time zone 'Europe/Stockholm')::date as origin_local_date,
 
     -- delay measures (v1: train delay at destination only)
     dest.arrival_delay                     as destination_delay_seconds,

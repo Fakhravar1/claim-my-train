@@ -230,6 +230,7 @@ export type Database = {
           journey_key: string | null
           line_terminus: string | null
           origin_actual: string | null
+          origin_local_date: string | null
           origin_scheduled: string | null
           origin_stop_id: string | null
           origin_stop_name: string | null
@@ -249,6 +250,7 @@ export type Database = {
           journey_key?: string | null
           line_terminus?: string | null
           origin_actual?: string | null
+          origin_local_date?: string | null
           origin_scheduled?: string | null
           origin_stop_id?: string | null
           origin_stop_name?: string | null
@@ -268,6 +270,7 @@ export type Database = {
           journey_key?: string | null
           line_terminus?: string | null
           origin_actual?: string | null
+          origin_local_date?: string | null
           origin_scheduled?: string | null
           origin_stop_id?: string | null
           origin_stop_name?: string | null

@@ -52,6 +52,13 @@ models:
         description: True if destination delay >= 20 min OR train was cancelled.
         tests: [not_null]
 
+      - name: origin_local_date
+        description: >
+          Calendar day on which the origin departure physically runs, in Stockholm local
+          time. Distinct from trip__start_date (GTFS service date) for post-midnight trips —
+          this is the column the frontend filters on when the user picks a date.
+        tests: [not_null]
+
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:

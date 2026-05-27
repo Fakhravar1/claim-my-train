@@ -137,7 +137,11 @@ Frontend (useStations, useJourneys hooks via Supabase JS client)
 - `stg_departures` cleaning layer.
 - `fct_departures` and `fct_passenger_journeys` are tables (not views) with indexes on dominant query patterns:
   - `fct_departures`: `(trip__trip_id, trip__start_date, event_type, stop_sequence)` and `(event_type, stop__id)`. The composite includes `event_type` so the planner avoids re-filtering during the journey self-join.
-  - `fct_passenger_journeys`: `(trip__start_date)`, `(origin_stop_id, destination_stop_id, trip__start_date)`, and `(is_claimable)`. The date-only index serves the common "user landed on the page, no stops picked yet" query (the composite cannot, due to leftmost-prefix). `is_claimable` is a full B-tree, not partial — dbt-postgres `indexes` config has no `WHERE` clause support, and full B-tree is fine at ~22k rows.
+  - `fct_passenger_journeys`: `(trip__start_date)`, `(origin_local_date)`, `(origin_stop_id, destination_stop_id, origin_local_date)`, `(origin_stop_id, destination_stop_id, trip__start_date)`, and `(is_claimable)`. The date-only indexes serve the common "user landed on the page, no stops picked yet" query (the composites cannot, due to leftmost-prefix). `is_claimable` is a full B-tree, not partial — dbt-postgres `indexes` config has no `WHERE` clause support, and full B-tree is fine at ~22k rows.
+- **`trip__start_date` vs `origin_local_date` on `fct_passenger_journeys`.** Different concepts, distinction is load-bearing:
+  - `trip__start_date` is the **GTFS service date** — degenerate dimension kept on the fact for traceability back to the feed. For a service "starting on the 23rd," GTFS-RT can include trips that physically run after midnight (e.g. 00:38 on the 24th Stockholm time).
+  - `origin_local_date` is `(origin.scheduled at time zone 'Europe/Stockholm')::date` — the **calendar day the origin departure physically runs**, in Stockholm local time. This is what end users mean when they pick a date in the picker.
+  - The frontend filters on `origin_local_date`, not `trip__start_date`. Filtering on `trip__start_date` produced a "picked the 24th, top card says 25 May" bug: service-24 trips that run on the 25th sorted first (descending by `origin_scheduled`) and led the list.
   Frontend query time dropped from ~6s to sub-50ms post-materialization.
 - `dim_stations`, `dim_line` views.
 - `dim_active_stations` view filters `dim_stations` to stops appearing as origin or destination in `fct_passenger_journeys`. Source for the frontend stations dropdown.

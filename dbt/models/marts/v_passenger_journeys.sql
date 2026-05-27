@@ -16,6 +16,7 @@ select
     origin_actual,
     destination_scheduled,
     destination_actual,
+    origin_local_date,
     destination_delay_minutes,
     is_claimable,
     canceled,

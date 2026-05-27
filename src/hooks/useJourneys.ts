@@ -7,13 +7,13 @@ export type Journey = Tables<"v_passenger_journeys">;
 type Params = {
   fromStopId: string | null;
   toStopId: string | null;
-  sinceDate: string; // ISO date, e.g. "2026-03-19"
+  date: string; // ISO date, e.g. "2026-03-19"
   onlyClaimable?: boolean;
 };
 
-export function useJourneys({ fromStopId, toStopId, sinceDate, onlyClaimable = false }: Params) {
+export function useJourneys({ fromStopId, toStopId, date, onlyClaimable = false }: Params) {
   return useQuery<Journey[]>({
-    queryKey: ["journeys", fromStopId, toStopId, sinceDate, onlyClaimable],
+    queryKey: ["journeys", fromStopId, toStopId, date, onlyClaimable],
     enabled: Boolean(fromStopId && toStopId),
     queryFn: async () => {
       let query = supabase
@@ -21,7 +21,7 @@ export function useJourneys({ fromStopId, toStopId, sinceDate, onlyClaimable = f
         .select("*")
         .eq("origin_stop_id", fromStopId!)
         .eq("destination_stop_id", toStopId!)
-        .gte("trip__start_date", sinceDate)
+        .eq("origin_local_date", date)
         .order("origin_scheduled", { ascending: false })
         .limit(500);
       if (onlyClaimable) query = query.eq("is_claimable", true);

@@ -117,7 +117,7 @@ export default function SkanetrafikenApp() {
   } = useJourneys({
     fromStopId,
     toStopId,
-    sinceDate: selectedDate, // always a specific date — no 60-day bulk fetch
+    date: selectedDate, // always a specific date — no 60-day bulk fetch
     onlyClaimable: false,
   });
 
