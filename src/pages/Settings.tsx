@@ -41,6 +41,9 @@ const Settings = () => {
   const [claimMobile, setClaimMobile] = useState("");
   const [claimTicketId, setClaimTicketId] = useState("");
   const [claimPersonnummer, setClaimPersonnummer] = useState("");
+  const [streetAddress, setStreetAddress] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [city, setCity] = useState("");
   const [claimsDoneCount, setClaimsDoneCount] = useState(0);
   const [isPeriodTicket, setIsPeriodTicket] = useState(false);
   const [ticketValidUntil, setTicketValidUntil] = useState("");
@@ -60,6 +63,9 @@ const Settings = () => {
     setClaimMobile(profile?.claim_mobile ?? "");
     setClaimTicketId(profile?.claim_ticket_id ?? "");
     setClaimPersonnummer(profile?.claim_personnummer ?? "");
+    setStreetAddress(profile?.street_address ?? "");
+    setPostalCode(profile?.postal_code ?? "");
+    setCity(profile?.city ?? "");
     setClaimsDoneCount(profile?.claims_done_count ?? 0);
     setIsPeriodTicket(profile?.is_period_ticket ?? false);
     setTicketValidUntil(toIsoDate(profile?.ticket_valid_until));
@@ -122,6 +128,9 @@ const Settings = () => {
           claim_mobile: claimMobile || null,
           claim_ticket_id: claimTicketId || null,
           claim_personnummer: claimPersonnummer || null,
+          street_address: streetAddress || null,
+          postal_code: postalCode || null,
+          city: city || null,
           claims_done_count: Math.max(0, claimsDoneCount),
           is_period_ticket: isPeriodTicket,
           ticket_valid_until: isPeriodTicket ? ticketValidUntil || null : null,
@@ -212,6 +221,40 @@ const Settings = () => {
                     onChange={(event) => setClaimPersonnummer(event.target.value)}
                     placeholder="19700901-3975"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="street-address">Street address</Label>
+                  <Input
+                    id="street-address"
+                    value={streetAddress}
+                    onChange={(event) => setStreetAddress(event.target.value)}
+                    placeholder="Storgatan 1"
+                    autoComplete="street-address"
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="postal-code">Postal code</Label>
+                    <Input
+                      id="postal-code"
+                      value={postalCode}
+                      onChange={(event) => setPostalCode(event.target.value)}
+                      placeholder="211 20"
+                      autoComplete="postal-code"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City</Label>
+                    <Input
+                      id="city"
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      placeholder="Malmö"
+                      autoComplete="address-level2"
+                    />
+                  </div>
                 </div>
               </TabsContent>
 

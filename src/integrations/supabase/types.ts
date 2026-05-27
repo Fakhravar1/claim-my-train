@@ -17,6 +17,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          city: string | null
           claim_email: string | null
           claim_mobile: string | null
           claim_personnummer: string | null
@@ -33,13 +34,16 @@ export type Database = {
           full_name: string | null
           id: string
           is_period_ticket: boolean
+          postal_code: string | null
           preferred_from_stop_id: string | null
           preferred_to_stop_id: string | null
+          street_address: string | null
           ticket_valid_until: string | null
           updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
+          city?: string | null
           claim_email?: string | null
           claim_mobile?: string | null
           claim_personnummer?: string | null
@@ -56,13 +60,16 @@ export type Database = {
           full_name?: string | null
           id: string
           is_period_ticket?: boolean
+          postal_code?: string | null
           preferred_from_stop_id?: string | null
           preferred_to_stop_id?: string | null
+          street_address?: string | null
           ticket_valid_until?: string | null
           updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
+          city?: string | null
           claim_email?: string | null
           claim_mobile?: string | null
           claim_personnummer?: string | null
@@ -79,8 +86,10 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_period_ticket?: boolean
+          postal_code?: string | null
           preferred_from_stop_id?: string | null
           preferred_to_stop_id?: string | null
+          street_address?: string | null
           ticket_valid_until?: string | null
           updated_at?: string | null
         }
