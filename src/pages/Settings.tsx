@@ -41,6 +41,8 @@ const Settings = () => {
   );
   const CLAIM_VALUE_SEK = 100;
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [claimEmail, setClaimEmail] = useState("");
   const [claimMobile, setClaimMobile] = useState("");
   const [claimTicketId, setClaimTicketId] = useState("");
@@ -65,6 +67,8 @@ const Settings = () => {
   const [activeTab, setActiveTab] = useState("personal");
 
   useEffect(() => {
+    setFirstName(profile?.first_name ?? "");
+    setLastName(profile?.last_name ?? "");
     setClaimEmail(profile?.claim_email ?? profile?.email ?? "");
     setClaimMobile(profile?.claim_mobile ?? "");
     setClaimTicketId(profile?.claim_ticket_id ?? "");
@@ -127,6 +131,8 @@ const Settings = () => {
     event.preventDefault();
 
     const validationErrors = validateClaimProfile({
+      firstName,
+      lastName,
       claimEmail,
       claimMobile,
       claimPersonnummer,
@@ -157,6 +163,9 @@ const Settings = () => {
       const { error } = await supabase.from("profiles").upsert(
         {
           id: user.id,
+          first_name: firstName.trim() || null,
+          last_name: lastName.trim() || null,
+          full_name: `${firstName.trim()} ${lastName.trim()}`.trim() || null,
           claim_email: claimEmail || null,
           claim_mobile: claimMobile || null,
           claim_ticket_id: claimTicketId || null,
@@ -234,6 +243,41 @@ const Settings = () => {
               </TabsList>
 
               <TabsContent value="personal" className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="first-name">
+                      First name <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="first-name"
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      placeholder="Anna"
+                      autoComplete="given-name"
+                      aria-invalid={Boolean(errors.firstName)}
+                    />
+                    {errors.firstName && (
+                      <p className="text-sm text-destructive">{errors.firstName}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="last-name">
+                      Last name <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="last-name"
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                      placeholder="Andersson"
+                      autoComplete="family-name"
+                      aria-invalid={Boolean(errors.lastName)}
+                    />
+                    {errors.lastName && (
+                      <p className="text-sm text-destructive">{errors.lastName}</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="claim-email">
                     Claim email <span className="text-destructive">*</span>

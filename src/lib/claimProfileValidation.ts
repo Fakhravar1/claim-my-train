@@ -3,6 +3,8 @@
 // get a claim rejected. Each validator returns an error string, or null if ok.
 
 export type ClaimProfileInput = {
+  firstName: string;
+  lastName: string;
   claimEmail: string;
   claimMobile: string;
   claimPersonnummer: string;
@@ -115,6 +117,12 @@ export const validateRequiredText = (raw: string, label: string): string | null 
 
 export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErrors => {
   const errors: ClaimProfileErrors = {};
+
+  const firstName = validateRequiredText(input.firstName, "First name");
+  if (firstName) errors.firstName = firstName;
+
+  const lastName = validateRequiredText(input.lastName, "Last name");
+  if (lastName) errors.lastName = lastName;
 
   const email = validateEmail(input.claimEmail);
   if (email) errors.claimEmail = email;
