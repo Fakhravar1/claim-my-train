@@ -18,6 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  validateClaimProfile,
+  type ClaimProfileErrors,
+} from "@/lib/claimProfileValidation";
 
 const toIsoDate = (value: string | null | undefined) => {
   if (!value) return "";
@@ -57,6 +61,8 @@ const Settings = () => {
   const [commuterReturnStartTime, setCommuterReturnStartTime] = useState("");
   const [commuterReturnEndTime, setCommuterReturnEndTime] = useState("");
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<ClaimProfileErrors>({});
+  const [activeTab, setActiveTab] = useState("personal");
 
   useEffect(() => {
     setClaimEmail(profile?.claim_email ?? profile?.email ?? "");
@@ -119,6 +125,33 @@ const Settings = () => {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+
+    const validationErrors = validateClaimProfile({
+      claimEmail,
+      claimMobile,
+      claimPersonnummer,
+      streetAddress,
+      postalCode,
+      city,
+      claimTicketId,
+    });
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      // Surface the tab that holds the first problem. Ticket ID lives on the
+      // ticket tab; everything else is on the personal tab.
+      const onlyTicketBroken =
+        Object.keys(validationErrors).length === 1 && "claimTicketId" in validationErrors;
+      setActiveTab(onlyTicketBroken ? "ticket" : "personal");
+      toast({
+        title: "Please fix the highlighted fields",
+        description:
+          "These details go on your Skånetrafiken claim. Incomplete or wrongly formatted data can get the claim rejected.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase.from("profiles").upsert(
@@ -183,7 +216,17 @@ const Settings = () => {
 
         <Card className="p-5">
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
-            <Tabs defaultValue="personal" className="space-y-4">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="font-semibold">Why these details matter</p>
+              <p className="mt-1">
+                Your personal details, address, personnummer and ticket ID are submitted on the
+                Skånetrafiken reklamation. If any required field is missing or wrongly formatted,
+                Skånetrafiken can reject the claim. Fields marked with{" "}
+                <span className="font-semibold text-destructive">*</span> are mandatory.
+              </p>
+            </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList className="!grid h-auto w-full !grid-cols-3 gap-1 p-1">
                 <TabsTrigger value="personal" className="w-full">Personal info</TabsTrigger>
                 <TabsTrigger value="ticket" className="w-full">Ticket</TabsTrigger>
@@ -192,81 +235,124 @@ const Settings = () => {
 
               <TabsContent value="personal" className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="claim-email">Claim email</Label>
+                  <Label htmlFor="claim-email">
+                    Claim email <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="claim-email"
                     type="email"
                     value={claimEmail}
                     onChange={(event) => setClaimEmail(event.target.value)}
                     placeholder="name@example.com"
+                    aria-invalid={Boolean(errors.claimEmail)}
                   />
+                  {errors.claimEmail && (
+                    <p className="text-sm text-destructive">{errors.claimEmail}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="claim-mobile">Mobile number</Label>
+                  <Label htmlFor="claim-mobile">
+                    Mobile number <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="claim-mobile"
                     type="tel"
                     value={claimMobile}
                     onChange={(event) => setClaimMobile(event.target.value)}
-                    placeholder="0701234567"
+                    placeholder="+46 70 123 45 67"
+                    aria-invalid={Boolean(errors.claimMobile)}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Swedish (0701234567) or international with country code (+46…).
+                  </p>
+                  {errors.claimMobile && (
+                    <p className="text-sm text-destructive">{errors.claimMobile}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="claim-personnummer">Personnummer</Label>
+                  <Label htmlFor="claim-personnummer">
+                    Personnummer <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="claim-personnummer"
                     value={claimPersonnummer}
                     onChange={(event) => setClaimPersonnummer(event.target.value)}
                     placeholder="19700901-3975"
+                    aria-invalid={Boolean(errors.claimPersonnummer)}
                   />
+                  {errors.claimPersonnummer && (
+                    <p className="text-sm text-destructive">{errors.claimPersonnummer}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="street-address">Street address</Label>
+                  <Label htmlFor="street-address">
+                    Street address <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="street-address"
                     value={streetAddress}
                     onChange={(event) => setStreetAddress(event.target.value)}
                     placeholder="Storgatan 1"
                     autoComplete="street-address"
+                    aria-invalid={Boolean(errors.streetAddress)}
                   />
+                  {errors.streetAddress && (
+                    <p className="text-sm text-destructive">{errors.streetAddress}</p>
+                  )}
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="postal-code">Postal code</Label>
+                    <Label htmlFor="postal-code">
+                      Postal code <span className="text-destructive">*</span>
+                    </Label>
                     <Input
                       id="postal-code"
                       value={postalCode}
                       onChange={(event) => setPostalCode(event.target.value)}
                       placeholder="211 20"
                       autoComplete="postal-code"
+                      aria-invalid={Boolean(errors.postalCode)}
                     />
+                    {errors.postalCode && (
+                      <p className="text-sm text-destructive">{errors.postalCode}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
+                    <Label htmlFor="city">
+                      City <span className="text-destructive">*</span>
+                    </Label>
                     <Input
                       id="city"
                       value={city}
                       onChange={(event) => setCity(event.target.value)}
                       placeholder="Malmö"
                       autoComplete="address-level2"
+                      aria-invalid={Boolean(errors.city)}
                     />
+                    {errors.city && <p className="text-sm text-destructive">{errors.city}</p>}
                   </div>
                 </div>
               </TabsContent>
 
               <TabsContent value="ticket" className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="claim-ticket-id">Ticket ID</Label>
+                  <Label htmlFor="claim-ticket-id">
+                    Ticket ID <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="claim-ticket-id"
                     value={claimTicketId}
                     onChange={(event) => setClaimTicketId(event.target.value)}
                     placeholder="2Y3CE88"
+                    aria-invalid={Boolean(errors.claimTicketId)}
                   />
+                  {errors.claimTicketId && (
+                    <p className="text-sm text-destructive">{errors.claimTicketId}</p>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/70 p-3">
