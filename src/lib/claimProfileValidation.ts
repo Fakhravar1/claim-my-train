@@ -2,6 +2,11 @@
 // These fields end up on the Skånetrafiken reklamation, so bad data here can
 // get a claim rejected. Each validator returns an error string, or null if ok.
 
+export const PAYOUT_METHODS = ["bank", "sms", "email"] as const;
+export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
+export const isPayoutMethod = (value: unknown): value is PayoutMethod =>
+  typeof value === "string" && (PAYOUT_METHODS as readonly string[]).includes(value);
+
 export type ClaimProfileInput = {
   firstName: string;
   lastName: string;
@@ -12,6 +17,7 @@ export type ClaimProfileInput = {
   postalCode: string;
   city: string;
   claimTicketId: string;
+  payoutMethod: string;
 };
 
 export type ClaimProfileErrors = Partial<Record<keyof ClaimProfileInput, string>>;
@@ -144,6 +150,12 @@ export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErro
 
   const ticket = validateRequiredText(input.claimTicketId, "Ticket ID");
   if (ticket) errors.claimTicketId = ticket;
+
+  if (!input.payoutMethod) {
+    errors.payoutMethod = "Pick how you want to receive payouts.";
+  } else if (!isPayoutMethod(input.payoutMethod)) {
+    errors.payoutMethod = "Payout method must be Bank, SMS or Email.";
+  }
 
   return errors;
 };

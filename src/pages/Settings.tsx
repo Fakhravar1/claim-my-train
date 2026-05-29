@@ -23,6 +23,12 @@ import {
   type ClaimProfileErrors,
 } from "@/lib/claimProfileValidation";
 
+const PAYOUT_LABELS: Record<string, string> = {
+  bank: "Bank transfer",
+  sms: "SMS (Värdekod)",
+  email: "Email (Värdekod)",
+};
+
 const toIsoDate = (value: string | null | undefined) => {
   if (!value) return "";
   return value.slice(0, 10);
@@ -43,6 +49,7 @@ const Settings = () => {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState("");
   const [claimEmail, setClaimEmail] = useState("");
   const [claimMobile, setClaimMobile] = useState("");
   const [claimTicketId, setClaimTicketId] = useState("");
@@ -69,6 +76,7 @@ const Settings = () => {
   useEffect(() => {
     setFirstName(profile?.first_name ?? "");
     setLastName(profile?.last_name ?? "");
+    setPayoutMethod(profile?.payout_method ?? "");
     setClaimEmail(profile?.claim_email ?? profile?.email ?? "");
     setClaimMobile(profile?.claim_mobile ?? "");
     setClaimTicketId(profile?.claim_ticket_id ?? "");
@@ -140,15 +148,18 @@ const Settings = () => {
       postalCode,
       city,
       claimTicketId,
+      payoutMethod,
     });
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
       // Surface the tab that holds the first problem. Ticket ID lives on the
       // ticket tab; everything else is on the personal tab.
-      const onlyTicketBroken =
-        Object.keys(validationErrors).length === 1 && "claimTicketId" in validationErrors;
-      setActiveTab(onlyTicketBroken ? "ticket" : "personal");
+      const ticketTabKeys = new Set(["claimTicketId", "payoutMethod"]);
+      const allOnTicketTab = Object.keys(validationErrors).every((key) =>
+        ticketTabKeys.has(key)
+      );
+      setActiveTab(allOnTicketTab ? "ticket" : "personal");
       toast({
         title: "Please fix the highlighted fields",
         description:
@@ -173,6 +184,7 @@ const Settings = () => {
           street_address: streetAddress || null,
           postal_code: postalCode || null,
           city: city || null,
+          payout_method: payoutMethod || null,
           claims_done_count: Math.max(0, claimsDoneCount),
           is_period_ticket: isPeriodTicket,
           ticket_valid_until: isPeriodTicket ? ticketValidUntil || null : null,
@@ -396,6 +408,30 @@ const Settings = () => {
                   />
                   {errors.claimTicketId && (
                     <p className="text-sm text-destructive">{errors.claimTicketId}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="payout-method">
+                    Preferred payout method <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={payoutMethod} onValueChange={setPayoutMethod}>
+                    <SelectTrigger id="payout-method" aria-invalid={Boolean(errors.payoutMethod)}>
+                      <SelectValue placeholder="Choose how you want to be paid">
+                        {payoutMethod ? PAYOUT_LABELS[payoutMethod] ?? payoutMethod : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank">Bank transfer</SelectItem>
+                      <SelectItem value="sms">SMS (Värdekod)</SelectItem>
+                      <SelectItem value="email">Email (Värdekod)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Skånetrafiken pays out either by bank transfer or as a Värdekod sent by SMS or email.
+                  </p>
+                  {errors.payoutMethod && (
+                    <p className="text-sm text-destructive">{errors.payoutMethod}</p>
                   )}
                 </div>
 

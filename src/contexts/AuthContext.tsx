@@ -27,6 +27,7 @@ interface Profile {
   street_address: string | null;
   postal_code: string | null;
   city: string | null;
+  payout_method: string | null;
 }
 
 interface AuthContextType {
@@ -49,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, first_name, last_name, avatar_url, claim_email, claim_mobile, claim_ticket_id, claim_personnummer, claims_done_count, is_period_ticket, preferred_from_stop_id, preferred_to_stop_id, commuter_from_stop_id, commuter_to_stop_id, commuter_outbound_start_time, commuter_outbound_end_time, commuter_return_start_time, commuter_return_end_time, ticket_valid_until, street_address, postal_code, city")
+      .select("id, email, full_name, first_name, last_name, avatar_url, claim_email, claim_mobile, claim_ticket_id, claim_personnummer, claims_done_count, is_period_ticket, preferred_from_stop_id, preferred_to_stop_id, commuter_from_stop_id, commuter_to_stop_id, commuter_outbound_start_time, commuter_outbound_end_time, commuter_return_start_time, commuter_return_end_time, ticket_valid_until, street_address, postal_code, city, payout_method")
       .eq("id", userId)
       .single();
     if (error) {
@@ -80,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         street_address: null,
         postal_code: null,
         city: null,
+        payout_method: null,
       } as Profile);
       return;
     }
