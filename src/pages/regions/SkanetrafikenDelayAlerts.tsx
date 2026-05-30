@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Select,
@@ -20,6 +21,7 @@ import { SAMS_TO_GTFS } from "@/constants/stops";
 import { useStations } from "@/hooks/useStations";
 import { useJourneys, type Journey } from "@/hooks/useJourneys";
 import { useStartClaim } from "@/hooks/useStartClaim";
+import { useMyClaims } from "@/hooks/useMyClaims";
 import { useAppShellStyles } from "@/hooks/useAppShellStyles";
 import themeCSS from "@/themes/skanetrafiken/theme.css?inline";
 import SkaneBand from "@/components/region/SkaneBand";
@@ -148,6 +150,7 @@ export default function SkanetrafikenDelayAlerts() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { startClaim, pending: submitting } = useStartClaim();
+  const queryClient = useQueryClient();
 
   const { data: stations = [] } = useStations();
   const stationOptions = useMemo(
@@ -209,6 +212,15 @@ export default function SkanetrafikenDelayAlerts() {
     const missing = fields.filter((f) => !f.value.trim()).map((f) => f.label);
     return { fields, missing };
   }, [profile]);
+
+  // Departures this user has already filed a claim for — proactive duplicate
+  // guardrail (the DB unique constraint is the hard backstop). journey_key
+  // identifies the trip+date+OD leg, so a Set of keys is enough to match.
+  const { data: myClaims = [] } = useMyClaims(user?.id);
+  const claimedKeys = useMemo(
+    () => new Set(myClaims.map((c) => c.journey_key).filter(Boolean)),
+    [myClaims]
+  );
 
   const alerts = useMemo<RegionDeparture[]>(() => {
     const mapped = journeys.map(journeyToDeparture);
@@ -283,6 +295,7 @@ export default function SkanetrafikenDelayAlerts() {
     if (result.ok) {
       setClaimActionStatus("");
       setClaimDialogOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["my-claims"] });
       toast({
         title: "Claim saved",
         description: "Your claim is queued. We'll generate the filled Skånetrafiken form for you.",
@@ -480,18 +493,29 @@ export default function SkanetrafikenDelayAlerts() {
                   <RegionDepartureCard
                     dep={dep}
                     action={
-                      <button
-                        type="button"
-                        className="btn-cmt btn-cmt--primary btn-cmt--sm"
-                        onClick={() => {
-                          if (!user) { promptLoginForClaim(); return; }
-                          setSelectedAlert(dep);
-                          setClaimActionStatus("");
-                          setClaimDialogOpen(true);
-                        }}
-                      >
-                        Start claim
-                      </button>
+                      dep.journeyKey && claimedKeys.has(dep.journeyKey) ? (
+                        <button
+                          type="button"
+                          className="btn-cmt btn-cmt--outline btn-cmt--sm"
+                          disabled
+                          title="You've already filed a claim for this departure"
+                        >
+                          ✓ Claim filed
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-cmt btn-cmt--primary btn-cmt--sm"
+                          onClick={() => {
+                            if (!user) { promptLoginForClaim(); return; }
+                            setSelectedAlert(dep);
+                            setClaimActionStatus("");
+                            setClaimDialogOpen(true);
+                          }}
+                        >
+                          Start claim
+                        </button>
+                      )
                     }
                   />
                 </div>

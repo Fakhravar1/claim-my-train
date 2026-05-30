@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useStations } from "@/hooks/useStations";
+import { useMyClaims } from "@/hooks/useMyClaims";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -34,10 +35,42 @@ const toIsoDate = (value: string | null | undefined) => {
   return value.slice(0, 10);
 };
 
+const CLAIM_STATUS_META: Record<string, { label: string; className: string }> = {
+  pending: { label: "Pending", className: "border-amber-300 bg-amber-50 text-amber-900" },
+  generated: { label: "Form ready", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
+  submitted: { label: "Submitted", className: "border-sky-300 bg-sky-50 text-sky-900" },
+  error: { label: "Error", className: "border-destructive/40 bg-destructive/10 text-destructive" },
+};
+
+const claimDelayLabel = (bucket: string | null, cancelled: boolean) => {
+  if (cancelled) return "Cancelled";
+  switch (bucket) {
+    case "20_39": return "20–39 min";
+    case "40_59": return "40–59 min";
+    case "60_119": return "60–119 min";
+    case "120_plus": return "120+ min";
+    default: return "Delay";
+  }
+};
+
 const Settings = () => {
   const { user, profile, loading } = useAuth();
   const { toast } = useToast();
   const { data: stations = [] } = useStations();
+  const { data: myClaims = [], isLoading: claimsLoading } = useMyClaims(user?.id);
+
+  const downloadClaimPdf = async (path: string) => {
+    const { data, error } = await supabase.storage.from("claims").createSignedUrl(path, 120);
+    if (error || !data?.signedUrl) {
+      toast({
+        title: "Could not open the PDF",
+        description: error?.message ?? "No signed URL returned.",
+        variant: "destructive",
+      });
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
   const stopOptions = useMemo(
     () =>
       stations
@@ -248,10 +281,11 @@ const Settings = () => {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <TabsList className="!grid h-auto w-full !grid-cols-3 gap-1 p-1">
+              <TabsList className="!grid h-auto w-full !grid-cols-2 gap-1 p-1 sm:!grid-cols-4">
                 <TabsTrigger value="personal" className="w-full">Personal info</TabsTrigger>
                 <TabsTrigger value="ticket" className="w-full">Ticket</TabsTrigger>
                 <TabsTrigger value="commuter" className="w-full">Commuter habits</TabsTrigger>
+                <TabsTrigger value="claims" className="w-full">My claims</TabsTrigger>
               </TabsList>
 
               <TabsContent value="personal" className="space-y-4">
@@ -650,6 +684,73 @@ const Settings = () => {
                     </div>
                   </div>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="claims" className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Your filed claims</p>
+                  <p className="text-xs text-muted-foreground">
+                    Each delay you submit appears here. Once we've generated the filled
+                    Skånetrafiken form, you can download it.
+                  </p>
+                </div>
+
+                {claimsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading your claims…</p>
+                ) : myClaims.length === 0 ? (
+                  <div className="rounded-xl border border-border/70 bg-card/70 p-4 text-sm text-muted-foreground">
+                    No claims yet. Find a delayed trip on{" "}
+                    <Link to="/regions/skanetrafiken/delay-alerts" className="underline font-medium">
+                      claimable delays
+                    </Link>{" "}
+                    and hit “Start claim”.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {myClaims.map((claim) => {
+                      const meta = CLAIM_STATUS_META[claim.status] ?? {
+                        label: claim.status,
+                        className: "border-border bg-muted text-foreground",
+                      };
+                      return (
+                        <div
+                          key={claim.id}
+                          className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="space-y-0.5">
+                            <p className="text-sm font-medium">
+                              {claim.origin_stop_name} → {claim.destination_stop_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {toIsoDate(claim.trip_start_date)} ·{" "}
+                              {claimDelayLabel(claim.delay_bucket, claim.was_cancelled)}
+                            </p>
+                            {claim.status === "error" && claim.error_message && (
+                              <p className="text-xs text-destructive">{claim.error_message}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${meta.className}`}
+                            >
+                              {meta.label}
+                            </span>
+                            {claim.status === "generated" && claim.pdf_path && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void downloadClaimPdf(claim.pdf_path as string)}
+                              >
+                                Download PDF
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
 
