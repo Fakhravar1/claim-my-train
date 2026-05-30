@@ -44,6 +44,7 @@ User preferences are non-negotiable:
 - **Frontend:** `src/` (React/TypeScript + Vite + Tailwind + shadcn/ui). Marketing landing at `/` (`src/pages/Landing.tsx`). Skåne departures board at `/regions/skanetrafiken` (`src/pages/regions/SkanetrafikenApp.tsx`), claimable delays at `/regions/skanetrafiken/delay-alerts` (`src/pages/regions/SkanetrafikenDelayAlerts.tsx`) — both public, both styled with the design-system look injected via `src/hooks/useAppShellStyles.ts` + `src/themes/regional-app-base.css`. `/regions/sl` and `/regions/vasttrafik` no longer exist; SL / Västtrafik appear as inert "Coming soon" cards on the landing's OperatorPicker. Shared region UI lives in `src/components/region/` (`SkaneBand.tsx`, `RegionDepartureCard.tsx`, `RegionUserMenu.tsx`). Landing CSS is scope-injected via `src/hooks/useLandingStyles.ts`. In-app shadcn theme in `src/index.css` is retuned to the Skåne palette (forest green + warm cream + sunflower) so `/login` / `/settings` feel continuous with the cards page.
 - **Data source:** Trafiklab GTFS-RT feed → ingested to `public.raw_departures` every 15 min by pg_cron job `collect-raw-departures-15m`, which POSTs to the `collect-raw-departures` Supabase edge function.
 - **Auth:** Supabase Auth, user profiles in `public.profiles`.
+- **Claim filing pipeline:** Python worker in `claim-worker/` (reportlab + pypdf) — polls `public.claims` for `status='pending'`, fills the Skånetrafiken reklamation PDF from the claim's journey snapshot + the user's `profiles` row, uploads it to the private `claims` Supabase Storage bucket, and flips the row to `generated` (or `error`). Runs on GitHub Actions (`.github/workflows/claim-pdf-worker.yml`, daily `0 6 * * *` + `workflow_dispatch`), using `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` repo secrets (service-role key bypasses RLS — backend-only, never in the frontend). We chose GitHub Actions over Render here because **Render cron jobs are paid**, and Actions already hosts the dbt job. Generate-and-store only: no auto-submission to Skånetrafiken.
 
 ---
 
@@ -53,7 +54,9 @@ User preferences are non-negotiable:
 C:\Users\arian\trafiklab\          ← repo root
 ├── .github/
 │   └── workflows/
-│       └── dbt-run.yml             ← scheduled dbt build on GitHub Actions
+│       ├── dbt-run.yml             ← scheduled dbt build on GitHub Actions
+│       ├── claim-pdf-worker.yml    ← scheduled claim-PDF worker (daily)
+│       └── mirror-to-lovable.yml   ← force-push working main → Lovable companion
 ├── dbt/                            ← dbt project root (dbt_project.yml lives here)
 │   ├── macros/
 │   │   └── generate_schema_name.sql        ← schema='public' override; lets dbt build wrappers in public, not dbt_dev_public
@@ -72,6 +75,11 @@ C:\Users\arian\trafiklab\          ← repo root
 │   │       └── _marts.yml                   ← model tests & docs
 │   ├── packages.yml                ← dbt_utils dependency
 │   └── dbt_project.yml
+├── claim-worker/                   ← Python claim-PDF worker (runs on GitHub Actions)
+│   ├── worker.py                   ← polls pending claims → fill → upload → mark generated
+│   ├── fill_template.py            ← overlays claim + profile data onto template.pdf
+│   ├── template.pdf                ← blank Skånetrafiken reklamation form
+│   └── requirements.txt            ← reportlab, pypdf, supabase, tzdata
 ├── src/                            ← frontend (React/TS)
 │   ├── pages/
 │   ├── hooks/
@@ -156,6 +164,8 @@ Frontend (useStations, useJourneys hooks via Supabase JS client)
 - Frontend hooks `useStations` (`src/hooks/useStations.ts`) and `useJourneys` (`src/hooks/useJourneys.ts`) consume the public wrappers. SkanetrafikenApp.tsx, SkanetrafikenDelayAlerts.tsx, and Settings.tsx all use `useStations` for dropdowns; the two region pages use `useJourneys` for the journey lists (departures with `onlyClaimable: false`, delay-alerts with `onlyClaimable: true`). Both region pages default the date filter to today and pass it as `sinceDate`.
 - `shared/stops.ts` includes a `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation map bridging Trafiklab sams-id (legacy `get-train-departures` edge function imports) and GTFS (everything in dbt and the frontend). Only used for inbound URL-param normalization on the region pages, for legacy bookmarks that pre-date the GTFS migration.
 - ✅ Marketing landing page at `/` (`src/pages/Landing.tsx`). Skåne departures + claimable-delays pages at `/regions/skanetrafiken` and `/regions/skanetrafiken/delay-alerts`. SL and Västtrafik no longer have routes; they appear as inert "Coming soon" cards on the landing's OperatorPicker. `src/themes/skanetrafiken/theme.css` carries the Skåne token overrides (Pågatåg purple, rapeseed yellow); the per-region marketing SVGs (`HeroScene.tsx`, `SignupScene.tsx`, `Vehicle.tsx`) were dropped when the regional marketing pages were removed. Decorative band SVG for the region cards page lives in `src/components/region/SkaneBand.tsx`. Region CSS is injected via `src/hooks/useAppShellStyles.ts` so it doesn't bleed into the shadcn theme on `/login` and `/settings`.
+- ✅ **Claim filing, end-to-end.** `public.claims` table (one row per filed claim, carries a snapshot of the journey so it's independent of later dbt rebuilds). RLS: `insert`/`select` own rows (`auth.uid() = user_id`); unique on `(user_id, journey_key, trip_start_date)`; `status` defaults `'pending'`; columns include `pdf_path`, `generated_at`, `submitted_at`, `error_message`, `delay_bucket`. The "Start claim" → confirm dialog on `SkanetrafikenDelayAlerts.tsx` inserts via `src/hooks/useStartClaim.ts`; the dialog shows the full claim payload (journey + compensation tier + all personal fields from the profile) and blocks submit if any required profile field is missing. The `claim-worker/` (see §3) then generates the PDF to the `claims` Storage bucket.
+- ✅ **Settings is the claim profile.** `public.profiles` gained `first_name`, `last_name`, `payout_method` (`bank`/`sms`/`email`, CHECK-constrained), plus `street_address` / `postal_code` / `city`. `src/pages/Settings.tsx` validates everything client-side (`src/lib/claimProfileValidation.ts`: personnummer Luhn + date, intl-or-Swedish mobile, postal code, email) and makes the claim-identity fields mandatory. `profiles` RLS now has an `insert` policy + `with_check` on `update` (`auth.uid() = id`) — without the insert policy the Settings `upsert` was silently rejected.
 
 **Data volume:** ~22k journey rows currently, ~220 claimable. Three operators present: VR Sverige AB (Öresundståg, 880 trips), Pågatåg (1,866 trips), SJ AB (7 trips).
 
@@ -189,6 +199,10 @@ Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-
 
 **Status:** Both `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`) and `SkanetrafikenDelayAlerts.tsx` (at `/regions/skanetrafiken/delay-alerts`) query `public.v_passenger_journeys` via `src/hooks/useJourneys.ts`. Departures page passes `onlyClaimable: false` (shows everything on the route); delay-alerts passes `onlyClaimable: true`. The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
 
+**Claim filing (implemented).** The confirm dialog inserts a `pending` row into `public.claims` via `useStartClaim`; the `claim-worker/` generates the filled PDF (§3, §6). The old **autofill-bot path is removed** — `scripts/claim-bot.js` (Playwright), the `claim-assistant` edge function, the `claim-bot` npm script, and the `playwright` dep are all deleted. There's still a non-bot "Or open the official form" link (`CLAIM_START_URL`) as a manual fallback.
+
+**Cross-midnight rendering.** `RegionDepartureCard.tsx` derives delay/duration from `HH:MM` strings, so it `wrapHalfDay()`-normalizes any clock difference into ±12h — otherwise a leg arriving `23:48 → 00:11 (next day)` rendered as `-1417 min` / `0 min` duration instead of `+23 min` / `66 min`. Don't reintroduce raw `actual - scheduled` clock subtraction here.
+
 **Theme + region-component layout:**
 - `src/themes/landing-base.css` — base CSS tokens (cmt-* palette, Fraunces/Inter type) used by the landing.
 - `src/themes/regional-app-base.css` — shell CSS for region departures pages (decorative band, app-shell, app-card, dep card v2 layout). Injected via `useAppShellStyles()`.
@@ -211,7 +225,7 @@ Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-
 - ❌ Pre-compute every (user × delay × ticket) combination eagerly. User-side resolution stays lazy (Postgres function or app query). Operator-side facts are pre-computed.
 - ❌ Use ingestion artifacts (`raw.id`, UUIDs) as the basis for surrogate keys. Must be hash of business keys.
 - ❌ Run a self-join from the frontend against `fct_departures` per user request. The journey-leg fact is materialized for this exact reason.
-- ❌ Auto-submit any claim to Skånetrafiken. Manual user review before submission, always. Skånetrafiken §1.10 says false claims will be polisanmäld.
+- ❌ Auto-submit any claim to Skånetrafiken. Manual user review before submission, always. Skånetrafiken §1.10 says false claims will be polisanmäld. The `claim-worker` only **generates and stores** a filled PDF (`status='generated'`); it never submits. The Playwright autofill bot that *did* drive the official form was deliberately removed — don't resurrect it as an auto-submit step.
 - ❌ Apply Lovable-style auto-commits to dbt files. dbt logic is high-stakes and requires deliberate review. If an AI agent touched `models/marts/fct_departures.sql` autonomously, that's a bug.
 - ❌ Treat the rebase ritual as routine. If git divergence keeps happening, the workflow is broken — fix the workflow (separate repos, branch separation, or disable Lovable GitHub sync).
 - ❌ Reintroduce sams-id anywhere in new code. The legacy live-departures pipeline that used Trafiklab sams-id was retired. The frontend now speaks GTFS end-to-end. `SAMS_TO_GTFS` / `GTFS_TO_SAMS` in `shared/stops.ts` exist only as a one-way safety net for legacy URL bookmarks (e.g. `?from=740000003` on the old `/delay-alerts` path or its `/regions/skanetrafiken/...` successor) — translate inbound, never emit.
@@ -224,15 +238,15 @@ Build in this order. Do not skip ahead without explicit user decision.
 
 **v1 (now):**
 - ✅ `fct_passenger_journeys` with hardcoded 20-min threshold
-- ⏳ Frontend page: user selects origin + destination + date, sees claimable journeys
-- ⏳ Frontend: claim filing workflow (collect user details, generate Skånetrafiken claim text)
+- ✅ Frontend page: user selects origin + destination + date, sees claimable journeys
+- ✅ Frontend: claim filing workflow — confirm dialog inserts a `pending` claim; `claim-worker` fills the Skånetrafiken PDF and stores it (§3, §6). Remaining: a way for users to download/view their generated PDF, and the future "submit" step (Writer 3 / Ekopost), still deliberately manual.
 
 **v1.5 — Correctness gaps:**
 - 72-hour pre-announcement rule (Lag 2015:953). If service change was announced ≥3 dygn before scheduled departure, delay is measured against amended timetable, not original. Requires `snap_gtfs_static_trips` (dbt snapshot, SCD-2) and join logic. Currently produces false positives.
 - `dim_stations` enrichment for the frontend (human-readable station names — most columns already present, verify completeness).
 - Add a dbt `relationships` test linking `fct_passenger_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
 - Pagination on `SkanetrafikenDelayAlerts.tsx` claimable journeys list (current 500-row hard limit in `useJourneys` saturates as stations grow). Less urgent now that the date filter defaults to a single day — but still a real ceiling when a user picks a date with high traffic.
-- Evaluate alternative dbt orchestrator if GitHub free-tier scheduled-action cadence (currently 1–4 hours between runs vs configured 15 min) becomes a problem. Easiest swap: **Render Cron Jobs** (free tier 100 hrs/month, very reliable, wrap dbt in a Dockerfile + 1 YAML). Other options: Modal (Python-native), Fly.io scheduled machines, or a self-hosted GitHub runner on always-on hardware. Edge functions and pg_cron cannot run dbt directly (Deno + Postgres SQL respectively; dbt is Python).
+- Evaluate alternative dbt orchestrator if GitHub free-tier scheduled-action cadence (currently 1–4 hours between runs vs configured 15 min) becomes a problem. Note: **Render cron jobs are paid** (an earlier version of this doc wrongly called them free) — that's why the `claim-worker` runs on GitHub Actions, not Render. Free options if Actions ever falls short: Modal (Python-native, generous free credits), PythonAnywhere (1 free daily task), Google Cloud Run Jobs + Cloud Scheduler, or a self-hosted runner. Edge functions and pg_cron cannot run dbt/Python orchestration directly (Deno + Postgres SQL respectively).
 - ✅ ~~Revisit Index.tsx hypothesis.~~ Resolved: `Index.tsx` (at `/app`) was replaced by `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`). The page is now public — discovery doesn't require auth, only claim filing does. Signed-in visitors of `/` still get bounced to the cards page via `<ProtectedFromAuth>`, but the redirect target is now the region URL.
 
 **v2 — "Could you have caught a better alternative":**
@@ -255,6 +269,8 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
 - **The 72-hour rule is not yet modeled.** v1 will produce false positives for trips with pre-announced service changes. Document this in user-facing UI ("Claim will be reviewed for pre-announced changes") until v1.5 lands.
 - **Lovable host repo is decoupled from the working repo.** Production is served by Lovable from a companion repo (`Fakhravar1/claim-my-train-ab5b0f74`) that is *not* a Git remote of the working repo. The `mirror-to-lovable` GitHub Action keeps the companion's `main` in sync on every push, so this is no longer a foot-gun in normal operation. Two residual risks: (a) if the mirror Action fails silently or GitHub throttles its triggers, prod runs stale code — periodically eyeball the Actions tab; (b) if Lovable AI ever commits to the companion, the next mirror push fails as non-fast-forward — a loud tripwire, but it means someone has to investigate the divergence before the next deploy can land. Manual mirror procedure in §11 is the fallback.
 - **No analytics layer yet, by deliberate choice.** Metrics work is deferred until something usable ships. Don't volunteer dashboard work.
+- **Possibly-orphaned `claim-assistant` edge function.** Its source was deleted from the repo, but the *deployed* function may still be ACTIVE on Supabase (delete with `supabase functions delete claim-assistant --project-ref jnfwmdirvnqfpfhtipld`). Harmless while it lingers — nothing calls it — but it's dead weight tied to the removed bot path. Verify and delete if still present.
+- **`dbt/models/marts/fct_claims.sql` is untracked.** It sits in the working tree but isn't committed. The live claim path uses the `public.claims` *app table* (written by the frontend + worker), **not** a dbt model — recall claims are deliberately not dbt-managed (a `dbt run` would drop the table). Decide whether `fct_claims` is a real analytics model or leftover scaffolding before committing it.
 - **Data-freshness lag.** Ingestion to `raw_departures` is every 15 min, but downstream `fct_*` tables only update when `dbt build` runs via GitHub Actions — actual cadence 1–4 hours on free tier. A claimable journey ingested at 12:00 may not appear at `/regions/skanetrafiken/delay-alerts` until 14:00 or later. Acceptable for the 60-day reklamation deadline, but worth knowing if user-perceived "live" matters later (see §9 v1.5 orchestrator alternatives).
 - **Triangeln arrivals 2026-05-19 → 2026-05-26 are permanently missing.** Trafiklab tightened `/arrivals/740001587` and `/departures/740001587` to return identical `scheduled` values for the same trip at this instantaneous pass-through stop. The edge function's upsert used `ignoreDuplicates: true` with a `onConflict` key that omitted `event_type`, so for each colliding pair the departure (pushed first) won and the arrival was silently dropped. Triangeln arrival counts collapsed from ~1,700 trips/day to ~10–30/day, which made any journey *terminating* at Triangeln (Malmö C → Triangeln, Hyllie → Triangeln) disappear from `fct_passenger_journeys` while reverse directions stayed healthy. Fixed on 2026-05-26 by adding `event_type` to both the unique constraint and the function's `onConflict` (migration `20260526150000_fix_raw_departures_unique_constraint.sql`, function v14). The realtime feed only retains a short window so the missing rows cannot be backfilled — affected journeys will read as low-volume until those dates age out of the 60-day display horizon. The dbt singular test `tests/assert_arrival_departure_ratio_per_stop.sql` exists to catch any future per-stop, per-event-type collapse on the next `dbt build`.
 
@@ -286,7 +302,7 @@ Production is hosted by Lovable from the companion repo `Fakhravar1/claim-my-tra
 
 **Automated path (normal operation):**
 
-The `mirror-to-lovable` workflow (`.github/workflows/mirror-to-lovable.yml`) runs on every push to working `main`. It pushes the whole repo to the companion's `main` using a fine-grained PAT stored in the `LOVABLE_MIRROR_PAT` repo secret (scoped to `contents:write` on the companion repo only — so a leak can't touch the working repo). Lovable picks up the push and redeploys within ~1–2 min. Verify at `https://claim-my-train.lovable.app/regions/skanetrafiken/delay-alerts`.
+The `mirror-to-lovable` workflow (`.github/workflows/mirror-to-lovable.yml`) runs on every push to working `main`. It pushes the whole repo to the companion's `main` using a fine-grained PAT stored in the `LOVABLE_MIRROR_PAT` repo secret, scoped to the companion repo only (so a leak can't touch the working repo) with **both** `Contents: Read and write` **and** `Workflows: Read and write`. The Workflows permission is mandatory: GitHub rejects any push that creates/updates a `.github/workflows/*` file with a token lacking it — `! [remote rejected] ... refusing to allow a Personal Access Token to create or update workflow ... without 'workflow' scope`. We hit this when `claim-pdf-worker.yml` was first added; once a workflow file is on working main, *every* subsequent mirror push re-sends it, so a missing Workflows permission jams the mirror for all pushes, not just the one that touched a workflow. Editing a fine-grained token's permissions keeps the same token value, so the secret needs no change. Lovable picks up the push and redeploys within ~1–2 min. Verify at `https://claim-my-train.lovable.app/regions/skanetrafiken/delay-alerts`.
 
 After any frontend-affecting commit hits main, glance at the Actions tab and confirm the latest `Mirror to Lovable` run is green.
 
@@ -322,6 +338,16 @@ The workflow at `.github/workflows/dbt-run.yml` runs `dbt build` against the Sup
    - `relation "public.v_passenger_journeys" does not exist` after a `dbt run --full-refresh` — the dbt DAG should rebuild these, but check `dbt build` step output. If it persists, the §11 wrapper recreation SQL (below) is the manual fallback.
 3. **Manually trigger a run** to test fixes: Actions → "dbt run" → Run workflow → main → Run workflow.
 4. **Trigger from CLI:** `gh workflow run dbt-run.yml --repo Fakhravar1/claim-my-train`.
+
+### Debugging the claim PDF worker
+
+The `claim-worker/` (§3) runs via `.github/workflows/claim-pdf-worker.yml`. Trigger manually with `gh workflow run claim-pdf-worker.yml --repo Fakhravar1/claim-my-train`; check rows with `select id, status, pdf_path, error_message from public.claims order by created_at desc;`.
+
+1. **Nothing happens / no pending rows:** the worker only processes `status='pending'`. Submit a claim in the app, or reset a test row: `update public.claims set status='pending', pdf_path=null, generated_at=null, error_message=null where id='…';`. Note the unique `(user_id, journey_key, trip_start_date)` — re-claiming the same journey returns `23505` and the dialog says "already started a claim."
+2. **`ModuleNotFoundError: No module named 'tzdata'` / `ZoneInfoNotFoundError: Europe/Stockholm`:** Windows has no system tz DB; `tzdata` is in `requirements.txt` for this reason (harmless on the Linux runner). Local fix: `pip install tzdata`.
+3. **`KeyError: 'SUPABASE_URL'` / auth errors:** the `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` repo secrets are missing/stale. The DB-pooler secrets used by dbt do **not** work here — the worker uses the REST + Storage API, which needs the project URL + service-role key.
+4. **Row stuck in `error`:** read `error_message`. "Orphaned claim — no matching profile" means the `profiles` row for that `user_id` is gone. PDF field drift (wrong checkbox, off-by-one personnummer cell) is tuned in `claim-worker/fill_template.py` against `template.pdf` — download a generated PDF from the `claims` bucket and eyeball before trusting coordinates.
+5. **Local dry run:** from `claim-worker/`, `pip install -r requirements.txt`, set the two env vars, `python worker.py`.
 
 
 ---
