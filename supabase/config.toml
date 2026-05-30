@@ -3,8 +3,6 @@ project_id = "jnfwmdirvnqfpfhtipld"
 [functions.get-train-departures]
 verify_jwt = false
 
-[functions.claim-assistant]
-verify_jwt = false
 [functions.collect-raw-departures]
 enabled = true
 verify_jwt = true
