@@ -16,10 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { SAMS_TO_GTFS } from "@/constants/stops";
 import { useStations } from "@/hooks/useStations";
 import { useJourneys, type Journey } from "@/hooks/useJourneys";
+import { useStartClaim } from "@/hooks/useStartClaim";
 import { useAppShellStyles } from "@/hooks/useAppShellStyles";
 import themeCSS from "@/themes/skanetrafiken/theme.css?inline";
 import SkaneBand from "@/components/region/SkaneBand";
@@ -27,16 +27,26 @@ import RegionUserMenu from "@/components/region/RegionUserMenu";
 import RegionDepartureCard, { type RegionDeparture } from "@/components/region/RegionDepartureCard";
 
 const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
-const CLAIM_AUTOFILL_TEST_MODE = import.meta.env.VITE_CLAIM_AUTOFILL_TEST_MODE === "true";
-const CLAIM_AUTOFILL_PROVIDER = import.meta.env.VITE_CLAIM_AUTOFILL_PROVIDER ?? "supabase";
-const CLAIM_AUTOFILL_LOCAL_URL =
-  (import.meta.env.VITE_CLAIM_AUTOFILL_LOCAL_URL as string | undefined) ?? "http://127.0.0.1:8787/claim";
-const CLAIM_AUTOFILL_TEST_DATE = "2026-02-14";
-const CLAIM_AUTOFILL_TEST_MOBILE = "0701234567";
-const CLAIM_AUTOFILL_TEST_TICKET_ID = "2Y3CE88";
 
 const DEFAULT_FROM_STOP_ID = "1587"; // Malmö Triangeln
 const DEFAULT_TO_STOP_ID = "25315";  // København H
+
+const PAYOUT_LABELS: Record<string, string> = {
+  bank: "Bank transfer",
+  sms: "Värdekod via SMS",
+  email: "Värdekod via e-post",
+};
+
+// Mirror of the delay tiers ticked on the Skånetrafiken form (see useStartClaim).
+const delayTierLabel = (minutes: number | null | undefined, cancelled: boolean): string => {
+  if (cancelled) return "Cancelled (full compensation)";
+  const m = minutes ?? 0;
+  if (m < 20) return "Under 20 min — not claimable";
+  if (m < 40) return "20–39 min";
+  if (m < 60) return "40–59 min";
+  if (m < 120) return "60–119 min";
+  return "120 min or more";
+};
 
 const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
 
@@ -137,6 +147,7 @@ export default function SkanetrafikenDelayAlerts() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { startClaim, pending: submitting } = useStartClaim();
 
   const { data: stations = [] } = useStations();
   const stationOptions = useMemo(
@@ -166,6 +177,38 @@ export default function SkanetrafikenDelayAlerts() {
     date: selectedDate, // always a specific date — no 60-day bulk fetch
     onlyClaimable: true,
   });
+
+  // Look-up table so the dialog can recover the raw Journey row (carries
+  // journey_key, stop IDs, scheduled timestamps) from the displayed RegionDeparture.
+  const journeysByKey = useMemo(() => {
+    const m = new Map<string, Journey>();
+    for (const j of journeys) if (j.journey_key) m.set(j.journey_key, j);
+    return m;
+  }, [journeys]);
+
+  // Everything from the saved profile that will be printed on the claim.
+  // Missing entries mean an incomplete claim → Skånetrafiken can reject it.
+  const claimProfile = useMemo(() => {
+    const fields: { label: string; value: string }[] = [
+      { label: "Name", value: [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") },
+      { label: "Personnummer", value: profile?.claim_personnummer ?? "" },
+      {
+        label: "Address",
+        value: [profile?.street_address, [profile?.postal_code, profile?.city].filter(Boolean).join(" ")]
+          .filter(Boolean)
+          .join(", "),
+      },
+      { label: "Mobile", value: profile?.claim_mobile ?? "" },
+      { label: "Email", value: profile?.claim_email ?? "" },
+      { label: "Ticket ID", value: profile?.claim_ticket_id ?? "" },
+      {
+        label: "Payout method",
+        value: profile?.payout_method ? PAYOUT_LABELS[profile.payout_method] ?? profile.payout_method : "",
+      },
+    ];
+    const missing = fields.filter((f) => !f.value.trim()).map((f) => f.label);
+    return { fields, missing };
+  }, [profile]);
 
   const alerts = useMemo<RegionDeparture[]>(() => {
     const mapped = journeys.map(journeyToDeparture);
@@ -228,52 +271,34 @@ export default function SkanetrafikenDelayAlerts() {
     navigate(`/login?next=${encodeURIComponent("/regions/skanetrafiken/delay-alerts")}`);
   };
 
-  const openClaimFormWithFallback = async (dep: RegionDeparture) => {
+  const submitClaim = async (dep: RegionDeparture) => {
     if (!user) { promptLoginForClaim(); return; }
-    try {
-      setClaimActionStatus("Trying autofill bot...");
-      const requestBody = {
-        departureDate: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_DATE : dep.departureDate,
-        departureTime: dep.departureTime,
-        line: dep.line,
-        lineName: dep.lineName ?? "",
-        from: dep.departureStation,
-        to: dep.arrivalStation,
-        scheduledArrivalTime: dep.scheduledArrivalTime ?? null,
-        actualArrivalTime: dep.arrivalTime ?? null,
-        delayMinutes: dep.arrivalDelayMinutes ?? 0,
-        mobileNumber: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_MOBILE : (profile?.claim_mobile ?? null),
-        ticketId: CLAIM_AUTOFILL_TEST_MODE ? CLAIM_AUTOFILL_TEST_TICKET_ID : (profile?.claim_ticket_id ?? null),
-        personnummer: profile?.claim_personnummer ?? null,
-        email: profile?.claim_email ?? user.email ?? null,
-      };
-
-      let result: { success?: boolean; message?: string };
-      if (CLAIM_AUTOFILL_PROVIDER === "local") {
-        const response = await fetch(CLAIM_AUTOFILL_LOCAL_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
-        const data = (await response.json()) as { success?: boolean; message?: string };
-        if (!response.ok) throw new Error(data.message || `Local bot failed (${response.status})`);
-        result = data;
-      } else {
-        const { data, error } = await supabase.functions.invoke("claim-assistant", { body: requestBody });
-        if (error) throw error;
-        result = (data ?? {}) as { success?: boolean; message?: string };
-      }
-
-      if (!result.success) throw new Error(result.message || "autofill bot failed");
-      setClaimActionStatus(
-        CLAIM_AUTOFILL_TEST_MODE
-          ? "Autofill bot launched in test mode."
-          : "Autofill bot launched. Continue on the opened claim page."
-      );
-    } catch {
-      window.open(CLAIM_START_URL, "_blank", "noopener,noreferrer");
-      setClaimActionStatus("Autofill unavailable. Opened manual claim page.");
+    const journey = dep.journeyKey ? journeysByKey.get(dep.journeyKey) : undefined;
+    if (!journey) {
+      setClaimActionStatus("Could not match this row to a journey. Refresh and try again.");
+      return;
     }
+    setClaimActionStatus("Submitting…");
+    const result = await startClaim(journey);
+    if (result.ok) {
+      setClaimActionStatus("");
+      setClaimDialogOpen(false);
+      toast({
+        title: "Claim saved",
+        description: "Your claim is queued. We'll generate the filled Skånetrafiken form for you.",
+      });
+    } else {
+      setClaimActionStatus(result.error);
+      toast({
+        title: "Could not save claim",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openManualClaimPage = () => {
+    window.open(CLAIM_START_URL, "_blank", "noopener,noreferrer");
   };
 
   const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
@@ -481,7 +506,7 @@ export default function SkanetrafikenDelayAlerts() {
           <DialogHeader>
             <DialogTitle>Claim Assistant</DialogTitle>
             <DialogDescription>
-              Review this delay summary, then continue to the official claim page.
+              Review everything that will go on your claim, then submit. We'll generate the filled form.
             </DialogDescription>
           </DialogHeader>
 
@@ -500,6 +525,7 @@ export default function SkanetrafikenDelayAlerts() {
                       </div>
                     )}
                     <div className="cmt-dialog__summary">
+                      <p style={{ fontWeight: 700, marginBottom: 4 }}>Journey</p>
                       <p><b>Line:</b> {selectedAlert.line} {selectedAlert.lineName ?? ""}</p>
                       <p><b>Route:</b> {selectedAlert.departureStation} → {selectedAlert.arrivalStation}</p>
                       <p><b>Claim date:</b> {claimDate}</p>
@@ -508,6 +534,7 @@ export default function SkanetrafikenDelayAlerts() {
                       <p><b>Scheduled arrival:</b> {selectedAlert.scheduledArrivalTime ?? "—"}</p>
                       <p><b>Actual arrival:</b> {selectedAlert.arrivalTime ?? "—"}</p>
                       <p><b>Delay:</b> +{selectedAlert.arrivalDelayMinutes ?? 0} min</p>
+                      <p><b>Compensation tier:</b> {delayTierLabel(selectedAlert.arrivalDelayMinutes, selectedAlert.canceled)}</p>
                       {selectedAlert.canceled && (
                         <p style={{ color: "var(--cmt-skt-red)", fontWeight: 600 }}>Trip was cancelled.</p>
                       )}
@@ -515,6 +542,31 @@ export default function SkanetrafikenDelayAlerts() {
                   </>
                 );
               })()}
+
+              <div className="cmt-dialog__summary">
+                <p style={{ fontWeight: 700, marginBottom: 4 }}>Your details (from settings)</p>
+                {claimProfile.fields.map((f) => (
+                  <p key={f.label}>
+                    <b>{f.label}:</b>{" "}
+                    {f.value.trim() ? (
+                      f.value
+                    ) : (
+                      <span style={{ color: "var(--cmt-skt-red)" }}>— missing —</span>
+                    )}
+                  </p>
+                ))}
+              </div>
+
+              {claimProfile.missing.length > 0 && (
+                <div className="cmt-dialog__warn">
+                  These required details are missing: {claimProfile.missing.join(", ")}. The claim
+                  may be rejected without them.{" "}
+                  <Link to="/settings" style={{ textDecoration: "underline", fontWeight: 600 }}>
+                    Complete your settings
+                  </Link>{" "}
+                  first.
+                </div>
+              )}
 
               {isClaimOutsideTicketValidity(
                 selectedAlert.departureDate,
@@ -531,9 +583,18 @@ export default function SkanetrafikenDelayAlerts() {
                 type="button"
                 className="btn-cmt btn-cmt--primary"
                 style={{ width: "100%" }}
-                onClick={() => void openClaimFormWithFallback(selectedAlert)}
+                disabled={submitting || claimProfile.missing.length > 0}
+                onClick={() => void submitClaim(selectedAlert)}
               >
-                Open claim form
+                {submitting ? "Submitting…" : "Confirm & submit claim"}
+              </button>
+              <button
+                type="button"
+                className="btn-cmt btn-cmt--outline"
+                style={{ width: "100%" }}
+                onClick={openManualClaimPage}
+              >
+                Or open manual form instead
               </button>
               {claimActionStatus && (
                 <p style={{ fontSize: 12, color: "var(--cmt-muted)" }}>{claimActionStatus}</p>
