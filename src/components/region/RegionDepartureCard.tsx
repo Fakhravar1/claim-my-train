@@ -50,6 +50,19 @@ const parseTimeToSeconds = (value?: string | null) => {
   return hh * 3600 + mm * 60 + ss;
 };
 
+const SECONDS_PER_DAY = 86_400;
+
+// Clock-time subtraction loses the calendar date, so a leg that rolls past
+// midnight (e.g. scheduled 23:48, actual 00:11) comes out as a ~-24h delta.
+// Wrap the raw difference into [-12h, +12h] so it reads as the real ±minutes.
+// Train deltas are always well within half a day, so this is unambiguous.
+const wrapHalfDay = (seconds: number) => {
+  let s = seconds % SECONDS_PER_DAY;
+  if (s > SECONDS_PER_DAY / 2) s -= SECONDS_PER_DAY;
+  if (s < -SECONDS_PER_DAY / 2) s += SECONDS_PER_DAY;
+  return s;
+};
+
 const trimSeconds = (value?: string | null) => {
   if (!value) return "";
   const parts = value.split(":");
@@ -111,7 +124,7 @@ export default function RegionDepartureCard({ dep, action }: Props) {
   const depSchedSec = parseTimeToSeconds(dep.departureTime);
   const depRealSec = parseTimeToSeconds(dep.departureRealtimeTime ?? dep.departureTime);
   const depDeltaSeconds =
-    depSchedSec !== null && depRealSec !== null ? depRealSec - depSchedSec : 0;
+    depSchedSec !== null && depRealSec !== null ? wrapHalfDay(depRealSec - depSchedSec) : 0;
   const depDeltaMin =
     depDeltaSeconds === 0
       ? 0
@@ -124,7 +137,7 @@ export default function RegionDepartureCard({ dep, action }: Props) {
   const arrSchedSec = parseTimeToSeconds(arrScheduledRaw);
   const arrRealSec = parseTimeToSeconds(dep.arrivalTime);
   const arrDeltaSeconds =
-    arrSchedSec !== null && arrRealSec !== null ? arrRealSec - arrSchedSec : 0;
+    arrSchedSec !== null && arrRealSec !== null ? wrapHalfDay(arrRealSec - arrSchedSec) : 0;
   const arrDeltaMin =
     arrDeltaSeconds === 0
       ? 0
@@ -146,7 +159,9 @@ export default function RegionDepartureCard({ dep, action }: Props) {
     const [dh, dm] = dep.departureTime.split(":").map(Number);
     const [ah, am] = dep.arrivalTime.split(":").map(Number);
     if (![dh, dm, ah, am].some(Number.isNaN)) {
-      duration = Math.max(0, ah * 60 + am - (dh * 60 + dm));
+      let mins = ah * 60 + am - (dh * 60 + dm);
+      if (mins < 0) mins += 1440; // arrival rolled past midnight
+      duration = mins;
     }
   }
 
