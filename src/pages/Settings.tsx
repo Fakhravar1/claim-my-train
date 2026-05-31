@@ -10,7 +10,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useStations } from "@/hooks/useStations";
-import { useMyClaims } from "@/hooks/useMyClaims";
+import { useMyClaims, type ClaimOutcome } from "@/hooks/useMyClaims";
+import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -42,6 +43,22 @@ const CLAIM_STATUS_META: Record<string, { label: string; className: string }> = 
   error: { label: "Error", className: "border-destructive/40 bg-destructive/10 text-destructive" },
 };
 
+const CLAIM_OUTCOME_META: Record<string, { label: string; className: string }> = {
+  paid_out: { label: "Paid out", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
+  denied: { label: "Denied", className: "border-destructive/40 bg-destructive/10 text-destructive" },
+};
+
+const fmtStockholm = (iso: string | null) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(d);
+};
+
 const claimDelayLabel = (bucket: string | null, cancelled: boolean) => {
   if (cancelled) return "Cancelled";
   switch (bucket) {
@@ -58,18 +75,29 @@ const Settings = () => {
   const { toast } = useToast();
   const { data: stations = [] } = useStations();
   const { data: myClaims = [], isLoading: claimsLoading } = useMyClaims(user?.id);
+  const queryClient = useQueryClient();
+  const [outcomeSavingId, setOutcomeSavingId] = useState<string | null>(null);
 
-  const downloadClaimPdf = async (path: string) => {
-    const { data, error } = await supabase.storage.from("claims").createSignedUrl(path, 120);
-    if (error || !data?.signedUrl) {
+  // Lets the user record what Skånetrafiken decided. Setting outcome back to
+  // null clears it. Requires the claims UPDATE RLS policy (own rows).
+  const setClaimOutcome = async (id: string, outcome: ClaimOutcome) => {
+    setOutcomeSavingId(id);
+    try {
+      const { error } = await supabase
+        .from("claims")
+        .update({ outcome } as never)
+        .eq("id", id);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["my-claims"] });
+    } catch (error) {
       toast({
-        title: "Could not open the PDF",
-        description: error?.message ?? "No signed URL returned.",
+        title: "Could not update claim",
+        description: error instanceof Error ? error.message : "Update failed",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setOutcomeSavingId(null);
     }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
   const stopOptions = useMemo(
     () =>
@@ -706,43 +734,105 @@ const Settings = () => {
                     and hit “Start claim”.
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {myClaims.map((claim) => {
                       const meta = CLAIM_STATUS_META[claim.status] ?? {
                         label: claim.status,
                         className: "border-border bg-muted text-foreground",
                       };
+                      const outcomeMeta = claim.outcome ? CLAIM_OUTCOME_META[claim.outcome] : null;
+                      const saving = outcomeSavingId === claim.id;
                       return (
                         <div
                           key={claim.id}
-                          className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                          className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4"
                         >
-                          <div className="space-y-0.5">
-                            <p className="text-sm font-medium">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold">
                               {claim.origin_stop_name} → {claim.destination_stop_name}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {toIsoDate(claim.trip_start_date)} ·{" "}
-                              {claimDelayLabel(claim.delay_bucket, claim.was_cancelled)}
-                            </p>
-                            {claim.status === "error" && claim.error_message && (
-                              <p className="text-xs text-destructive">{claim.error_message}</p>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${meta.className}`}
+                              >
+                                {meta.label}
+                              </span>
+                              {outcomeMeta && (
+                                <span
+                                  className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${outcomeMeta.className}`}
+                                >
+                                  {outcomeMeta.label}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${meta.className}`}
+
+                          {/* What was filed on this claim (the stored journey snapshot). */}
+                          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
+                            <div>
+                              <dt className="text-muted-foreground">Travel date</dt>
+                              <dd>{toIsoDate(claim.trip_start_date)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Compensation tier</dt>
+                              <dd>{claimDelayLabel(claim.delay_bucket, claim.was_cancelled)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Filed</dt>
+                              <dd>{toIsoDate(claim.created_at)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Scheduled departure</dt>
+                              <dd>{fmtStockholm(claim.origin_scheduled)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Scheduled arrival</dt>
+                              <dd>{fmtStockholm(claim.destination_scheduled)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-muted-foreground">Actual arrival</dt>
+                              <dd>{claim.was_cancelled ? "Cancelled" : fmtStockholm(claim.destination_actual)}</dd>
+                            </div>
+                          </dl>
+                          <p className="text-[11px] text-muted-foreground">
+                            Personal details (name, personnummer, address, payout) are taken from your
+                            profile above at the time the form is generated.
+                          </p>
+
+                          {claim.status === "error" && claim.error_message && (
+                            <p className="text-xs text-destructive">{claim.error_message}</p>
+                          )}
+
+                          {/* Outcome controls */}
+                          <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                            <span className="text-xs text-muted-foreground">Outcome:</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={claim.outcome === "paid_out" ? "default" : "outline"}
+                              disabled={saving}
+                              onClick={() => void setClaimOutcome(claim.id, "paid_out")}
                             >
-                              {meta.label}
-                            </span>
-                            {claim.status === "generated" && claim.pdf_path && (
+                              Paid out
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={claim.outcome === "denied" ? "destructive" : "outline"}
+                              disabled={saving}
+                              onClick={() => void setClaimOutcome(claim.id, "denied")}
+                            >
+                              Denied
+                            </Button>
+                            {claim.outcome && (
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="outline"
-                                onClick={() => void downloadClaimPdf(claim.pdf_path as string)}
+                                variant="ghost"
+                                disabled={saving}
+                                onClick={() => void setClaimOutcome(claim.id, null)}
                               >
-                                Download PDF
+                                Clear
                               </Button>
                             )}
                           </div>
