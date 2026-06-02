@@ -66,3 +66,25 @@ models:
             - trip__start_date
             - origin_stop_id
             - destination_stop_id 
+
+  - name: fct_claimable_journeys
+    description: >
+        Discovery fact: one row per claimable journey leg (origin->destination on a
+        single trip) where the destination arrival is 20+ min late or cancelled.
+        Derived from fct_departures via filter-before-join; incremental, delete+insert
+        on journey_key, ~6h lookback to cover the GTFS-RT settling tail. NOT the same
+        as public.claims (filed claims) — this is the detected set a user MAY file on.
+    columns:
+        - name: journey_key
+          description: Surrogate key; hash of (trip_id, start_date, origin_stop, destination_stop).
+          data_tests:
+            - not_null
+            - unique
+    data_tests:
+        - dbt_utils.unique_combination_of_columns:
+            arguments:
+              combination_of_columns:
+                - trip__trip_id
+                - trip__start_date
+                - origin_stop_id
+                - destination_stop_id

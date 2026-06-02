@@ -1,5 +1,5 @@
 {{ config(
-    materialized='view'
+    materialized='table'
 ) }}
 
 with departures as (
@@ -12,6 +12,7 @@ arrivals as (
     select *
     from {{ ref('fct_departures') }}
     where event_type = 'arrival'
+    and (coalesce(arrival_delay, 0) >= 1200 or coalesce(canceled, false))
 )
 
 select
