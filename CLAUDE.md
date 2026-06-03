@@ -68,8 +68,9 @@ C:\Users\arian\trafiklab\          ← repo root
 │   │   │   ├── dim_active_stations.sql     ← stations referenced by fct_passenger_journeys (v1)
 │   │   │   └── dim_line.sql
 │   │   └── marts/
-│   │       ├── fct_departures.sql           ← stop-event grain (table)
-│   │       ├── fct_passenger_journeys.sql   ← journey-leg grain, v1 (table)
+│   │       ├── fct_departures.sql           ← stop-event grain (incremental table)
+│   │       ├── fct_passenger_journeys.sql   ← journey-leg grain, v1 (VIEW — all O-D legs, lazy)
+│   │       ├── fct_claimable_journeys.sql   ← claimable legs only (table; filter-before-join). See §13
 │   │       ├── v_active_stations.sql        ← public wrapper view (dbt-managed, schema='public')
 │   │       ├── v_passenger_journeys.sql     ← public wrapper view (dbt-managed, schema='public')
 │   │       └── _marts.yml                   ← model tests & docs
@@ -96,7 +97,8 @@ C:\Users\arian\trafiklab\          ← repo root
 - **Layered models:** `raw_` (untouched ingestion) → `stg_` (cleaning, type casting, no joins) → `dim_` / `fct_` (business-ready marts). Never edit raw; only derive from it.
 - **Fact grain:** stated explicitly on every fact. Currently:
   - `fct_departures`: one row per (trip, start_date, stop_id, event_type). Stop-event grain.
-  - `fct_passenger_journeys`: one row per (trip, start_date, origin_stop_id, destination_stop_id) where origin precedes destination in stop sequence. Journey-leg grain.
+  - `fct_passenger_journeys`: one row per (trip, start_date, origin_stop_id, destination_stop_id) where origin precedes destination in stop sequence. Journey-leg grain. **Now a VIEW** (see §13) — emits *all* O-D legs, read narrowly by the departures board.
+  - `fct_claimable_journeys`: same journey-leg grain, but **claimable legs only** (delay ≥ 1200 s or cancelled). The durable discovery set behind the delay-alerts page + claim filing. See §13.
 - **Surrogate keys:** every fact has one, generated from business keys via `dbt_utils.generate_surrogate_key([...])`. Never use ingestion artifacts (like raw row UUIDs) as the basis — must be deterministic from business keys.
 - **Grain tests:** every fact has a `dbt_utils.unique_combination_of_columns` test on its natural grain. Grain violations = silent data corruption.
 - **Degenerate dimensions:** business keys (trip_id, stop_id, etc.) live on the fact for traceability, alongside surrogate FKs to conformed dims.
@@ -104,7 +106,7 @@ C:\Users\arian\trafiklab\          ← repo root
 - **No business-rule thresholds hardcoded in SQL when they're meant to be parameterized.** Current v1 hardcodes 20-min threshold; this gets refactored into `dim_compensation_rules` when we add operator #2 — not before.
 - **No `CASE WHEN operator = '...'` branches in fact tables.** Operator-specific logic belongs in joined rule tables, not in fact SQL.
 - **Rules attach to claim authority + route characteristics, NOT to operator.** Operator concessions change; rules don't. The "operator-agnostic fact" pattern means `fct_passenger_journeys` carries `agency__operator` as descriptive context only — never as a rule key.
-- **Materialization strategy:** staging and dimensions are views; facts with expensive logic (dedup, self-joins) are tables with indexes on dominant query patterns. Per-model `{{ config(materialized='table') }}` in each file. Diagnose with `explain (analyze, buffers)` before changing materialization; never materialize speculatively.
+- **Materialization strategy:** staging and dimensions are views; facts with expensive logic (dedup, self-joins) are tables with indexes on dominant query patterns. Per-model `{{ config(materialized='table') }}` in each file. Diagnose with `explain (analyze, buffers)` before changing materialization; never materialize speculatively. **Updated by the storage refactor (§13):** `fct_departures` is the materialized substrate (incremental table, ~70 d retention target); `fct_passenger_journeys` is now a **view** (the full all-pairs fan-out never hits disk — the board reads it narrowly by one O-D + date); `fct_claimable_journeys` is the only journey-grain **table**, kept small because claimable is delay-bounded (~1.5% of legs), not stops-bounded. Rationale: the quadratic all-pairs fan-out is what doesn't scale to ~1000 stops, so we only persist the tiny claimable slice.
 - **Incremental facts:** `fct_departures` is `materialized='incremental'` (`delete+insert` on `departure_key`). A full rebuild scans all of `raw_departures` (EXPLAIN ANALYZE: ~79s, ~95% in the raw index scan, growing linearly with raw volume) — incremental cuts each run to the recently-active slice. **Incremental unit = the trip, not the row.** `stop_sequence` is a `row_number()` over `(trip__trip_id, trip__start_date)`, so it spans the whole trip; feeding it a partial trip silently misnumbers stops and corrupts the `fct_passenger_journeys` origin/destination pairing (verified: all 73k legs satisfy `origin_sequence < destination_sequence`, and `is_claimable` reads the delay off the sequence-selected destination row). The `is_incremental()` filter therefore selects whole trips touched since `max(ingested_at) - 1 hour`, never a flat row-level watermark. General rule: the incremental grain must be ≥ the coarsest key any window / aggregate / self-join spans.
 - **Presentation-layer wrapper views** in `public` (`v_passenger_journeys`, `v_active_stations`, future additions) are dbt models with `schema='public'`. The custom `generate_schema_name` macro in `dbt/macros/` makes the `schema='public'` config land objects directly in `public` instead of the dbt-default `dbt_dev_public`. Wrappers are part of the dbt DAG (via `ref(...)`), so they rebuild automatically when underlying facts/dims change. No manual recreation needed after materialization changes.
 
@@ -127,31 +129,30 @@ public.raw_departures (table — cron writes here)
        │ (dbt build, every ~15 min via GitHub Actions —
        │  in practice 1–4 hours apart due to GH scheduling jitter)
        ▼
-dbt_dev.fct_departures (incremental table)
-dbt_dev.fct_passenger_journeys (table)
+dbt_dev.fct_departures (incremental table — the materialized substrate)
+dbt_dev.fct_passenger_journeys (VIEW — recomputes the all-O-D self-join on each SELECT)
+dbt_dev.fct_claimable_journeys (table — claimable legs only)
 dbt_dev.dim_active_stations (table)
        │
        │ public.v_passenger_journeys, public.v_active_stations
-       │ (dbt-managed views — reads of these go straight to the underlying
-       │  tables, so freshness = "last dbt build" not "last raw insert")
+       │ (dbt-managed views — reads of these resolve to the underlying
+       │  fct_departures table, so freshness = "last dbt build" not "last raw insert")
        ▼
 Frontend (useStations, useJourneys hooks via Supabase JS client)
 ```
 
-**Critical fact about freshness:** dimension and staging models are views (always live), but the facts and `dim_active_stations` are materialized tables (stale until the next `dbt build` runs). The frontend cannot show a claimable journey until the scheduled Action has processed the new raw row into `fct_passenger_journeys`. Currently 1–4 hours of GH scheduling drift between ingest and visibility.
+**Critical fact about freshness:** dimension and staging models are views (always live), and `fct_passenger_journeys` is now a view too — but a view is only as fresh as the **table it reads**, and it reads `fct_departures`, which is a materialized incremental table (stale until the next `dbt build` runs). So freshness is still gated on `dbt build`: the frontend cannot show a journey until the scheduled Action has processed the new raw row into `fct_departures`. `fct_claimable_journeys` and `dim_active_stations` are likewise tables refreshed only by `dbt build`. Currently 1–4 hours of GH scheduling drift between ingest and visibility (the cause of the "no afternoon departures" symptom — last build sets the visible horizon).
 
 **Working:**
 - `raw_departures` ingestion from Trafiklab GTFS-RT via the `collect-raw-departures` edge function. Keep the deployed copy and `supabase/functions/collect-raw-departures/index.ts` in sync — drift between them is what masked the May 2026 Triangeln incident (§10). The table's unique constraint is `(trip__trip_id, trip__start_date, stop__id, scheduled, ingested_at, event_type)`. `event_type` MUST stay in both the constraint and the function's `onConflict` argument, otherwise arrival rows for intermediate stops collide with the same-trip departure row in the same upsert batch and get silently dropped by `ignoreDuplicates: true`.
 - Scheduled `dbt build` via `.github/workflows/dbt-run.yml` keeps `fct_*` and `dim_active_stations` tables fresh. Triggers: `schedule: */15` + `workflow_dispatch` (for manual runs from the Actions tab). Logs visible per-run in the GitHub Actions UI.
 - `stg_departures` cleaning layer.
-- `fct_departures` (incremental, `delete+insert` on `departure_key`) and `fct_passenger_journeys` (table) have indexes on dominant query patterns:
-  - `fct_departures`: `(trip__trip_id, trip__start_date, event_type, stop_sequence)` and `(event_type, stop__id)`. The composite includes `event_type` so the planner avoids re-filtering during the journey self-join.
-  - `fct_passenger_journeys`: `(trip__start_date)`, `(origin_local_date)`, `(origin_stop_id, destination_stop_id, origin_local_date)`, `(origin_stop_id, destination_stop_id, trip__start_date)`, and `(is_claimable)`. The date-only indexes serve the common "user landed on the page, no stops picked yet" query (the composites cannot, due to leftmost-prefix). `is_claimable` is a full B-tree, not partial — dbt-postgres `indexes` config has no `WHERE` clause support, and full B-tree is fine at ~22k rows.
+- `fct_departures` (incremental, `delete+insert` on `departure_key`) carries indexes on dominant query patterns: `(trip__trip_id, trip__start_date, event_type, stop_sequence)` and `(event_type, stop__id)`. The composite includes `event_type` so the planner avoids re-filtering during the journey self-join. **`fct_passenger_journeys` no longer carries indexes** — it's a view now (§13); its read performance comes from the date filter keeping the recomputed self-join tiny, plus `fct_departures`'s own indexes. The set of indexes the *old* `fct_passenger_journeys` table held [`(trip__start_date)`, `(origin_local_date)`, `(origin_stop_id, destination_stop_id, origin_local_date)`, `(origin_stop_id, destination_stop_id, trip__start_date)`, `(is_claimable)`] is the candidate set for `fct_claimable_journeys` if/when its read patterns warrant it (currently tiny, ~1,188 rows, so unindexed is fine).
 - **`trip__start_date` vs `origin_local_date` on `fct_passenger_journeys`.** Different concepts, distinction is load-bearing:
   - `trip__start_date` is the **GTFS service date** — degenerate dimension kept on the fact for traceability back to the feed. For a service "starting on the 23rd," GTFS-RT can include trips that physically run after midnight (e.g. 00:38 on the 24th Stockholm time).
   - `origin_local_date` is `(origin.scheduled at time zone 'Europe/Stockholm')::date` — the **calendar day the origin departure physically runs**, in Stockholm local time. This is what end users mean when they pick a date in the picker.
   - The frontend filters on `origin_local_date`, not `trip__start_date`. Filtering on `trip__start_date` produced a "picked the 24th, top card says 25 May" bug: service-24 trips that run on the 25th sorted first (descending by `origin_scheduled`) and led the list.
-  Frontend query time dropped from ~6s to sub-50ms post-materialization.
+  Frontend query time was ~6s when the board scanned an unmaterialized all-journeys path; it is kept low now by the narrow one-O-D-plus-date filter against the `fct_passenger_journeys` view, which bounds the recomputed self-join (the board does NOT scan all journeys). Claim discovery + the delay-alerts page read the small `fct_claimable_journeys` table instead.
 - `dim_stations`, `dim_line` views.
 - `dim_active_stations` view filters `dim_stations` to stops appearing as origin or destination in `fct_passenger_journeys`. Source for the frontend stations dropdown.
 - `fct_passenger_journeys` v1 claim logic:
@@ -272,7 +273,7 @@ Do v3's architecture work only when operator #2 forces the abstraction. Prematur
 
 - **The 72-hour rule is not yet modeled.** v1 will produce false positives for trips with pre-announced service changes. Document this in user-facing UI ("Claim will be reviewed for pre-announced changes") until v1.5 lands.
 - **`fct_departures` is incremental; `--full-refresh` reprocesses from whatever `raw_departures` still holds.** Today raw holds full history (<70 days), so a full-refresh is currently lossless. Once the planned 70-day raw prune is live (next entry), `--full-refresh` becomes destructive past that horizon — it rebuilds the fact only from surviving raw, permanently dropping older rows. Acceptable because the reklamation deadline is 60 days, but never `--full-refresh` expecting full history once pruning is on, and never prune raw below 70 days while compensation rules are still changing (you lose the ability to recompute corrected history when a rule is fixed — e.g. the unmodeled 72-hour rule).
-- **Raw retention not yet enforced; pending Pro upgrade.** `raw_departures` grows unbounded (303 MB / ~571k rows at ~6 weeks). Plan: daily `pg_cron` prune of rows older than 70 days, plus the `(ingested_at)` btree index (added 2026-06-01, migration `20260601120000_add_raw_departures_ingested_at_index.sql`) so both the prune and the incremental filter are index-scannable. 70 days of raw projects to ~550–600 MB — over the 500 MB free ceiling — so this lands only after Pro. Secondary lever: ~31% of raw row width is denormalised text labels (`route__name`, stop/route/agency names), re-derivable from dims by id, prunable when the ingestion path is next touched.
+- **Raw retention not yet enforced; pending Pro upgrade.** `raw_departures` grows unbounded (303 MB / ~571k rows at ~6 weeks). The storage refactor (§13) reframes the plan: raw becomes a **SHORT buffer (~3 days)** — just enough to cover the incremental lookback — not a 70-day store. (The earlier 70-day raw prune was sized for a v2 use case that's now dropped; at the ~1000-stop expansion target, 70 d of raw projects to **~7 GB**, which would blow Pro, so raw must stay short.) The `(ingested_at)` btree index (added 2026-06-01, migration `20260601120000_add_raw_departures_ingested_at_index.sql`) makes both the prune and the incremental filter index-scannable. Secondary lever: ~31% of raw row width is denormalised text labels (`route__name`, stop/route/agency names), re-derivable from dims by id, prunable when the ingestion path is next touched. Prune is a destructive `DELETE` — show plan before applying.
 - **Lovable host repo is decoupled from the working repo.** Production is served by Lovable from a companion repo (`Fakhravar1/claim-my-train-ab5b0f74`) that is *not* a Git remote of the working repo. The `mirror-to-lovable` GitHub Action keeps the companion's `main` in sync on every push, so this is no longer a foot-gun in normal operation. Two residual risks: (a) if the mirror Action fails silently or GitHub throttles its triggers, prod runs stale code — periodically eyeball the Actions tab; (b) if Lovable AI ever commits to the companion, the next mirror push fails as non-fast-forward — a loud tripwire, but it means someone has to investigate the divergence before the next deploy can land. Manual mirror procedure in §11 is the fallback.
 - **No analytics layer yet, by deliberate choice.** Metrics work is deferred until something usable ships. Don't volunteer dashboard work.
 - **Possibly-orphaned `claim-assistant` edge function.** Its source was deleted from the repo, but the *deployed* function may still be ACTIVE on Supabase (delete with `supabase functions delete claim-assistant --project-ref jnfwmdirvnqfpfhtipld`). Harmless while it lingers — nothing calls it — but it's dead weight tied to the removed bot path. Verify and delete if still present.
@@ -375,3 +376,61 @@ The `claim-worker/` (§3) runs via `.github/workflows/claim-pdf-worker.yml`. Tri
 - Lag (2015:953) om kollektivtrafikresenärers rättigheter
 - EU Regulation 2021/782 (long-distance rail rights, replaces 1371/2007 from 7 June 2023)
 - Kimball, *The Data Warehouse Toolkit*, 3rd ed.: fact grain, conformed dims, late-arriving facts (Ch. 19), bus matrix incremental development
+
+---
+
+## 13. Storage architecture refactor (in progress — folded in from handover 2026-06-02)
+
+A multi-step storage redesign driven by the ~1000-stop expansion target (the current ~9-stop slice already showed ~91 stations; full Skåne train network ~1000). Capturing it here so the partial state is recoverable.
+
+### The problem it solves
+- **raw_departures** at the old 70-day retention projects to **~7 GB** at 1000 stops (poll-snapshot bloat) — blows the Pro ceiling.
+- **fct_passenger_journeys** is an all-O-D self-join; legs scale with **stops-per-trip squared** (legs ≈ C(stops,2); empirically avg 4.21 stops/trip → 8.01 legs/trip vs predicted C(n,2)=8.47). At 1000 stops with full routes this is multi-GB.
+- Only **~1.56% of legs are ever claimable** (1,188 of ~75k), concentrated in 95 of 9,416 trip-days. Persisting all legs to keep ~1.5% is the waste.
+- Key correction made during design: "fct will get huge" was inverted — **raw is ~10× fct_departures** (303 MB vs 30 MB; 571k vs 100k rows), because dedup collapses redundant polls. **Raw is the bloat lever, not fct.**
+
+### Target architecture (agreed) — three tiers by retention, each derivable from the tier below
+- **raw_departures** → SHORT buffer (~3 days). Just enough to cover the incremental lookback. (See §10 — the old 70-day plan is dropped.)
+- **fct_departures** → SUBSTRATE, ~70 days. **NON-NEGOTIABLE:** retention must cover the 60-day reklamation deadline + margin, because claimable legs must stay *derivable* as long as a user can still file. Shortening it below ~70 d silently breaks claim filing.
+- **fct_passenger_journeys** → VIEW (no storage). Lazy all-pairs, read narrowly (one O-D + date) by the departures board. Quadratic fan-out never hits disk.
+- **fct_claimable_journeys** → thin TABLE, ~70 days. The durable discovery set. Tiny (~140 MB even at 1000 stops) because claimable is delay-bounded, not stops-bounded.
+
+### DONE (committed)
+- `fct_departures` incremental (delete+insert on `departure_key`, trip-grain `is_incremental()` filter, 1 h lookback). Verified.
+- `raw_departures(ingested_at)` btree index applied + migration committed.
+- `.gitignore` / repo hygiene (see §11 Repo hygiene).
+- **`fct_passenger_journeys` converted to a VIEW** (`materialized='view'`, indexes removed). Confirmed committed (`git show HEAD`). The board reads it with a narrow one-O-D-plus-date query so the recomputed self-join stays tiny.
+- **`fct_claimable_journeys` committed as a plain full-refresh TABLE** (`materialized='table'`, claimable-only, filter-before-join: the `arrivals` CTE applies `arrival_delay >= 1200 or canceled` *before* the join so the full fan-out never forms). Tracked, with a `journey_key` grain test in `_marts.yml`. Full-refresh build verified to produce **exactly** the same 1,188 claimable legs as the old `fct_passenger_journeys where is_claimable` (zero set difference both ways). Restructure is semantically equivalent, performance-only.
+
+### PARKED — making `fct_claimable_journeys` incremental
+The incremental version is **not** committed (current committed model is the full-refresh table above). It was debugged through two errors worth remembering:
+- *"aggregate not allowed in WHERE"* — malformed nesting of the `max(ingested_at)` watermark subquery.
+- *"column ingested_at does not exist"* — the watermark reads `max(ingested_at)` from `{{ this }}` (the target), but the model wasn't emitting `ingested_at`. Fix: carry `greatest(origin.ingested_at, dest.ingested_at) as ingested_at` in the final select.
+
+Watermark concept (NOT abandoned): lookback measures from `max(ingested_at)` of the target's own rows (last successful run) minus a **6 h margin** = GTFS-RT settling tail (~2 h) + GH-Actions build gap (~4 h). It must measure on **ingestion time, not service date**, because a delay keeps getting revised for ~2 h *after* the train runs, and a late revision is exactly what flips a leg claimable.
+
+**The parked decision — the retraction problem.** Claimable-only + delete+insert keyed on `journey_key` cannot retract: a leg that *stops* being claimable (delay revised back below 20 min) produces no row next run, so delete+insert never deletes the stale claimable row — it lingers wrongly. Three resolutions:
+- **A.** `pre_hook` deletes the whole reprocessed trip-window before insert; insert claimable-only. Exactly correct every run, but adds a moving part and duplicates the window logic between hook and model.
+- **B.** Plain claimable-only delete+insert (accept rare stale row) + a **scheduled full-refresh** to reconcile. Table is tiny (~1,188 rows, ~3 s rebuild; ~140 MB at 1000 stops), so full-refresh is nearly free. **Lean recorded: B** — retraction (e.g. a 21-min delay corrected to 18) is rare, the 6 h window absorbs most volatility before capture, and full-refresh is cheap at this size. Matches the anti-premature-complexity instinct (§5/§9).
+- **C (surfaced this session).** Don't go claimable-only at all: keep emitting *all* legs incrementally with `is_claimable` as a column. Because every leg of a touched trip reappears each batch, a revised-down leg comes back as `is_claimable=false` and delete+insert *self-heals* — retraction is free. Cost: it's the full quadratic table again (the thing the refactor is trying to avoid at 1000 stops), and an orphaned-leg edge case if a stop vanishes entirely from the feed. So C trades the retraction problem for the scaling problem; it's the right shape only if the table stays a flagged-all-legs design rather than claimable-only.
+
+Decision (A vs B vs C) **not yet made** — required before any incremental `fct_claimable_journeys` goes on the schedule. Not a blocker for anything already committed.
+
+### OPEN TO-DOs (parked, none blocking)
+1. Decide retraction handling (A/B/C above). Lean = B (keeps the small claimable table) unless we accept the full table (C).
+2. **Departures board source.** Claimable-only can't feed the board (`onlyClaimable:false`) — board reads the `fct_passenger_journeys` VIEW narrowly; delay-alerts + claim filing read `fct_claimable_journeys`. Confirm `useJourneys` points each page at the right source.
+3. **Curate any public wrapper over the claimable table** to EXCLUDE plumbing columns (`ingested_at`, `origin_sequence`, `destination_sequence`, …) per the existing curated-column convention.
+4. **`fct_passenger_journeys` VIEW grain test.** Its `unique_combination_of_columns` test now re-runs the full self-join on every `dbt test` (costly at scale). Decide drop (source `fct_departures` grain is already tested, so the view can't violate a grain its source doesn't) vs keep. Lean = drop.
+5. **`_marts.yml` deprecation.** The `fct_departures` test entry still uses top-level `combination_of_columns`; nest under `arguments:` (dbt 2.x). Trivial.
+6. **null `arrival_delay` handling.** `coalesce(arrival_delay,0)` excludes unsettled delays — safe ONLY because the 6 h lookback re-pulls and re-evaluates. If lookback ever shrinks below the settling tail, this becomes permanent missed claims. Coupling to remember.
+7. **`arrival_delay` is a misnomer** (confirmed via data this session): it's the signed deviation of THIS ROW's event, not specifically arrival — exactly `realtime - scheduled` per row, differing by event_type (arrival avg ~46 s, departure avg ~104 s). The self-joins are correct because they read the value off the arrival-side row (`dest`). Rename to `delay_seconds` / `event_delay_seconds` OR document in `_marts.yml`; isolated commit, check downstream refs first. Not urgent.
+8. **raw 3-day prune + fct_departures ~70-day prune** as pg_cron jobs — only after Pro upgrade. Destructive DELETEs; show plan before applying. `--full-refresh` becomes destructive past the raw horizon once pruning is live (already noted §10).
+9. **fct_departures column-width prune** (~31% of row width is denormalised text labels, re-derivable from dims by id). Secondary lever, for when the ingestion path is next touched.
+
+### DROPPED FROM SCOPE (for now)
+- v2 "could you have caught a better alternative" — dropped. (It was the only consumer of realtime *change history*; its removal is why a short raw buffer + final-state fct is sufficient.)
+- 72-hour pre-announcement rule — dropped for now (still tracked as a correctness gap in §10 / roadmap §9 v1.5).
+
+### Verification queries to re-run when resuming
+- **Equivalence:** claimable count from `fct_claimable_journeys` should equal `count(*) filter (where is_claimable)` from the `fct_passenger_journeys` view, with zero set-difference both ways on `journey_key`.
+- **Incremental idempotency** (once incremental lands): run incrementally twice over unchanged data; total count stable (no doubling ⇒ delete+insert is idempotent).
