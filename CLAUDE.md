@@ -434,3 +434,48 @@ Decision (A vs B vs C) **not yet made** — required before any incremental `fct
 ### Verification queries to re-run when resuming
 - **Equivalence:** claimable count from `fct_claimable_journeys` should equal `count(*) filter (where is_claimable)` from the `fct_passenger_journeys` view, with zero set-difference both ways on `journey_key`.
 - **Incremental idempotency** (once incremental lands): run incrementally twice over unchanged data; total count stable (no doubling ⇒ delete+insert is idempotent).
+
+---
+
+## 14. Realtime data source cheatsheet (region × mode) — folded in from the 2026-06 source investigation
+
+Think in terms of **"I want to add <mode> in <city> — is it possible, and which API?"** — not operators. "Possible" here means the data both **shows up AND reports genuine delays** (not hollow). Empirically verified June 2026 with live API tests.
+
+### The only 3 APIs worth using
+- **REST** — Trafiklab Realtime APIs (`realtime-api.trafiklab.se`), the current ingestion source (stop-board, all modes). Key (used in tests): the `Trafiklab Realtime APIs` Bronze key.
+- **Trafikverket** — Trafikverket Öppet API (`api.trafikinfo.trafikverket.se/v2/data.json`), all Swedish **rail**, every operator, operator-independent (measured at track). POST XML query, `TrainAnnouncement` objecttype.
+- **Västtrafik** — Västtrafik's own portal (`developer.vasttrafik.se`), separate signup/OAuth2. Only door to Göteborg city transit.
+
+(Also explored but **not** recommended as primary: GTFS Sweden 3 RT / GTFS Regional RT — Swedish-only, border-clipped, piecemeal operator onboarding; **KoDa** — historical archive back to 2020, great for Skåne-internal backfill + the 72-h rule, but no Denmark / no SJ realtime / no Västtrafik; **ResRobot** — realtime is dead/unreliable, good only for stop lookup + journey planning; **SIRI** — derived from GTFS Sweden 3, same gaps.)
+
+### Cheatsheet (✅ = verified genuine delays)
+
+| Want to add… | Possible? | Use | Tested |
+|---|---|---|---|
+| Stockholm — metro | ✅ | **REST** | ✅ Slussen 26/79, T-Centralen 26/100 delayed |
+| Stockholm — bus | ✅ | **REST** | ✅ Slussen 16/52 |
+| Stockholm — tram | ✅ | **REST** | ✅ Alvik 4/33, Sundbyberg 7/18 |
+| Stockholm — train (pendeltåg, SJ, …) | ✅ | **Trafikverket** | ✅ (REST is **hollow** for all Stockholm trains: Flemingsberg/Sundbyberg 0 nonzero) |
+| Malmö — bus | ✅ | **REST** | ✅ 16/103 |
+| Malmö — train | ✅ | **REST** (Öresundståg) / **Trafikverket** (all incl. Pågatåg) | ✅ |
+| Malmö → Copenhagen — train (Danish stops) | ✅ | **REST** (only cross-border source) | ✅ København arr +1328 s |
+| Göteborg — train | ✅ | **Trafikverket** | ✅ (REST genuine only for Öresundståg there) |
+| Göteborg — tram | ❌ in Trafiklab → only via **Västtrafik** | **Västtrafik** own API | ✅ REST hollow 0/122 |
+| Göteborg — bus | ❌ in Trafiklab → only via **Västtrafik** | **Västtrafik** own API | ✅ REST hollow 0/49 |
+| Other Swedish city — any **train** | ✅ | **Trafikverket** (universal rail) | — |
+
+### The rules behind it
+1. **City transit (metro/tram/bus) in Stockholm or Malmö → REST.** Genuine.
+2. **City transit in Göteborg → Västtrafik's own API.** Nothing in Trafiklab has it (incl. the all-vehicles GPS map) — Västtrafik doesn't publish realtime to Samtrafiken/Trafiklab.
+3. **Any Swedish train → Trafikverket** is the safe universal choice (every operator, every region, genuine + real cancellations). Use **REST instead only for the Danish side** of the Öresund corridor — Trafikverket stops at the national border (København is Banedanmark).
+
+### Why coverage is supplier-dependent (the non-obvious bit)
+A station board in these APIs is **not measured at the station** — it's *assembled* per-train from whatever realtime feed covers that train. If the operator-mode hasn't been onboarded to the feed the API is built on, that row falls back to the scheduled time **but still sets `is_realtime=true`** → a "hollow" row (delay always 0). REST is built on GTFS Sweden 3, whose realtime onboarding is **piecemeal**: genuine for SL metro/bus/tram, Skånetrafiken buses, and Öresundståg; **hollow** for SJ/Mälartåg/Arlanda/Snälltåget/Vy/Pågatåg trains and **all** Västtrafik. Trafikverket is the exception that behaves like you'd expect a station board to — because it measures the **infrastructure** (track circuits), independent of operator.
+
+### MANDATORY check before trusting any new city/mode
+`is_realtime=true` is **not** a guarantee of real data. Before wiring up a new region/mode, pull that stop+mode and confirm **`realtime <> scheduled` (nonzero `delay`) on a meaningful share of rows**. All-exactly-zero across many rows = hollow → switch APIs. Historical proof of the trap: `fct_departures` held **57,554 Pågatåg rows and 1,822 SJ rows, 0.0% with any nonzero delay**, all `is_realtime=true` — while VR/Öresundståg was 91.2% nonzero.
+
+### Per-API catches
+- **REST:** genuine only where onboarded (above); retention ~18–24 h backward (rolling, not multi-day) — capture live, can re-query within ~a day, **cannot** backfill older. `canceled` flag is unreliable (real cancellations arrive as `alerts` text).
+- **Trafikverket:** rail only (no metro/tram/bus); genuine for all rail incl. real cancellations (`Canceled=True`); live retention ~2 days → **Lastkajen** for older history; own query language + `LocationSignature`/`AdvertisedTrainIdent` IDs (no GTFS `stop_id`/`trip_id` — needs a crosswalk to stitch a Swedish Trafikverket leg onto a Danish REST leg by train number + time).
+- **Västtrafik:** separate OAuth2 registration; the only source for Göteborg trams/buses (Planera Resa v4 for realtime departures, an unpublished `/fpos/v1/positions` for GPS).
