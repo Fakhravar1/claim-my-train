@@ -88,3 +88,29 @@ models:
                 - trip__start_date
                 - origin_stop_id
                 - destination_stop_id
+
+  - name: fct_stitched_journeys
+    description: >
+        Cross-feed train journeys built by pairing int_stop_events (TV Swedish stops +
+        REST Danish stops): an origin DEPARTURE joined to a later ARRIVAL of the same
+        train number, within a 12h window (handles cross-midnight; excludes next-day
+        recurrence). MVP corridor: Malmö C dep (TV) -> København H arr (REST). Destination
+        delay drives is_claimable (20+ min or cancelled). Separate from the REST-only
+        fct_passenger_journeys path.
+    columns:
+        - name: journey_key
+          description: Surrogate key; hash of (train_number, service_date, origin_stop, destination_stop).
+          data_tests:
+            - not_null
+            - unique
+        - name: is_claimable
+          description: True if destination delay >= 20 min OR train cancelled.
+          data_tests: [not_null]
+    data_tests:
+        - dbt_utils.unique_combination_of_columns:
+            arguments:
+              combination_of_columns:
+                - train_number
+                - service_date
+                - origin_stop_id
+                - destination_stop_id
