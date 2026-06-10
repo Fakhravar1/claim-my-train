@@ -63,5 +63,21 @@ sources:
     - name: track_at_location
     - name: modified_time
     - name: ingested_at
+- name: reference
+  schema: public
+  description: "Reference / crosswalk tables — built out-of-band (edge functions), not dbt-managed"
+  tables:
+  - name: ref_stations
+    description: "Trafikverket <-> REST station crosswalk, built by the build-ref-stations edge function (§15)"
+    columns:
+    - name: tv_signature
+      description: "Trafikverket LocationSignature (PK)"
+    - name: rest_area_id
+      description: "REST/ResRobot 740... area id; numeric tail = REST short stop__id"
+    - name: station_name
+    - name: rest_name
+    - name: resolved
+    - name: name_match
+    - name: match_distance_m
     
 
