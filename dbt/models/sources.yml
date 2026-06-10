@@ -41,5 +41,27 @@ sources:
     - name: alerts 
     - name: ingested_at
     # - name: UNIQUE ( trip__start_date, stop__id, scheduled, ingested_at)
+  - name: raw_train_announcements
+    description: "Trafikverket TrainAnnouncement rows (station-event grain), ingested by collect-train-announcements"
+    columns:
+    - name: activity_id
+      description: "Stable per-announcement id; upsert key"
+    - name: advertised_train_ident
+    - name: location_signature
+    - name: activity_type
+    - name: scheduled_time
+    - name: estimated_time
+    - name: actual_time
+    - name: canceled
+    - name: deleted
+    - name: operator
+    - name: train_owner
+    - name: information_owner
+    - name: from_location
+    - name: to_location
+    - name: via_from_location
+    - name: track_at_location
+    - name: modified_time
+    - name: ingested_at
     
 
