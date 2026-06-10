@@ -1,49 +1,26 @@
 {{ config(materialized='view') }}
 
--- int_stop_events  (DRAFT — not yet wired into fct_departures)
--- The conforming layer: merges the two realtime feeds into one stop-event set.
---   * stg_departures            (REST)  — all modes, only cross-border source, but hollow for some Swedish rail
---   * stg_train_announcements   (TV)    — all Swedish rail, genuine track-measured delay, dies at the border
+-- int_stop_events
+-- Disjoint union of train stop-events across the two feeds. No precedence/overlap
+-- resolution: the feeds cover SEPARATE territory, so they don't compete.
+--   * TV   (stg_train_announcements) — Swedish stops, genuine track-measured delay
+--   * REST (stg_departures)          — DANISH stops only (the cross-border leg);
+--                                       REST is the Danish-side / non-Swedish-rail source
 --
--- Grain: one row per conformed stop-event (train_number, station_id, event_type, service_date).
--- Verified: a train hits a station once per run with one arrival + one departure (train 1061 @ Malmö C).
+-- Grain: one row per (train_number, station_id, event_type, service_date).
+-- Downstream pairs these into cross-border journeys by (train_number, service_date),
+-- ordering origin/destination by scheduled time. Stitch key verified: a train keeps
+-- the same number across the border (97.9% of København H arrivals match a Malmö C
+-- departure within REST), and TV uses that same number on the Swedish side.
 --
--- Conformed station key = REST's native short stop__id (e.g. 3, 1586, 1587), NOT the 740... form.
--- REST strips the 740 prefix and Danish stops reuse the short namespace (København H = 25315),
--- so reconstructing 740 would fabricate/collide. TV maps INTO the short id via the verified identity
--- right(ref_stations.rest_area_id, 6)::int = stop__id, gated to 740-prefixed (Swedish) ids only.
---
--- Precedence: TV outranks REST. No geographic branching needed — coverage gaps make it fall out:
---   Swedish stop, both present -> TV wins (genuine track data, trustworthy canceled flag)
---   Danish stop -> TV absent   -> REST wins by default
---   tram/boat (future)         -> no TV row -> REST wins
--- A single window does double duty: cross-source precedence (source_priority) AND the §5
--- intra-source latest-poll dedup (ingested_at desc). The surviving row carries the winner's
--- ingested_at, which is the freshest signal an incremental fct should watermark on.
+-- station_id is REST's native short stop__id (3, 1586, 1587 / DK 25315). TV maps in via
+-- right(ref_stations.rest_area_id,6)::int = stop__id, gated to 740-prefixed (Swedish) ids.
 
-with rest as (
+with tv as (   -- Swedish stop-events
 
     select
-        stop__id::int                                       as station_id
-        ,trip__technical_number::text                       as train_number     -- REST stores this as integer; conform to text
-        ,event_type
-        ,(scheduled at time zone 'Europe/Stockholm')::date  as service_date     -- physical local date of the event (§6)
-        ,scheduled
-        ,realtime
-        ,arrival_delay                                      as delay_seconds    -- signed per-event deviation (the §13 misnomer fixed)
-        ,canceled
-        ,ingested_at
-        ,'rest'                                             as source
-        ,2                                                  as source_priority
-    from {{ ref('stg_departures') }}
-
-),
-
-tv as (
-
-    select
-        right(r.rest_area_id, 6)::int                       as station_id       -- = REST short stop__id for Swedish stops
-        ,t.advertised_train_ident                           as train_number     -- already text
+        right(r.rest_area_id, 6)::int                       as station_id
+        ,t.advertised_train_ident                           as train_number
         ,t.event_type
         ,(t.scheduled at time zone 'Europe/Stockholm')::date as service_date
         ,t.scheduled
@@ -52,27 +29,48 @@ tv as (
         ,t.canceled
         ,t.ingested_at
         ,'tv'                                               as source
-        ,1                                                  as source_priority
     from {{ ref('stg_train_announcements') }} t
     join {{ source('reference', 'ref_stations') }} r
         on  r.tv_signature = t.location_signature
-        and r.rest_area_id ~ '^740[0-9]{6}$'                -- the crosswalk staging couldn't do; Swedish stops only
-    where t.event_type is not null                          -- guard: any unmapped ActivityType drops out rather than poisoning the key
+        and r.rest_area_id ~ '^740[0-9]{6}$'                -- Swedish stops only
+    where t.event_type is not null
 
 ),
 
-ranked as (
+rest as (      -- Danish stop-events ONLY — REST is the Danish-side leg for trains
+
+    select
+        stop__id::int                                       as station_id
+        ,trip__technical_number::text                       as train_number
+        ,event_type
+        ,(scheduled at time zone 'Europe/Stockholm')::date  as service_date
+        ,scheduled
+        ,realtime
+        ,arrival_delay                                      as delay_seconds
+        ,canceled
+        ,ingested_at
+        ,'rest'                                             as source
+    from {{ ref('stg_departures') }}
+    where stop__id in ('25315')                             -- Danish corridor stops (MVP: København H); extend as corridor grows
+      and is_realtime = true
+      and route__transport_mode = 'TRAIN'
+
+),
+
+-- intra-source latest-poll dedup (REST polls an event many times; §5 late-arriving fact).
+-- No cross-source contention: territories are disjoint, so each key has one source.
+deduped as (
 
     select
         *
         ,row_number() over (
             partition by train_number, station_id, event_type, service_date
-            order by source_priority asc, ingested_at desc  -- TV wins; then newest poll
+            order by ingested_at desc
         ) as rn
     from (
-        select * from rest
-        union all
         select * from tv
+        union all
+        select * from rest
     ) u
 
 )
@@ -87,7 +85,7 @@ select
     ,realtime
     ,delay_seconds
     ,canceled
-    ,source                                                 -- degenerate dim: which feed won this event
-    ,ingested_at                                            -- winner's; the watermark signal for a downstream incremental fct
-from ranked
+    ,source                                                 -- 'tv' (Swedish) | 'rest' (Danish) — degenerate dim
+    ,ingested_at
+from deduped
 where rn = 1
