@@ -31,7 +31,15 @@ def main() -> int:
             if not profile:
                 raise RuntimeError("no profile row for user")
 
-            pdf_bytes = fill(claim, profile)
+            # The form requires a signature. Prefer the path snapshotted on the
+            # claim (what the user authorised at filing time); fall back to the
+            # current profile. Fail loudly rather than produce an unsigned form.
+            sig_path = claim.get("signature_path") or profile.get("signature_path")
+            if not sig_path:
+                raise RuntimeError("no signature on file — cannot produce a signed form")
+            sig_bytes = sb.storage.from_("signatures").download(sig_path)
+
+            pdf_bytes = fill(claim, profile, sig_bytes)
             path = f'{claim["user_id"]}/{cid}.pdf'
 
             sb.storage.from_(BUCKET).upload(

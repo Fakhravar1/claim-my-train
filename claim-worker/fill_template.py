@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
 from pypdf import PdfReader, PdfWriter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +51,31 @@ def _fmt_time(dt):
     return dt.strftime("%H:%M") if dt else ""
 
 
-def fill(claim: dict, profile: dict) -> bytes:
+# Signature line on the form: a rule at top=536.3 spanning x 414.3 -> 566.2,
+# with the "Underskrift" label printed beneath it. The drawn signature sits
+# just above that rule.
+SIG_LINE_TOP = 536.3
+SIG_BOX_X = 416.0
+SIG_BOX_W = 150.0
+SIG_BOX_H = 30.0
+
+
+def _draw_signature(c, sig_bytes):
+    """Stamp the user's signature PNG above the Underskrift line, preserving
+    aspect ratio and resting its baseline on the rule."""
+    if not sig_bytes:
+        return
+    img = ImageReader(io.BytesIO(sig_bytes))
+    iw, ih = img.getSize()
+    if iw <= 0 or ih <= 0:
+        return
+    scale = min(SIG_BOX_W / iw, SIG_BOX_H / ih)
+    w, h = iw * scale, ih * scale
+    bottom = (PAGE_H - SIG_LINE_TOP) + 2  # reportlab y; +2 lifts strokes off the rule
+    c.drawImage(img, SIG_BOX_X, bottom, width=w, height=h, mask="auto")
+
+
+def fill(claim: dict, profile: dict, sig_bytes: bytes | None = None) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     c.setFillColorRGB(0.10, 0.30, 0.85)  # blue, to distinguish from printed labels
@@ -123,6 +148,9 @@ def fill(claim: dict, profile: dict) -> bytes:
     # --- Consent boxes (measured rect centres) ---
     draw(31,  527, "X")   # Jag intygar att uppgifterna är sanningsenliga
     draw(233, 527, "X")   # Jag har läst villkoren och accepterar dem
+
+    # --- Signature (above the Underskrift line) ---
+    _draw_signature(c, sig_bytes)
 
     c.save()
     buf.seek(0)

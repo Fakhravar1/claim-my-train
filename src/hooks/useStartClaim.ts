@@ -22,7 +22,10 @@ function pickDelayBucket(minutes: number | null | undefined, cancelled: boolean)
 export function useStartClaim() {
   const [pending, setPending] = useState(false);
 
-  async function startClaim(journey: Journey): Promise<Result> {
+  async function startClaim(
+    journey: Journey,
+    signaturePath?: string | null
+  ): Promise<Result> {
     setPending(true);
     try {
       const { data: userResp } = await supabase.auth.getUser();
@@ -30,6 +33,10 @@ export function useStartClaim() {
 
       const payload = {
         user_id: userResp.user.id,
+        // Per-filing consent audit: clicking confirm authorised this specific
+        // form, signed with the signature on file at this moment.
+        consented_at: new Date().toISOString(),
+        signature_path: signaturePath ?? null,
         journey_key: journey.journey_key ?? "",
         trip_start_date: journey.trip__start_date ?? "",
         origin_stop_id: journey.origin_stop_id ?? "",

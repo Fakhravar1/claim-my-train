@@ -1,4 +1,5 @@
 reportlab>=4.0,<5
+pillow>=10.0  # reportlab needs PIL to decode the transparent signature PNG (mask="auto")
 pypdf>=4.0,<6
 supabase>=2.4,<3
 tzdata>=2024.1  # zoneinfo has no bundled tz DB on Windows; harmless on Linux

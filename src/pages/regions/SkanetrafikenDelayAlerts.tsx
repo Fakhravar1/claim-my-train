@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { SAMS_TO_GTFS } from "@/constants/stops";
 import { useStations } from "@/hooks/useStations";
 import { useJourneys, type Journey } from "@/hooks/useJourneys";
@@ -145,6 +146,7 @@ export default function SkanetrafikenDelayAlerts() {
   const [selectedAlert, setSelectedAlert] = useState<RegionDeparture | null>(null);
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
   const [claimActionStatus, setClaimActionStatus] = useState("");
+  const [sigPreviewUrl, setSigPreviewUrl] = useState<string | null>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -208,10 +210,31 @@ export default function SkanetrafikenDelayAlerts() {
         label: "Payout method",
         value: profile?.payout_method ? PAYOUT_LABELS[profile.payout_method] ?? profile.payout_method : "",
       },
+      { label: "Signature", value: profile?.signature_path ? "On file" : "" },
     ];
     const missing = fields.filter((f) => !f.value.trim()).map((f) => f.label);
     return { fields, missing };
   }, [profile]);
+
+  // Fetch a short-lived signed URL for the signature preview when the dialog
+  // opens, so the user sees the exact mark that will be stamped on the form.
+  useEffect(() => {
+    let active = true;
+    const path = profile?.signature_path;
+    if (!claimDialogOpen || !path) {
+      setSigPreviewUrl(null);
+      return;
+    }
+    supabase.storage
+      .from("signatures")
+      .createSignedUrl(path, 60 * 10)
+      .then(({ data }) => {
+        if (active) setSigPreviewUrl(data?.signedUrl ?? null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [claimDialogOpen, profile?.signature_path]);
 
   // Departures this user has already filed a claim for — proactive duplicate
   // guardrail (the DB unique constraint is the hard backstop). journey_key
@@ -291,7 +314,7 @@ export default function SkanetrafikenDelayAlerts() {
       return;
     }
     setClaimActionStatus("Submitting…");
-    const result = await startClaim(journey);
+    const result = await startClaim(journey, profile?.signature_path ?? null);
     if (result.ok) {
       setClaimActionStatus("");
       setClaimDialogOpen(false);
@@ -579,6 +602,16 @@ export default function SkanetrafikenDelayAlerts() {
                     )}
                   </p>
                 ))}
+                {sigPreviewUrl && (
+                  <div style={{ marginTop: 6 }}>
+                    <p style={{ marginBottom: 2 }}>This signature will be affixed to the form:</p>
+                    <img
+                      src={sigPreviewUrl}
+                      alt="Your signature"
+                      style={{ height: 56, width: "auto", maxWidth: "100%", background: "#fff", borderRadius: 6, border: "1px solid var(--cmt-border, #ddd)", padding: 2 }}
+                    />
+                  </div>
+                )}
               </div>
 
               {claimProfile.missing.length > 0 && (

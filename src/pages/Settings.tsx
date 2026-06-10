@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,7 @@ import {
   validateClaimProfile,
   type ClaimProfileErrors,
 } from "@/lib/claimProfileValidation";
+import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 
 const PAYOUT_LABELS: Record<string, string> = {
   bank: "Bank transfer",
@@ -71,7 +72,7 @@ const claimDelayLabel = (bucket: string | null, cancelled: boolean) => {
 };
 
 const Settings = () => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, refreshProfile } = useAuth();
   const { toast } = useToast();
   const { data: stations = [] } = useStations();
   const { data: myClaims = [], isLoading: claimsLoading } = useMyClaims(user?.id);
@@ -133,6 +134,33 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<ClaimProfileErrors>({});
   const [activeTab, setActiveTab] = useState("personal");
+
+  // Signature: stored once in the private `signatures` bucket; profiles.signature_path
+  // points at it. We preview the saved one (signed URL) and let the user draw a
+  // replacement. A fresh drawing overrides the saved one on Save.
+  const sigPadRef = useRef<SignaturePadHandle>(null);
+  const [existingSigUrl, setExistingSigUrl] = useState<string | null>(null);
+  const [hasNewSignature, setHasNewSignature] = useState(false);
+  const [sigError, setSigError] = useState<string | null>(null);
+  const hasSignatureOnFile = Boolean(profile?.signature_path) || hasNewSignature;
+
+  useEffect(() => {
+    let active = true;
+    const path = profile?.signature_path;
+    if (!path) {
+      setExistingSigUrl(null);
+      return;
+    }
+    supabase.storage
+      .from("signatures")
+      .createSignedUrl(path, 60 * 60)
+      .then(({ data }) => {
+        if (active) setExistingSigUrl(data?.signedUrl ?? null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [profile?.signature_path]);
 
   useEffect(() => {
     setFirstName(profile?.first_name ?? "");
@@ -213,13 +241,19 @@ const Settings = () => {
     });
     setErrors(validationErrors);
 
-    if (Object.keys(validationErrors).length > 0) {
+    // Signature lives outside validateClaimProfile (it's a canvas, not a text
+    // field). The form requires one, so block save without a saved or new signature.
+    const signatureMissing = !hasSignatureOnFile;
+    setSigError(signatureMissing ? "A signature is required for the claim form." : null);
+
+    if (Object.keys(validationErrors).length > 0 || signatureMissing) {
       // Surface the tab that holds the first problem. Ticket ID lives on the
-      // ticket tab; everything else is on the personal tab.
+      // ticket tab; everything else (incl. signature) is on the personal tab.
       const ticketTabKeys = new Set(["claimTicketId", "payoutMethod"]);
-      const allOnTicketTab = Object.keys(validationErrors).every((key) =>
-        ticketTabKeys.has(key)
-      );
+      const allOnTicketTab =
+        !signatureMissing &&
+        Object.keys(validationErrors).length > 0 &&
+        Object.keys(validationErrors).every((key) => ticketTabKeys.has(key));
       setActiveTab(allOnTicketTab ? "ticket" : "personal");
       toast({
         title: "Please fix the highlighted fields",
@@ -232,9 +266,26 @@ const Settings = () => {
 
     setSaving(true);
     try {
+      // Upload a freshly drawn signature (if any) before the profile upsert, so
+      // signature_path always points at an object that exists. Stable filename →
+      // upsert overwrites the previous one.
+      let signaturePath = profile?.signature_path ?? null;
+      if (hasNewSignature) {
+        const blob = await sigPadRef.current?.toBlob();
+        if (blob) {
+          const path = `${user.id}/signature.png`;
+          const { error: uploadError } = await supabase.storage
+            .from("signatures")
+            .upload(path, blob, { contentType: "image/png", upsert: true });
+          if (uploadError) throw uploadError;
+          signaturePath = path;
+        }
+      }
+
       const { error } = await supabase.from("profiles").upsert(
         {
           id: user.id,
+          signature_path: signaturePath,
           first_name: firstName.trim() || null,
           last_name: lastName.trim() || null,
           full_name: `${firstName.trim()} ${lastName.trim()}`.trim() || null,
@@ -261,6 +312,16 @@ const Settings = () => {
         { onConflict: "id" }
       );
       if (error) throw error;
+
+      // Pull the saved row back into AuthContext so the new signature_path (and
+      // any other change) is live everywhere — the Settings preview on revisit
+      // and the delay-alerts claim gate both read profile.signature_path.
+      if (hasNewSignature) {
+        sigPadRef.current?.clear();
+        setHasNewSignature(false);
+      }
+      await refreshProfile();
+
       toast({
         title: "Settings saved",
         description: "Your claim profile is updated.",
@@ -453,6 +514,61 @@ const Settings = () => {
                     />
                     {errors.city && <p className="text-sm text-destructive">{errors.city}</p>}
                   </div>
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Signature <span className="text-destructive">*</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Drawn once and reused on every claim form. The Skånetrafiken reklamation
+                      requires a signature; we add it only when you confirm and submit a claim.
+                    </p>
+                  </div>
+
+                  {existingSigUrl && !hasNewSignature && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Signature on file:</p>
+                      <img
+                        src={existingSigUrl}
+                        alt="Your saved signature"
+                        className="h-20 w-auto max-w-full rounded-md border border-border/70 bg-white p-1"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Draw below to replace it.
+                      </p>
+                    </div>
+                  )}
+
+                  <SignaturePad
+                    ref={sigPadRef}
+                    onChange={(hasInk) => {
+                      setHasNewSignature(hasInk);
+                      if (hasInk) setSigError(null);
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        sigPadRef.current?.clear();
+                        setHasNewSignature(false);
+                      }}
+                    >
+                      Clear
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {hasNewSignature
+                        ? "New signature ready — Save to store it."
+                        : existingSigUrl
+                          ? "Using your saved signature."
+                          : "Draw your signature in the box."}
+                    </span>
+                  </div>
+                  {sigError && <p className="text-sm text-destructive">{sigError}</p>}
                 </div>
               </TabsContent>
 
