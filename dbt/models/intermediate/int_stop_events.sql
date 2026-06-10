@@ -51,7 +51,12 @@ rest as (      -- Danish stop-events ONLY — REST is the Danish-side leg for tr
         ,ingested_at
         ,'rest'                                             as source
     from {{ ref('stg_departures') }}
-    where stop__id in ('25315')                             -- Danish corridor stops (MVP: København H); extend as corridor grows
+    where stop__id in (
+          '25314'   -- CPH Airport (Kastrup)
+        , '23657'   -- Tårnby
+        , '25313'   -- Ørestad
+        , '25315'   -- København H
+      )                                                     -- Danish corridor stops (REST = Danish leg). Østerport not yet present in REST data; add its id when it appears.
       and is_realtime = true
       and route__transport_mode = 'TRAIN'
 
