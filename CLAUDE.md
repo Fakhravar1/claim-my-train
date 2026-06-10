@@ -480,3 +480,20 @@ A station board in these APIs is **not measured at the station** — it's *assem
 - **REST:** genuine only where onboarded (above); retention ~18–24 h backward (rolling, not multi-day) — capture live, can re-query within ~a day, **cannot** backfill older. `canceled` flag is unreliable (real cancellations arrive as `alerts` text).
 - **Trafikverket:** rail only (no metro/tram/bus); genuine for all rail incl. real cancellations (`Canceled=True`); live retention ~2 days → **Lastkajen** for older history; own query language + `LocationSignature`/`AdvertisedTrainIdent` IDs (no GTFS `stop_id`/`trip_id` — needs a crosswalk to stitch a Swedish Trafikverket leg onto a Danish REST leg by train number + time).
 - **Västtrafik:** separate OAuth2 registration; the only source for Göteborg trams/buses (Planera Resa v4 for realtime departures, an unpublished `/fpos/v1/positions` for GPS).
+
+---
+
+## 15. Trafikverket integration + station crosswalk (built 2026-06)
+
+Follow-on from §14: SJ (and all Swedish rail) realtime lives in **Trafikverket Öppet API**, which uses its own IDs, so we built a bridge to the REST/national `740…` IDs.
+
+### `public.ref_stations` — the Trafikverket ↔ REST station crosswalk
+One row per Trafikverket station; lets you search by name and get both ID systems (`select … where station_name ilike '%kalmar%'`).
+- **Columns:** `tv_signature` (PK, Trafikverket `LocationSignature`, e.g. `Mc`, `Kac`), `station_name` (Trafikverket `AdvertisedLocationName`), `rest_area_id` (REST/ResRobot `extId`, the `740…` id REST queries take), `rest_name` (the REST stop's name, for human confirmation), `lat`/`lon`, `match_distance_m`, `advertised`, `resolved`, and **`name_match`** (generated: true when `station_name`'s first token appears in `rest_name`).
+- **How it's built:** load all ~1,745 Trafikverket `TrainStation`s (signature + name + WGS84 coords), then for each find the **nearest ResRobot stop** (`location.nearbystops`) → that gives the REST `extId` + name + distance. There is **no shared station ID** between Trafikverket and REST — coordinate proximity is the bridge.
+- **Trust gates:** `match_distance_m` (small = same place; >200 m = the nearest REST stop is a bus/tram/street stop, not the rail station) and `name_match` (false = names disagree). Corridor stations are all tiny-distance + `name_match=true`. Current coverage: **652/717 advertised resolved**, 627 `name_match=true`, 25 to eyeball, ~65 unmatched (minor/freight/foreign).
+- **`build-ref-stations` edge function** (deployed, `verify_jwt=true`) is the documented refresh runner: first invoke loads stations; each subsequent invoke resolves 100 (id+name+dist), **paced 1/s**, via `update` not `upsert`. Repeat until `remaining:0`. Needs `RESROBOT_API_KEY` secret.
+- **HARD LESSON — ResRobot rate-limits bulk coordinate lookups.** It allows a burst (~150–250) then throttles to hollow/empty. Any per-station resolution **must pace ~1/s** (concurrency 1 + delay); a 15-way `Promise.all` or no-delay loop silently caps at ~250 and the rest come back null. Also: a partial `upsert` (omitting `station_name`) fails the implicit INSERT on the NOT-NULL column — use `update`.
+
+### Trafikverket realtime ingestion (draft)
+`collect-train-announcements` edge function (deployed) polls Trafikverket `TrainAnnouncement` (station-event grain — one row per train × station × `ActivityType` arrival/departure) into a `raw_train_announcements` table, storing the full object in a `raw` jsonb plus typed columns (`scheduled`/`estimated`/`actual` times, `canceled`, `advertised_train_ident`). **Status: scaffolded, not verified** (last invocation 500'd — confirm the `raw_train_announcements` table exists and the upsert key before relying on it). To stitch a Swedish Trafikverket leg onto a Danish REST leg, join on **train number** (`AdvertisedTrainIdent` ↔ REST `technical_number`/`designation`) + date; for stations use `ref_stations`.
