@@ -16,8 +16,8 @@ function pickDelayBucket(minutes: number | null | undefined, cancelled: boolean)
 /**
  * Inserts a row into public.claims. The row carries a snapshot of the journey
  * (origin/destination/scheduled times) so the claim is independent of any future
- * dbt rebuild of fct_passenger_journeys. The Render cron picks up status='pending'
- * rows once daily and produces the filled PDF.
+ * dbt rebuild of fct_journeys. The claim-worker (GitHub Actions, daily) picks up
+ * status='pending' rows and produces the filled PDF.
  */
 export function useStartClaim() {
   const [pending, setPending] = useState(false);
@@ -38,7 +38,9 @@ export function useStartClaim() {
         consented_at: new Date().toISOString(),
         signature_path: signaturePath ?? null,
         journey_key: journey.journey_key ?? "",
-        trip_start_date: journey.trip__start_date ?? "",
+        // v_journeys has no GTFS trip__start_date; the origin's local date fills the
+        // claims.trip_start_date column (part of the per-user uniqueness constraint).
+        trip_start_date: journey.origin_local_date ?? "",
         origin_stop_id: journey.origin_stop_id ?? "",
         origin_stop_name: journey.origin_stop_name ?? "",
         origin_scheduled: journey.origin_scheduled ?? "",

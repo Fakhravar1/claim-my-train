@@ -91,7 +91,7 @@ const journeyToDeparture = (j: Journey): RegionDeparture => {
   const scheduledArrivalIso = j.destination_scheduled;
   const actualArrivalIso = j.destination_actual ?? j.destination_scheduled;
   return {
-    line: j.route__name ?? "",
+    line: j.line_name ?? (j.service_number ? `Tåg ${j.service_number}` : ""),
     lineName: j.line_terminus ?? "",
     departureStation: j.origin_stop_name ?? "",
     arrivalStation: j.destination_stop_name ?? "",

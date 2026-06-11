@@ -25,9 +25,11 @@ models:
             - stop_sequence
   - name: fct_passenger_journeys
     description: >
+      DEPRECATED (2026-06-11): the frontend now reads fct_journeys via public.v_journeys.
+      Kept in the DAG for rollback only; delete in a later cleanup.
       Journey-grain fact. One row per (trip, start_date, origin_stop, destination_stop).
       Built from fct_departures by self-joining departure events to later arrival events
-      on the same trip. Used by the claims app to evaluate delay compensation eligibility.
+      on the same trip.
 
     columns:
       - name: journey_key
@@ -89,28 +91,33 @@ models:
                 - origin_stop_id
                 - destination_stop_id
 
-  - name: fct_stitched_journeys
+  - name: fct_journeys
     description: >
-        Cross-feed train journeys built by pairing int_stop_events (TV Swedish stops +
-        REST Danish stops): an origin DEPARTURE joined to a later ARRIVAL of the same
-        train number, within a 12h window (handles cross-midnight; excludes next-day
-        recurrence). MVP corridor: Malmö C dep (TV) -> København H arr (REST). Destination
-        delay drives is_claimable (20+ min or cancelled). Separate from the REST-only
-        fct_passenger_journeys path.
+        THE unified journey fact the frontend reads (via public.v_journeys). Pairs
+        int_stop_events (TV Swedish stops + REST Danish stops) into O-D journeys:
+        an origin DEPARTURE joined to a later ARRIVAL of the same service_number
+        within a 12h window (handles cross-midnight; excludes next-day recurrence).
+        Mode-agnostic column contract (service_number, transport_mode, line_name);
+        trains only for now. origin_source/destination_source say which feed supplied
+        each leg. Destination delay drives is_claimable (20+ min or cancelled).
     columns:
         - name: journey_key
-          description: Surrogate key; hash of (train_number, service_date, origin_stop, destination_stop).
+          description: Surrogate key; hash of (service_number, origin_local_date, origin_stop, destination_stop).
           data_tests:
             - not_null
             - unique
         - name: is_claimable
-          description: True if destination delay >= 20 min OR train cancelled.
+          description: True if destination delay >= 20 min OR service cancelled.
+          data_tests: [not_null]
+        - name: origin_stop_id
+          data_tests: [not_null]
+        - name: destination_stop_id
           data_tests: [not_null]
     data_tests:
         - dbt_utils.unique_combination_of_columns:
             arguments:
               combination_of_columns:
-                - train_number
-                - service_date
+                - service_number
+                - origin_local_date
                 - origin_stop_id
                 - destination_stop_id

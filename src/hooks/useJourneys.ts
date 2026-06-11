@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
-export type Journey = Tables<"v_passenger_journeys">;
+export type Journey = Tables<"v_journeys">;
 
 type Params = {
   fromStopId: string | null;
@@ -17,7 +17,7 @@ export function useJourneys({ fromStopId, toStopId, date, onlyClaimable = false 
     enabled: Boolean(fromStopId && toStopId),
     queryFn: async () => {
       let query = supabase
-        .from("v_passenger_journeys")
+        .from("v_journeys")
         .select("*")
         .eq("origin_stop_id", fromStopId!)
         .eq("destination_stop_id", toStopId!)
