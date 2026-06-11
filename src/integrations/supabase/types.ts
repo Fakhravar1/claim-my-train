@@ -446,29 +446,6 @@ export type Database = {
         }
         Relationships: []
       }
-      v_passenger_journeys: {
-        Row: {
-          agency__operator: string | null
-          canceled: boolean | null
-          destination_actual: string | null
-          destination_delay_minutes: number | null
-          destination_scheduled: string | null
-          destination_stop_id: string | null
-          destination_stop_name: string | null
-          is_claimable: boolean | null
-          journey_key: string | null
-          line_terminus: string | null
-          origin_actual: string | null
-          origin_local_date: string | null
-          origin_scheduled: string | null
-          origin_stop_id: string | null
-          origin_stop_name: string | null
-          route__name: string | null
-          trip__start_date: string | null
-          trip__trip_id: string | null
-        }
-        Relationships: []
-      }
     }
     Functions: {
       [_ in never]: never

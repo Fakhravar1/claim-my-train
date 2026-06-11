@@ -18,7 +18,7 @@ A Supabase + dbt + React frontend (hosted by Lovable) that automates train delay
 
 **Frontend layout:** `/` is the marketing landing for signed-out visitors (`src/pages/Landing.tsx`); a `<ProtectedFromAuth>` wrapper redirects signed-in users to `/regions/skanetrafiken` (the departures cards page). The cards page itself is **public** — both `/regions/skanetrafiken` and `/regions/skanetrafiken/delay-alerts` are reachable without sign-in; claim filing still requires auth. There are no separate regional marketing pages anymore — `/regions/sl` and `/regions/vasttrafik` were dropped, and the OperatorPicker on the landing marks them inert "Coming soon" cards. The departures pages have their own design-system look (decorative Skåne weather band, cmt-* tokens) injected via `src/hooks/useAppShellStyles.ts` + `src/themes/regional-app-base.css`, scoped to the region routes so `/login` and `/settings` keep the shadcn theme. The landing keeps the older `src/hooks/useLandingStyles.ts` + `src/themes/landing-base.css` pair on the same scoping pattern. All routes that ship inline SVG payloads (landing, both region pages) are lazy-loaded.
 
-**Frontend data path (since 2026-06-11):** `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`) and `SkanetrafikenDelayAlerts.tsx` (at `/regions/skanetrafiken/delay-alerts`) query **`public.v_journeys`** (wrapper over `dbt_dev.fct_journeys`, the **unified TV+REST journey fact** — see §15) via `src/hooks/useJourneys.ts`. Departures page passes `onlyClaimable: false`; delay-alerts passes `onlyClaimable: true`. Coverage is **corridor-only by data** (7 stations: Malmö C / Triangeln / Hyllie + 4 Danish); the unified contract uses mode-agnostic names (`service_number`, `line_name`, `transport_mode`, `origin_source`/`destination_source`). The old `public.v_passenger_journeys` (over `fct_passenger_journeys`) is **DEPRECATED but kept** for rollback. The route card on both pages has a Date field that **defaults to today** and drives `useJourneys` — we query a single day at a time, so the payload is small. Dropdowns on those pages plus Settings are driven by `src/hooks/useStations.ts` (`public.v_active_stations`, now derived from `fct_journeys` → exactly the corridor stations). The legacy live-departures plumbing (the `get-train-departures` edge function, the `claim-collection-15m` cron, and tables `departures` / `train_names` / `yellow_alert_history` / `claimable_corridor_windows` / `api_call_events` / `stations_master`) has been retired. The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` maps in `shared/stops.ts` survive only for inbound URL-param normalization on legacy bookmarks (e.g. `?from=740000003` on the old `/delay-alerts` paths).
+**Frontend data path (since 2026-06-11):** `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`) and `SkanetrafikenDelayAlerts.tsx` (at `/regions/skanetrafiken/delay-alerts`) query **`public.v_journeys`** (wrapper over `dbt_dev.fct_journeys`, the **unified TV+REST journey fact** — see §15) via `src/hooks/useJourneys.ts`. Departures page passes `onlyClaimable: false`; delay-alerts passes `onlyClaimable: true`. Coverage is **corridor-only by data** (7 stations: Malmö C / Triangeln / Hyllie + 4 Danish); the unified contract uses mode-agnostic names (`service_number`, `line_name`, `transport_mode`, `origin_source`/`destination_source`). The old REST-only path (`fct_passenger_journeys` + `public.v_passenger_journeys`, and the unused `dim_line`) was **REMOVED 2026-06-11** — models deleted, views dropped (migration `20260611140000`); git history + `dbt build` is the rollback if ever needed. The route card on both pages has a Date field that **defaults to today** and drives `useJourneys` — we query a single day at a time, so the payload is small. Dropdowns on those pages plus Settings are driven by `src/hooks/useStations.ts` (`public.v_active_stations`, now derived from `fct_journeys` → exactly the corridor stations). The legacy live-departures plumbing (the `get-train-departures` edge function, the `claim-collection-15m` cron, and tables `departures` / `train_names` / `yellow_alert_history` / `claimable_corridor_windows` / `api_call_events` / `stations_master`) has been retired. The `SAMS_TO_GTFS` / `GTFS_TO_SAMS` maps in `shared/stops.ts` survive only for inbound URL-param normalization on legacy bookmarks (e.g. `?from=740000003` on the old `/delay-alerts` paths).
 
 ---
 
@@ -63,17 +63,20 @@ C:\Users\arian\trafiklab\          ← repo root
 │   │   └── generate_schema_name.sql        ← schema='public' override; lets dbt build wrappers in public, not dbt_dev_public
 │   ├── models/
 │   │   ├── staging/
-│   │   │   └── stg_departures.sql
+│   │   │   ├── stg_departures.sql           ← REST feed, cleaned
+│   │   │   └── stg_train_announcements.sql  ← Trafikverket feed, conformed vocabulary (§15)
+│   │   ├── intermediate/
+│   │   │   ├── int_stop_events.sql          ← TV+REST disjoint union (INCREMENTAL TABLE, §15)
+│   │   │   └── _intermediate.yml            ← grain tests
 │   │   ├── dimensions/
 │   │   │   ├── dim_stations.sql
-│   │   │   ├── dim_active_stations.sql     ← stations referenced by fct_passenger_journeys (v1)
-│   │   │   └── dim_line.sql
+│   │   │   └── dim_active_stations.sql      ← stations appearing in fct_journeys (the dropdowns)
 │   │   └── marts/
-│   │       ├── fct_departures.sql           ← stop-event grain (incremental table)
-│   │       ├── fct_passenger_journeys.sql   ← journey-leg grain, v1 (VIEW — all O-D legs, lazy)
-│   │       ├── fct_claimable_journeys.sql   ← claimable legs only (table; filter-before-join). See §13
+│   │       ├── fct_departures.sql           ← stop-event grain, REST-only (incremental table; substrate for fct_claimable_journeys)
+│   │       ├── fct_claimable_journeys.sql   ← claimable legs only (table; the durable claim-retention layer). See §13
+│   │       ├── fct_journeys.sql             ← THE journey fact (view over int_stop_events; frontend reads this)
 │   │       ├── v_active_stations.sql        ← public wrapper view (dbt-managed, schema='public')
-│   │       ├── v_passenger_journeys.sql     ← public wrapper view (dbt-managed, schema='public')
+│   │       ├── v_journeys.sql               ← public wrapper view over fct_journeys
 │   │       └── _marts.yml                   ← model tests & docs
 │   ├── packages.yml                ← dbt_utils dependency
 │   └── dbt_project.yml
@@ -97,19 +100,21 @@ C:\Users\arian\trafiklab\          ← repo root
 
 - **Layered models:** `raw_` (untouched ingestion) → `stg_` (cleaning, type casting, no joins) → `dim_` / `fct_` (business-ready marts). Never edit raw; only derive from it.
 - **Fact grain:** stated explicitly on every fact. Currently:
-  - `fct_departures`: one row per (trip, start_date, stop_id, event_type). Stop-event grain.
-  - `fct_passenger_journeys`: one row per (trip, start_date, origin_stop_id, destination_stop_id) where origin precedes destination in stop sequence. Journey-leg grain. **Now a VIEW** (see §13) — emits *all* O-D legs, read narrowly by the departures board.
-  - `fct_claimable_journeys`: same journey-leg grain, but **claimable legs only** (delay ≥ 1200 s or cancelled). The durable discovery set behind the delay-alerts page + claim filing. See §13.
+  - `fct_departures`: one row per (trip, start_date, stop_id, event_type). Stop-event grain, REST-only. Substrate for `fct_claimable_journeys`.
+  - `int_stop_events`: one row per (service_number, station_id, event_type, service_date). Conformed stop-event grain across TV + REST (§15). Incremental table.
+  - `fct_journeys`: one row per (service_number, origin_local_date, origin_stop_id, destination_stop_id). Journey-leg grain, VIEW over `int_stop_events` — the fact the frontend reads.
+  - `fct_claimable_journeys`: journey-leg grain (legacy trip-keyed), **claimable legs only** (delay ≥ 1200 s or cancelled). The durable claim-retention layer (claim windows are 60–90 d while substrates get pruned). See §13.
+  - (`fct_passenger_journeys` — removed 2026-06-11; superseded by `fct_journeys`.)
 - **Surrogate keys:** every fact has one, generated from business keys via `dbt_utils.generate_surrogate_key([...])`. Never use ingestion artifacts (like raw row UUIDs) as the basis — must be deterministic from business keys.
 - **Grain tests:** every fact has a `dbt_utils.unique_combination_of_columns` test on its natural grain. Grain violations = silent data corruption.
 - **Degenerate dimensions:** business keys (trip_id, stop_id, etc.) live on the fact for traceability, alongside surrogate FKs to conformed dims.
 - **Dedup at staging→fact boundary:** GTFS-RT publishes multiple updates per stop event; deduplicate with `row_number() over (partition by ... order by ingested_at desc) where rn = 1`. This is Kimball's late-arriving fact pattern (Toolkit Ch. 19).
 - **No business-rule thresholds hardcoded in SQL when they're meant to be parameterized.** Current v1 hardcodes 20-min threshold; this gets refactored into `dim_compensation_rules` when we add operator #2 — not before.
 - **No `CASE WHEN operator = '...'` branches in fact tables.** Operator-specific logic belongs in joined rule tables, not in fact SQL.
-- **Rules attach to claim authority + route characteristics, NOT to operator.** Operator concessions change; rules don't. The "operator-agnostic fact" pattern means `fct_passenger_journeys` carries `agency__operator` as descriptive context only — never as a rule key.
+- **Rules attach to claim authority + route characteristics, NOT to operator.** Operator concessions change; rules don't. The "operator-agnostic fact" pattern means `fct_journeys` carries `operator` / `line_name` as descriptive context only — never as a rule key. Same applies to `transport_mode` (multi-modal by design, §15).
 - **Materialization strategy:** staging and dimensions are views; facts with expensive logic (dedup, self-joins) are tables with indexes on dominant query patterns. Per-model `{{ config(materialized='table') }}` in each file. Diagnose with `explain (analyze, buffers)` before changing materialization; never materialize speculatively. **Updated by the storage refactor (§13):** `fct_departures` is the materialized substrate (incremental table, ~70 d retention target); `fct_passenger_journeys` is now a **view** (the full all-pairs fan-out never hits disk — the board reads it narrowly by one O-D + date); `fct_claimable_journeys` is the only journey-grain **table**, kept small because claimable is delay-bounded (~1.5% of legs), not stops-bounded. Rationale: the quadratic all-pairs fan-out is what doesn't scale to ~1000 stops, so we only persist the tiny claimable slice. The unified TV+REST chain (§15) follows the same pattern: `int_stop_events` is the incremental-table substrate (linear, indexed, analyze post_hook), `fct_journeys` is the lazily-read view on top.
 - **Incremental facts:** `fct_departures` is `materialized='incremental'` (`delete+insert` on `departure_key`). A full rebuild scans all of `raw_departures` (EXPLAIN ANALYZE: ~79s, ~95% in the raw index scan, growing linearly with raw volume) — incremental cuts each run to the recently-active slice. **Incremental unit = the trip, not the row.** `stop_sequence` is a `row_number()` over `(trip__trip_id, trip__start_date)`, so it spans the whole trip; feeding it a partial trip silently misnumbers stops and corrupts the `fct_passenger_journeys` origin/destination pairing (verified: all 73k legs satisfy `origin_sequence < destination_sequence`, and `is_claimable` reads the delay off the sequence-selected destination row). The `is_incremental()` filter therefore selects whole trips touched since `max(ingested_at) - 1 hour`, never a flat row-level watermark. General rule: the incremental grain must be ≥ the coarsest key any window / aggregate / self-join spans.
-- **Presentation-layer wrapper views** in `public` (`v_passenger_journeys`, `v_active_stations`, future additions) are dbt models with `schema='public'`. The custom `generate_schema_name` macro in `dbt/macros/` makes the `schema='public'` config land objects directly in `public` instead of the dbt-default `dbt_dev_public`. Wrappers are part of the dbt DAG (via `ref(...)`), so they rebuild automatically when underlying facts/dims change. No manual recreation needed after materialization changes.
+- **Presentation-layer wrapper views** in `public` (`v_journeys`, `v_active_stations`, future additions) are dbt models with `schema='public'`. The custom `generate_schema_name` macro in `dbt/macros/` makes the `schema='public'` config land objects directly in `public` instead of the dbt-default `dbt_dev_public`. Wrappers are part of the dbt DAG (via `ref(...)`), so they rebuild automatically when underlying facts/dims change. No manual recreation needed after materialization changes.
 
 ---
 
@@ -130,14 +135,15 @@ public.raw_departures (table — cron writes here)
        │ (dbt build, every ~15 min via GitHub Actions —
        │  in practice 1–4 hours apart due to GH scheduling jitter)
        ▼
-dbt_dev.fct_departures (incremental table — the materialized substrate)
-dbt_dev.fct_passenger_journeys (VIEW — DEPRECATED; kept for rollback, frontend no longer reads it)
+dbt_dev.fct_departures (incremental table — substrate for the claim-retention layer)
 dbt_dev.fct_claimable_journeys (table — claimable legs only; durable retention layer)
-dbt_dev.dim_active_stations (table — now derived from fct_journeys, §15)
+dbt_dev.dim_active_stations (table — derived from fct_journeys, §15)
        │
-       │ public.v_active_stations  (public.v_passenger_journeys still exists but is DEPRECATED)
+       │ public.v_active_stations
        ▼
 Frontend dropdowns (useStations)
+
+(fct_passenger_journeys / v_passenger_journeys / dim_line REMOVED 2026-06-11 — git history is the rollback)
 
 SINCE 2026-06-11 the JOURNEY data path is the unified TV+REST chain (§15):
 raw_train_announcements + raw_departures(Danish stops) + ref_stations
@@ -158,22 +164,17 @@ station count grows).
 - `raw_departures` ingestion from Trafiklab GTFS-RT via the `collect-raw-departures` edge function. Keep the deployed copy and `supabase/functions/collect-raw-departures/index.ts` in sync — drift between them is what masked the May 2026 Triangeln incident (§10). The table's unique constraint is `(trip__trip_id, trip__start_date, stop__id, scheduled, ingested_at, event_type)`. `event_type` MUST stay in both the constraint and the function's `onConflict` argument, otherwise arrival rows for intermediate stops collide with the same-trip departure row in the same upsert batch and get silently dropped by `ignoreDuplicates: true`.
 - Scheduled `dbt build` via `.github/workflows/dbt-run.yml` keeps `fct_*` and `dim_active_stations` tables fresh. Triggers: `schedule: */15` + `workflow_dispatch` (for manual runs from the Actions tab). Logs visible per-run in the GitHub Actions UI.
 - `stg_departures` cleaning layer.
-- `fct_departures` (incremental, `delete+insert` on `departure_key`) carries indexes on dominant query patterns: `(trip__trip_id, trip__start_date, event_type, stop_sequence)` and `(event_type, stop__id)`. The composite includes `event_type` so the planner avoids re-filtering during the journey self-join. **`fct_passenger_journeys` no longer carries indexes** — it's a view now (§13); its read performance comes from the date filter keeping the recomputed self-join tiny, plus `fct_departures`'s own indexes. The set of indexes the *old* `fct_passenger_journeys` table held [`(trip__start_date)`, `(origin_local_date)`, `(origin_stop_id, destination_stop_id, origin_local_date)`, `(origin_stop_id, destination_stop_id, trip__start_date)`, `(is_claimable)`] is the candidate set for `fct_claimable_journeys` if/when its read patterns warrant it (currently tiny, ~1,188 rows, so unindexed is fine).
-- **`trip__start_date` vs `origin_local_date` on `fct_passenger_journeys`.** Different concepts, distinction is load-bearing:
-  - `trip__start_date` is the **GTFS service date** — degenerate dimension kept on the fact for traceability back to the feed. For a service "starting on the 23rd," GTFS-RT can include trips that physically run after midnight (e.g. 00:38 on the 24th Stockholm time).
-  - `origin_local_date` is `(origin.scheduled at time zone 'Europe/Stockholm')::date` — the **calendar day the origin departure physically runs**, in Stockholm local time. This is what end users mean when they pick a date in the picker.
-  - The frontend filters on `origin_local_date`, not `trip__start_date`. Filtering on `trip__start_date` produced a "picked the 24th, top card says 25 May" bug: service-24 trips that run on the 25th sorted first (descending by `origin_scheduled`) and led the list.
-  Frontend query time was ~6s when the board scanned an unmaterialized all-journeys path; it is kept low now by the narrow one-O-D-plus-date filter against the `fct_passenger_journeys` view, which bounds the recomputed self-join (the board does NOT scan all journeys). Claim discovery + the delay-alerts page read the small `fct_claimable_journeys` table instead.
-- `dim_stations`, `dim_line` views.
-- `dim_active_stations` view filters `dim_stations` to stops appearing as origin or destination in `fct_passenger_journeys`. Source for the frontend stations dropdown.
-- `fct_passenger_journeys` v1 claim logic:
+- `fct_departures` (incremental, `delete+insert` on `departure_key`) carries indexes on dominant query patterns: `(trip__trip_id, trip__start_date, event_type, stop_sequence)` and `(event_type, stop__id)`. It remains REST-only and exists as the substrate for `fct_claimable_journeys` (retention layer). `int_stop_events` (§15) carries its own indexes: `(event_type, station_id, service_date)` + `(service_number, event_type, scheduled)`.
+- **The date concept that is load-bearing: `origin_local_date`** = `(origin.scheduled at time zone 'Europe/Stockholm')::date` — the **calendar day the origin departure physically runs**. This is what users mean in the date picker, and what the frontend filters on. (History: filtering on the GTFS service date `trip__start_date` produced a "picked the 24th, top card says 25 May" bug — post-midnight trips belong to the previous service date. `fct_journeys` keys on `origin_local_date` natively.)
+- `dim_stations` view (from REST stops; includes the Danish corridor stops).
+- `dim_active_stations` table filters `dim_stations` to stops appearing as origin or destination in `fct_journeys`. Source for the frontend stations dropdown (= corridor stations).
+- v1 claim logic in `fct_journeys`:
   ```sql
-  is_claimable = (coalesce(dest.arrival_delay, 0) >= 1200)
+  is_claimable = (coalesce(dest.delay_seconds, 0) >= 1200)
                  or coalesce(dest.canceled, false)
   ```
   Threshold is hardcoded 1200 seconds (20 minutes). Cancelled trains always claimable.
-- All dbt tests passing: unique journey_key, not_null on grain columns, unique combination of (trip_id, start_date, origin_stop_id, destination_stop_id).
-- `public.v_passenger_journeys` and `public.v_active_stations` are dbt-managed views (`dbt/models/marts/v_*.sql`) materialized into the `public` schema via the `generate_schema_name` macro override. Each model declares a `post_hook` that grants `select` to `anon` and `authenticated`. Curated column lists exclude internal grain plumbing (`origin_sequence`, `destination_sequence`, `destination_delay_seconds`, `dbt_scd_id`, `ingested_at`).
+- `public.v_journeys` and `public.v_active_stations` are dbt-managed views (`dbt/models/marts/v_*.sql`) materialized into the `public` schema via the `generate_schema_name` macro override. Each model declares a `post_hook` that grants `select` to `anon` and `authenticated`. Curated column lists exclude internal plumbing (`ingested_at` etc.).
 - Frontend hooks `useStations` (`src/hooks/useStations.ts`) and `useJourneys` (`src/hooks/useJourneys.ts`) consume the public wrappers. SkanetrafikenApp.tsx, SkanetrafikenDelayAlerts.tsx, and Settings.tsx all use `useStations` for dropdowns; the two region pages use `useJourneys` for the journey lists (departures with `onlyClaimable: false`, delay-alerts with `onlyClaimable: true`). Both region pages default the date filter to today and pass it as `sinceDate`.
 - `shared/stops.ts` includes a `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation map bridging Trafiklab sams-id (legacy `get-train-departures` edge function imports) and GTFS (everything in dbt and the frontend). Only used for inbound URL-param normalization on the region pages, for legacy bookmarks that pre-date the GTFS migration.
 - ✅ Marketing landing page at `/` (`src/pages/Landing.tsx`). Skåne departures + claimable-delays pages at `/regions/skanetrafiken` and `/regions/skanetrafiken/delay-alerts`. SL and Västtrafik no longer have routes; they appear as inert "Coming soon" cards on the landing's OperatorPicker. `src/themes/skanetrafiken/theme.css` carries the Skåne token overrides (Pågatåg purple, rapeseed yellow); the per-region marketing SVGs (`HeroScene.tsx`, `SignupScene.tsx`, `Vehicle.tsx`) were dropped when the regional marketing pages were removed. Decorative band SVG for the region cards page lives in `src/components/region/SkaneBand.tsx`. Region CSS is injected via `src/hooks/useAppShellStyles.ts` so it doesn't bleed into the shadcn theme on `/login` and `/settings`.
@@ -200,14 +201,14 @@ The frontend was being built in Lovable's UI, then partially via Cursor. Now bei
 
 **Supabase types:** `src/integrations/supabase/types.ts` (auto-generated; regenerate when schema changes).
 
-**Frontend's claim discovery should query `dbt_dev.fct_passenger_journeys` directly:**
+**Frontend journey reads go through `public.v_journeys` (over `fct_journeys`), always narrow:**
 ```sql
 select *
-from fct_passenger_journeys
+from v_journeys
 where origin_stop_id = :origin
   and destination_stop_id = :dest
-  and trip__start_date = :date
-  and is_claimable = true
+  and origin_local_date = :date
+  -- and is_claimable = true   (delay-alerts page only)
 ```
 
 Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-computes `is_claimable`; the UI consumes it.
@@ -260,7 +261,7 @@ Build in this order. Do not skip ahead without explicit user decision.
 **v1.5 — Correctness gaps:**
 - 72-hour pre-announcement rule (Lag 2015:953). If service change was announced ≥3 dygn before scheduled departure, delay is measured against amended timetable, not original. Requires `snap_gtfs_static_trips` (dbt snapshot, SCD-2) and join logic. Currently produces false positives.
 - `dim_stations` enrichment for the frontend (human-readable station names — most columns already present, verify completeness).
-- Add a dbt `relationships` test linking `fct_passenger_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
+- Add a dbt `relationships` test linking `fct_journeys.origin_stop_id` and `destination_stop_id` → `dim_stations.stop__id`. Currently the FK relationship is convention-only; this test makes it auditable at `dbt test` time.
 - Pagination on `SkanetrafikenDelayAlerts.tsx` claimable journeys list (current 500-row hard limit in `useJourneys` saturates as stations grow). Less urgent now that the date filter defaults to a single day — but still a real ceiling when a user picks a date with high traffic.
 - Evaluate alternative dbt orchestrator if GitHub free-tier scheduled-action cadence (currently 1–4 hours between runs vs configured 15 min) becomes a problem. Note: **Render cron jobs are paid** (an earlier version of this doc wrongly called them free) — that's why the `claim-worker` runs on GitHub Actions, not Render. Free options if Actions ever falls short: Modal (Python-native, generous free credits), PythonAnywhere (1 free daily task), Google Cloud Run Jobs + Cloud Scheduler, or a self-hosted runner. Edge functions and pg_cron cannot run dbt/Python orchestration directly (Deno + Postgres SQL respectively).
 - ✅ ~~Revisit Index.tsx hypothesis.~~ Resolved: `Index.tsx` (at `/app`) was replaced by `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`). The page is now public — discovery doesn't require auth, only claim filing does. Signed-in visitors of `/` still get bounced to the cards page via `<ProtectedFromAuth>`, but the redirect target is now the region URL.
@@ -354,7 +355,7 @@ The workflow at `.github/workflows/dbt-run.yml` runs `dbt build` against the Sup
    - `Could not find a version that satisfies the requirement dbt-postgres==X.Y.Z` — pin in the workflow is wrong; check available versions on PyPI. The adapter version is **not** the same as dbt-core's version (see §3).
    - `connection refused` or `password authentication failed` — DB password rotated, or `SUPABASE_DB_*` secrets are stale. Get a fresh connection string from Supabase dashboard → Connect → Session pooler.
    - `prepared statement "X" already exists` — workflow is pointing at the **transaction pooler** (port 6543) instead of session pooler (5432). Fix the `SUPABASE_DB_HOST` / `SUPABASE_DB_PORT` secrets.
-   - `relation "public.v_passenger_journeys" does not exist` after a `dbt run --full-refresh` — the dbt DAG should rebuild these, but check `dbt build` step output. If it persists, the §11 wrapper recreation SQL (below) is the manual fallback.
+   - `relation "public.v_journeys" does not exist` after a `dbt run --full-refresh` — the dbt DAG should rebuild the wrappers automatically (they're dbt models); check `dbt build` step output for the wrapper models.
 3. **Manually trigger a run** to test fixes: Actions → "dbt run" → Run workflow → main → Run workflow.
 4. **Trigger from CLI:** `gh workflow run dbt-run.yml --repo Fakhravar1/claim-my-train`.
 
@@ -429,9 +430,9 @@ Decision (A vs B vs C) **not yet made** — required before any incremental `fct
 
 ### OPEN TO-DOs (parked, none blocking)
 1. Decide retraction handling (A/B/C above). Lean = B (keeps the small claimable table) unless we accept the full table (C).
-2. **Departures board source.** Claimable-only can't feed the board (`onlyClaimable:false`) — board reads the `fct_passenger_journeys` VIEW narrowly; delay-alerts + claim filing read `fct_claimable_journeys`. Confirm `useJourneys` points each page at the right source.
+2. ~~**Departures board source.**~~ RESOLVED differently (2026-06-11): both pages read `v_journeys` (over `fct_journeys`); `fct_claimable_journeys` remains the durable retention layer, not yet wired to the frontend.
 3. **Curate any public wrapper over the claimable table** to EXCLUDE plumbing columns (`ingested_at`, `origin_sequence`, `destination_sequence`, …) per the existing curated-column convention.
-4. **`fct_passenger_journeys` VIEW grain test.** Its `unique_combination_of_columns` test now re-runs the full self-join on every `dbt test` (costly at scale). Decide drop (source `fct_departures` grain is already tested, so the view can't violate a grain its source doesn't) vs keep. Lean = drop.
+4. ~~**`fct_passenger_journeys` VIEW grain test.**~~ MOOT (2026-06-11): model removed.
 5. **`_marts.yml` deprecation.** The `fct_departures` test entry still uses top-level `combination_of_columns`; nest under `arguments:` (dbt 2.x). Trivial.
 6. **null `arrival_delay` handling.** `coalesce(arrival_delay,0)` excludes unsettled delays — safe ONLY because the 6 h lookback re-pulls and re-evaluates. If lookback ever shrinks below the settling tail, this becomes permanent missed claims. Coupling to remember.
 7. **`arrival_delay` is a misnomer** (confirmed via data this session): it's the signed deviation of THIS ROW's event, not specifically arrival — exactly `realtime - scheduled` per row, differing by event_type (arrival avg ~46 s, departure avg ~104 s). The self-joins are correct because they read the value off the arrival-side row (`dest`). Rename to `delay_seconds` / `event_delay_seconds` OR document in `_marts.yml`; isolated commit, check downstream refs first. Not urgent.
@@ -526,7 +527,7 @@ Models (both views, pushed, **NOT on `main`** so the mirror hasn't shipped them)
 
 **Stitch key = `(train_number, service_date)`, verified.** A train keeps the same number across the border — **97.9%** of København H arrivals (REST) match a Malmö C departure (REST) under the same number+date, and TV uses that same number on the Swedish side. Example: train 1061 (2026-06-10) = Malmö C dep 11:35 (TV) → København H arr 12:13 **+238 s** (REST).
 
-**`fct_departures` / `fct_passenger_journeys` are NOT touched** (and `fct_passenger_journeys` + `v_passenger_journeys` are now **DEPRECATED** — kept in the DAG for rollback only). The earlier precedence-window + fct delay-overlay design was **dropped as overkill** — it solved feed *overlap* that doesn't exist once REST is scoped to Denmark. Don't reintroduce it.
+**`fct_departures` is NOT touched** — it remains the substrate for `fct_claimable_journeys` (the durable claim-retention layer; both deliberately kept). The deprecated REST-only journey path (`fct_passenger_journeys`, `v_passenger_journeys`) and the unused `dim_line` were **REMOVED 2026-06-11** (models deleted, views dropped via migration `20260611140000`; recreatable from git). The earlier precedence-window + fct delay-overlay design was **dropped as overkill** — it solved feed *overlap* that doesn't exist once REST is scoped to Denmark. Don't reintroduce it.
 
 **`int_stop_events` is an INCREMENTAL TABLE (since 2026-06-11, for the ~1000-station target).** This is the §13 pattern applied to the new chain: persist the **linear** stop-event grain, keep the **quadratic** journey fan-out (`fct_journeys`) a view read narrowly (one O-D + date). Design facts that matter:
 - **Incremental unit = the stop-event key** (`delete+insert` on `stop_event_key`, 6 h `ingested_at` lookback). A row-level watermark is **safe here, unlike `fct_departures`**, because the only window function is the dedup whose partition IS the unique key — nothing spans beyond one key (§13 rule: incremental grain ≥ coarsest key any window spans). TV raw upserts in place (re-pulls refresh `ingested_at`), so revised events re-enter the batch; verified idempotent (second run reprocesses only the window, count stable).
