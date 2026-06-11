@@ -19,6 +19,8 @@ import type { ReactNode } from "react";
 export interface RegionDeparture {
   line: string;
   lineName?: string;
+  /** Display-only operator/brand label (e.g. "VR Sverige AB", "Pågatåg", "SJ") */
+  operator?: string | null;
   departureStation: string;
   arrivalStation: string;
   /** Scheduled departure time (origin_scheduled), HH:MM */
@@ -199,6 +201,12 @@ export default function RegionDepartureCard({ dep, action }: Props) {
         <div className="dep__id">
           <div className="dep__id-row">
             {dep.line && <span className="dep__line">{dep.line}</span>}
+            {dep.operator && (
+              <>
+                <span className="dep__sep" aria-hidden="true">·</span>
+                <span className="dep__date">{dep.operator}</span>
+              </>
+            )}
             {depDateLabel && (
               <>
                 <span className="dep__sep" aria-hidden="true">·</span>

@@ -1,4 +1,14 @@
-{{ config(materialized='view') }}
+{{ config(
+    materialized='incremental',
+    unique_key='stop_event_key',
+    incremental_strategy='delete+insert',
+    on_schema_change='sync_all_columns',
+    indexes=[
+      {'columns': ['event_type', 'station_id', 'service_date']},
+      {'columns': ['service_number', 'event_type', 'scheduled']}
+    ],
+    post_hook="analyze {{ this }}"
+) }}
 
 -- int_stop_events
 -- Disjoint union of stop-events across the two feeds. No precedence/overlap
@@ -8,9 +18,21 @@
 --                                       REST is the Danish-side / future non-train-mode source
 --
 -- Grain: one row per (service_number, station_id, event_type, service_date).
--- Downstream (fct_journeys) pairs these into journeys by service number within a
--- bounded time window. Stitch key verified: a train keeps the same number across
--- the border (97.9% of København H arrivals match a Malmö C departure within REST).
+--
+-- MATERIALIZATION: incremental TABLE (the linear substrate, analog of fct_departures
+-- in the legacy chain). This is the §13 pattern at the ~1000-station target: persist
+-- the stop-event grain (linear in events), keep the journey fan-out (fct_journeys,
+-- quadratic in stops-per-trip) a lazily-read VIEW on top. Consequence: journey
+-- freshness is gated on `dbt build` again (GH Actions, 1–4 h jitter) — deliberate
+-- trade for not recomputing the dedup over all raw on every page load.
+--
+-- INCREMENTAL UNIT = the stop-event key (row-level watermark is SAFE here, unlike
+-- fct_departures): the only window function is the dedup, whose partition is exactly
+-- the unique key — nothing spans beyond one key, so a partial batch can't corrupt
+-- anything (§13 rule: incremental grain >= coarsest key any window spans).
+-- 6 h lookback margin = realtime settling tail (~2 h) + GH-Actions build gap (~4 h).
+-- TV raw rows are upserted IN PLACE (ingested_at refreshes on re-pull), so revised
+-- TV events re-enter the batch; REST appends new poll rows per revision.
 --
 -- station_id is REST's native short stop__id (3, 1586, 1587 / DK 25315). TV maps in via
 -- right(ref_stations.rest_area_id,6)::int = stop__id, gated to 740-prefixed (Swedish) ids.
@@ -23,7 +45,10 @@
 with tv as (   -- Swedish stop-events
 
     select
-        right(r.rest_area_id, 6)::int                       as station_id
+        -- ::int strips the zero-padding ('740000003' -> '000003' -> 3), ::text because
+        -- the conformed station id is TEXT end-to-end (matches REST's native stop__id and
+        -- keeps the (event_type, station_id, service_date) index sargable from v_journeys)
+        right(r.rest_area_id, 6)::int::text                 as station_id
         ,coalesce(r.rest_name, r.station_name)              as station_name
         ,t.advertised_train_ident                           as service_number
         ,'train'                                            as transport_mode
@@ -43,13 +68,16 @@ with tv as (   -- Swedish stop-events
         on  r.tv_signature = t.location_signature
         and r.rest_area_id ~ '^740[0-9]{6}$'                -- Swedish stops only
     where t.event_type is not null
+    {% if is_incremental() %}
+      and t.ingested_at >= (select max(ingested_at) from {{ this }}) - interval '6 hours'
+    {% endif %}
 
 ),
 
 rest as (      -- Danish stop-events ONLY — REST is the Danish leg for trains
 
     select
-        stop__id::int                                       as station_id
+        stop__id                                            as station_id   -- already the native short text id ('3', '25315')
         ,stop__name                                         as station_name
         ,trip__technical_number::text                       as service_number
         ,lower(route__transport_mode)                       as transport_mode
@@ -73,11 +101,16 @@ rest as (      -- Danish stop-events ONLY — REST is the Danish leg for trains
       )                                                     -- Danish corridor stops. Østerport not yet present in REST data; add its id when it appears.
       and is_realtime = true
       and route__transport_mode = 'TRAIN'
+    {% if is_incremental() %}
+      and ingested_at >= (select max(ingested_at) from {{ this }}) - interval '6 hours'
+    {% endif %}
 
 ),
 
 -- intra-source latest-poll dedup (REST polls an event many times; §5 late-arriving fact).
 -- No cross-source contention: territories are disjoint, so each key has one source.
+-- Under incremental, the window runs over the batch only — safe, because delete+insert
+-- replaces the stored row and any row in the batch is newer than what it replaces.
 deduped as (
 
     select

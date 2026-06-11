@@ -93,6 +93,7 @@ const journeyToDeparture = (j: Journey): RegionDeparture => {
   return {
     line: j.line_name ?? (j.service_number ? `Tåg ${j.service_number}` : ""),
     lineName: j.line_terminus ?? "",
+    operator: j.operator,
     departureStation: j.origin_stop_name ?? "",
     arrivalStation: j.destination_stop_name ?? "",
     departureTime: toStockholmTime(departureIso),

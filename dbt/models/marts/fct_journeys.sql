@@ -38,17 +38,25 @@ select
     -- natural grain (unified, mode-agnostic vocabulary)
     origin.service_number,
     origin.service_date            as origin_local_date,    -- the calendar day the origin departure physically runs (frontend date filter)
-    origin.station_id::text        as origin_stop_id,       -- text: matches v_active_stations.stop__id and the frontend's string .eq()
-    dest.station_id::text          as destination_stop_id,
+    origin.station_id              as origin_stop_id,       -- text natively in int_stop_events; matches v_active_stations.stop__id
+    dest.station_id                as destination_stop_id,
 
     origin.transport_mode,                                  -- 'train' for now
 
-    -- descriptive attributes
+    -- descriptive attributes. Line/operator are display-only (§8: never rule keys) and
+    -- coalesced across BOTH legs: a TV leg has no line concept, so a tv->rest journey
+    -- inherits the REST leg's line name ("Ö Karlskrona - ... - København"). Operator
+    -- prefers the REST label (human-recognizable: "VR Sverige AB", "Pågatåg", "SJ AB")
+    -- over TV's terse codes ("ARRIVA", "SJ"); tv->tv journeys fall back to the TV code.
     origin.station_name            as origin_stop_name,
     dest.station_name              as destination_stop_name,
-    origin.line_name,                                       -- nullable: TV legs have no line concept (UI falls back to service_number)
-    origin.line_terminus,
-    origin.operator,
+    coalesce(origin.line_name, dest.line_name)           as line_name,
+    coalesce(origin.line_terminus, dest.line_terminus)   as line_terminus,
+    case
+        when origin.source = 'rest' then origin.operator
+        when dest.source   = 'rest' then dest.operator
+        else coalesce(origin.operator, dest.operator)
+    end                            as operator,
 
     -- which feed supplied each leg (TV Swedish vs REST Danish) — source audit
     origin.source                  as origin_source,
