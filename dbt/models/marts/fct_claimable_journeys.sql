@@ -1,68 +1,63 @@
 {{ config(
-    materialized='table'
+    materialized='incremental',
+    unique_key='journey_key',
+    incremental_strategy='delete+insert',
+    on_schema_change='sync_all_columns',
+    pre_hook="{% if is_incremental() %}delete from {{ this }} where origin_local_date < current_date - interval '60 days'{% else %}select 1{% endif %}"
 ) }}
 
-with departures as (
-    select *
-    from {{ ref('fct_departures') }}
-    where event_type = 'departure'
-),
-
-arrivals as (
-    select *
-    from {{ ref('fct_departures') }}
-    where event_type = 'arrival'
-    and (coalesce(arrival_delay, 0) >= 1200 or coalesce(canceled, false))
-)
+-- fct_claimable_journeys
+-- The DURABLE claim-retention layer: every journey that was ever claimable, kept for
+-- 60 days (the reklamation window) regardless of upstream pruning. Substrates are
+-- short-lived (REST raw 10 d; int_stop_events bounded by raw at full-refresh), but a
+-- user can file long after the delay happened — this table is what guarantees the
+-- claimable set survives until the filing deadline passes.
+--
+-- Rebuilt 2026-06-11 on the unified chain: reads fct_journeys (TV+REST), journey_key
+-- grain (service_number, origin_local_date, origin_stop_id, destination_stop_id).
+-- All rows are claimable by construction (filter below), so no is_claimable column.
+--
+-- Retention = accumulate + prune:
+--  * delete+insert on journey_key only touches journeys re-seen in the 6 h lookback;
+--    older captured rows are never rewritten -> they survive upstream pruning.
+--  * pre_hook deletes rows past 60 days each incremental run (self-maintaining; no
+--    pg_cron needed). Operator-aware windows (60 vs 90 d) move to
+--    dim_compensation_rules when operator #2 lands (§9 v3) — until then, 60 d flat.
+--  * Retraction (§13 plan B, accepted): a journey that flips below the threshold
+--    inside the lookback emits no row, so its stale captured row lingers. Rare —
+--    delays are settled track measurements by capture time.
+--
+-- *** NEVER --full-refresh THIS MODEL once it holds rows older than the raw
+-- *** horizon: a full refresh rebuilds from fct_journeys, which only reaches as far
+-- *** back as raw retention (~10 d) — everything older is permanently lost and the
+-- *** 60-day claim guarantee silently breaks. Same hazard class as fct_departures
+-- *** (§10), but here it defeats the table's entire purpose.
 
 select
-    -- surrogate key for this journey (Kimball: one column identifier per fact row)
-    {{ dbt_utils.generate_surrogate_key([
-        'origin.trip__trip_id',
-        'origin.trip__start_date',
-        'origin.stop__id',
-        'dest.stop__id'
-    ]) }} as journey_key,
-
-    -- natural grain (the business keys that define uniqueness)
-    origin.trip__trip_id,
-    origin.trip__start_date,
-    origin.stop__id           as origin_stop_id,
-    dest.stop__id             as destination_stop_id,
-
-    -- descriptive attributes
-    origin.stop__name         as origin_stop_name,
-    dest.stop__name           as destination_stop_name,
-    origin.stop_sequence      as origin_sequence,
-    dest.stop_sequence        as destination_sequence,
-
-    -- timing facts
-    origin.scheduled          as origin_scheduled,
-    origin.realtime           as origin_actual,
-    dest.scheduled            as destination_scheduled,
-    dest.realtime             as destination_actual,
-
-    -- calendar day the origin departure physically runs, in Stockholm local time.
-    -- distinct from trip__start_date (GTFS service date) for post-midnight trips.
-    (origin.scheduled at time zone 'Europe/Stockholm')::date as origin_local_date,
-
-    -- delay measures (v1: train delay at destination only)
-    dest.arrival_delay                     as destination_delay_seconds,
-    round(dest.arrival_delay / 60.0, 1)    as destination_delay_minutes,
-
-    -- v1 claim rule: 20+ min late OR cancelled
-    (coalesce(dest.arrival_delay, 0) >= 1200)
-        or coalesce(dest.canceled, false)  as is_claimable,
-
-    dest.canceled,
-
-    -- route / operator context
-    origin.route__name,
-    origin.route__destination__name        as line_terminus,
-    origin.agency__operator
-
-from departures as origin
-join arrivals as dest
-    on  origin.trip__trip_id    = dest.trip__trip_id
-    and origin.trip__start_date = dest.trip__start_date
-    and origin.stop_sequence    < dest.stop_sequence
+    journey_key,
+    service_number,
+    origin_local_date,
+    origin_stop_id,
+    destination_stop_id,
+    transport_mode,
+    origin_stop_name,
+    destination_stop_name,
+    line_name,
+    line_terminus,
+    operator,
+    origin_source,
+    destination_source,
+    origin_scheduled,
+    origin_actual,
+    destination_scheduled,
+    destination_actual,
+    destination_delay_seconds,
+    destination_delay_minutes,
+    canceled,
+    ingested_at,
+    current_timestamp as captured_at
+from {{ ref('fct_journeys') }}
+where is_claimable
+{% if is_incremental() %}
+  and ingested_at >= (select max(ingested_at) from {{ this }}) - interval '6 hours'
+{% endif %}

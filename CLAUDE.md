@@ -100,10 +100,10 @@ C:\Users\arian\trafiklab\          ← repo root
 
 - **Layered models:** `raw_` (untouched ingestion) → `stg_` (cleaning, type casting, no joins) → `dim_` / `fct_` (business-ready marts). Never edit raw; only derive from it.
 - **Fact grain:** stated explicitly on every fact. Currently:
-  - `fct_departures`: one row per (trip, start_date, stop_id, event_type). Stop-event grain, REST-only. Substrate for `fct_claimable_journeys`.
+  - `fct_departures`: one row per (trip, start_date, stop_id, event_type). Stop-event grain, REST-only. **Currently consumer-less** (since fct_claimable_journeys moved to fct_journeys 2026-06-11) but kept as the only long REST stop-event archive — retire deliberately, not by accident.
   - `int_stop_events`: one row per (service_number, station_id, event_type, service_date). Conformed stop-event grain across TV + REST (§15). Incremental table.
   - `fct_journeys`: one row per (service_number, origin_local_date, origin_stop_id, destination_stop_id). Journey-leg grain, VIEW over `int_stop_events` — the fact the frontend reads.
-  - `fct_claimable_journeys`: journey-leg grain (legacy trip-keyed), **claimable legs only** (delay ≥ 1200 s or cancelled). The durable claim-retention layer (claim windows are 60–90 d while substrates get pruned). See §13.
+  - `fct_claimable_journeys`: same journey_key grain as `fct_journeys`, **claimable journeys only**, captured incrementally and **kept 60 days** (pre_hook prune) regardless of upstream pruning — the durable claim-retention layer. **NEVER `--full-refresh`** once it holds rows older than the raw horizon (collapses retention to ~10 d and silently breaks the 60-day claim guarantee).
   - (`fct_passenger_journeys` — removed 2026-06-11; superseded by `fct_journeys`.)
 - **Surrogate keys:** every fact has one, generated from business keys via `dbt_utils.generate_surrogate_key([...])`. Never use ingestion artifacts (like raw row UUIDs) as the basis — must be deterministic from business keys.
 - **Grain tests:** every fact has a `dbt_utils.unique_combination_of_columns` test on its natural grain. Grain violations = silent data corruption.
@@ -135,8 +135,8 @@ public.raw_departures (table — cron writes here)
        │ (dbt build, every ~15 min via GitHub Actions —
        │  in practice 1–4 hours apart due to GH scheduling jitter)
        ▼
-dbt_dev.fct_departures (incremental table — substrate for the claim-retention layer)
-dbt_dev.fct_claimable_journeys (table — claimable legs only; durable retention layer)
+dbt_dev.fct_departures (incremental table — consumer-less since 2026-06-11; kept as the long REST archive)
+dbt_dev.fct_claimable_journeys (incremental table — claimable journeys from fct_journeys, kept 60 d; the durable retention layer. NEVER --full-refresh)
 dbt_dev.dim_active_stations (table — derived from fct_journeys, §15)
        │
        │ public.v_active_stations
@@ -549,3 +549,7 @@ Models (both views, pushed, **NOT on `main`** so the mirror hasn't shipped them)
 **Scope note:** with all four Danish stops in, the mart now also emits **Danish-internal journeys** (e.g. CPH Airport→København H) — structurally valid O-D legs but **out of scope for a Skånetrafiken claim** (those are Danish-domestic, not cross-border or Sweden-touching). Not filtered yet; a "journey must touch Sweden / be cross-border" product rule is the place to cut them when claim discovery reads this mart.
 
 **journey_key discontinuity (accepted 2026-06-11):** `fct_journeys.journey_key` hashes different business keys than the old `fct_passenger_journeys.journey_key`, so claims filed before the switch won't match new keys — the "✓ Claim filed" badge won't show for them and a double-file is theoretically possible for those rows. Accepted because pre-switch claims are test data.
+
+**Operator label = TV's `information_owner` (2026-06-11).** TV carries three operator-ish fields; only one is the brand users recognize: `information_owner` ("Öresundståg", "Skånetrafiken", "SJ", "Snälltåget"). `operator` is the corporate contractor (ARRIVA, SNÄLL) and `train_owner` is a terse code that flips at contract seams (Ö-TÅG/SKANE) — neither is shown. `int_stop_events` maps `information_owner` → the conformed `operator` column on the TV side; `fct_journeys` prefers the TV leg's label over REST's corporate `agency__operator` ("VR Sverige AB"), so only Danish-internal (rest→rest) journeys show the REST label. Caveat: TV stamps most corridor departures at Malmö C as "Skånetrafiken" (1,854 rows) vs "Öresundståg" (206), so cross-border cards often read "Skånetrafiken" — that's the feed's labeling, not a bug.
+
+**`fct_claimable_journeys` rebuilt on the unified chain (2026-06-11).** Now reads `fct_journeys` (journey_key grain, was fct_departures/trip-keyed), captures `is_claimable` rows incrementally (delete+insert on journey_key, 6 h lookback on the `ingested_at` that `fct_journeys` carries for exactly this), and **retains 60 days** via a pre_hook prune — self-maintaining, no pg_cron. Retraction = §13 plan B (rare stale row accepted; the scheduled-full-refresh reconcile is NOT available because **`--full-refresh` is forbidden** once rows outlive the raw horizon — it would collapse retention to ~10 d). Side effect: `fct_departures` lost its last consumer; kept as the long REST archive pending a deliberate retire decision.

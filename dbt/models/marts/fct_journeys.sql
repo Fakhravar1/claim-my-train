@@ -46,15 +46,16 @@ select
     -- descriptive attributes. Line/operator are display-only (§8: never rule keys) and
     -- coalesced across BOTH legs: a TV leg has no line concept, so a tv->rest journey
     -- inherits the REST leg's line name ("Ö Karlskrona - ... - København"). Operator
-    -- prefers the REST label (human-recognizable: "VR Sverige AB", "Pågatåg", "SJ AB")
-    -- over TV's terse codes ("ARRIVA", "SJ"); tv->tv journeys fall back to the TV code.
+    -- prefers the TV leg's label — int maps it from TV's information_owner, the brand
+    -- users recognize ("Öresundståg", "Skånetrafiken", "SJ") — over REST's corporate
+    -- agency__operator ("VR Sverige AB"); rest->rest journeys fall back to REST's.
     origin.station_name            as origin_stop_name,
     dest.station_name              as destination_stop_name,
     coalesce(origin.line_name, dest.line_name)           as line_name,
     coalesce(origin.line_terminus, dest.line_terminus)   as line_terminus,
     case
-        when origin.source = 'rest' then origin.operator
-        when dest.source   = 'rest' then dest.operator
+        when origin.source = 'tv' then origin.operator
+        when dest.source   = 'tv' then dest.operator
         else coalesce(origin.operator, dest.operator)
     end                            as operator,
 
@@ -76,7 +77,11 @@ select
     (coalesce(dest.delay_seconds, 0) >= 1200)
         or coalesce(dest.canceled, false)   as is_claimable,
 
-    dest.canceled
+    dest.canceled,
+
+    -- watermark for incremental consumers (fct_claimable_journeys): the freshest
+    -- ingestion touching either leg. Excluded from the public wrapper (plumbing).
+    greatest(origin.ingested_at, dest.ingested_at) as ingested_at
 
 from departures as origin
 join arrivals as dest

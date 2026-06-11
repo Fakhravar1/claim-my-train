@@ -25,14 +25,15 @@ models:
             - stop_sequence
   - name: fct_claimable_journeys
     description: >
-        Discovery fact: one row per claimable journey leg (origin->destination on a
-        single trip) where the destination arrival is 20+ min late or cancelled.
-        Derived from fct_departures via filter-before-join; incremental, delete+insert
-        on journey_key, ~6h lookback to cover the GTFS-RT settling tail. NOT the same
-        as public.claims (filed claims) — this is the detected set a user MAY file on.
+        Durable claim-retention layer: one row per claimable journey (destination 20+
+        min late or cancelled), captured from fct_journeys and KEPT 60 DAYS (pre_hook
+        prune) regardless of upstream raw pruning — the set a user may still file on.
+        Incremental delete+insert on journey_key, 6h lookback. NEVER --full-refresh
+        once it holds rows older than the raw horizon (collapses retention, see model
+        header). NOT the same as public.claims (filed claims).
     columns:
         - name: journey_key
-          description: Surrogate key; hash of (trip_id, start_date, origin_stop, destination_stop).
+          description: Surrogate key; hash of (service_number, origin_local_date, origin_stop, destination_stop). Matches fct_journeys.
           data_tests:
             - not_null
             - unique
@@ -40,8 +41,8 @@ models:
         - dbt_utils.unique_combination_of_columns:
             arguments:
               combination_of_columns:
-                - trip__trip_id
-                - trip__start_date
+                - service_number
+                - origin_local_date
                 - origin_stop_id
                 - destination_stop_id
 

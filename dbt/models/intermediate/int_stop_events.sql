@@ -60,7 +60,10 @@ with tv as (   -- Swedish stop-events
         ,t.canceled
         ,null::text                                         as line_name        -- TV has no line concept
         ,null::text                                         as line_terminus
-        ,t.operator
+        -- information_owner is TV's BRAND label (Öresundståg / Skånetrafiken / SJ /
+        -- Snälltåget) — what users recognize. TV's `operator` field is the corporate
+        -- contractor (ARRIVA, SNÄLL); deliberately not used for display.
+        ,t.information_owner                                as operator
         ,t.ingested_at
         ,'tv'                                               as source
     from {{ ref('stg_train_announcements') }} t
