@@ -134,15 +134,32 @@ const isClaimOutsideTicketValidity = (
 export default function SkanetrafikenDelayAlerts() {
   useAppShellStyles(themeCSS);
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const routeFromParam = normalizeStopParam(searchParams.get("from"));
   const routeToParam = normalizeStopParam(searchParams.get("to"));
+  // Mount-time presence decides whether profile preferences apply (see below) —
+  // live params are always set once the sync effect has written them back.
+  const hadRouteParamsOnMount = useRef(Boolean(routeFromParam || routeToParam)).current;
   const initialFromStopId =
     routeFromParam && routeFromParam !== routeToParam ? routeFromParam : DEFAULT_FROM_STOP_ID;
   const initialToStopId =
     routeToParam && routeToParam !== initialFromStopId ? routeToParam : DEFAULT_TO_STOP_ID;
   const [fromStopId, setFromStopId] = useState<string>(initialFromStopId);
   const [toStopId, setToStopId] = useState<string>(initialToStopId);
+
+  // Keep the O-D choice in the URL so it survives switching between the
+  // departures and delay-alerts views (their cross-links carry the params).
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("from", fromStopId);
+        next.set("to", toStopId);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [fromStopId, toStopId, setSearchParams]);
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [selectedAlert, setSelectedAlert] = useState<RegionDeparture | null>(null);
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
@@ -166,7 +183,7 @@ export default function SkanetrafikenDelayAlerts() {
 
   const lookbackStart = useMemo(() => {
     const d = new Date();
-    d.setUTCDate(d.getUTCDate() - 60);
+    d.setUTCDate(d.getUTCDate() - 90); // matches the 90 d claimable retention layer
     return d.toISOString().slice(0, 10);
   }, []);
 
@@ -288,8 +305,7 @@ export default function SkanetrafikenDelayAlerts() {
 
   useEffect(() => {
     if (!profile) return;
-    const hasRouteParams = Boolean(routeFromParam || routeToParam);
-    if (hasRouteParams) return;
+    if (hadRouteParamsOnMount) return;
     if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
       setFromStopId(profile.preferred_from_stop_id);
     }
@@ -297,7 +313,7 @@ export default function SkanetrafikenDelayAlerts() {
       setToStopId(profile.preferred_to_stop_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id, routeFromParam, routeToParam]);
+  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id, hadRouteParamsOnMount]);
 
   const promptLoginForClaim = () => {
     toast({
@@ -342,7 +358,7 @@ export default function SkanetrafikenDelayAlerts() {
 
   return (
     <>
-      <Link className="back-link" to="/regions/skanetrafiken">
+      <Link className="back-link" to={`/regions/skanetrafiken?from=${fromStopId}&to=${toStopId}`}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
           <path d="M19 12H5" /><path d="m11 18-6-6 6-6" />
         </svg>
@@ -469,7 +485,7 @@ export default function SkanetrafikenDelayAlerts() {
 
         {/* Hero CTA — same size and style as "Check Claimable Delays" on the departures page */}
         <div className="hero-cta-row">
-          <Link to="/regions/skanetrafiken" className="btn-cmt btn-cmt--primary btn-cmt--hero">
+          <Link to={`/regions/skanetrafiken?from=${fromStopId}&to=${toStopId}`} className="btn-cmt btn-cmt--primary btn-cmt--hero">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5" /><path d="m11 18-6-6 6-6" />
             </svg>

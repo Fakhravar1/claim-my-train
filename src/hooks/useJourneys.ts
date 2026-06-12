@@ -16,18 +16,21 @@ export function useJourneys({ fromStopId, toStopId, date, onlyClaimable = false 
     queryKey: ["journeys", fromStopId, toStopId, date, onlyClaimable],
     enabled: Boolean(fromStopId && toStopId),
     queryFn: async () => {
-      let query = supabase
-        .from("v_journeys")
+      // Claimables come from the durable 90-day retention layer
+      // (v_claimable_journeys, column-compatible with v_journeys) — fct_journeys
+      // only reaches back as far as raw retention (~10 d), but a claim stays
+      // filable for 60–90 days. Live departures read v_journeys.
+      const table = onlyClaimable ? "v_claimable_journeys" : "v_journeys";
+      const { data, error } = await supabase
+        .from(table)
         .select("*")
         .eq("origin_stop_id", fromStopId!)
         .eq("destination_stop_id", toStopId!)
         .eq("origin_local_date", date)
         .order("origin_scheduled", { ascending: false })
         .limit(500);
-      if (onlyClaimable) query = query.eq("is_claimable", true);
-      const { data, error } = await query;
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as Journey[];
     },
     staleTime: 5 * 60 * 1000,
   });

@@ -103,7 +103,7 @@ C:\Users\arian\trafiklab\          ← repo root
   - `fct_departures`: one row per (trip, start_date, stop_id, event_type). Stop-event grain, REST-only. **Currently consumer-less** (since fct_claimable_journeys moved to fct_journeys 2026-06-11) but kept as the only long REST stop-event archive — retire deliberately, not by accident.
   - `int_stop_events`: one row per (service_number, station_id, event_type, service_date). Conformed stop-event grain across TV + REST (§15). Incremental table.
   - `fct_journeys`: one row per (service_number, origin_local_date, origin_stop_id, destination_stop_id). Journey-leg grain, VIEW over `int_stop_events` — the fact the frontend reads.
-  - `fct_claimable_journeys`: same journey_key grain as `fct_journeys`, **claimable journeys only**, captured incrementally and **kept 60 days** (pre_hook prune) regardless of upstream pruning — the durable claim-retention layer. **NEVER `--full-refresh`** once it holds rows older than the raw horizon (collapses retention to ~10 d and silently breaks the 60-day claim guarantee).
+  - `fct_claimable_journeys`: same journey_key grain as `fct_journeys`, **claimable journeys only**, captured incrementally and **kept 90 days** (pre_hook prune; max of the 60/90 d operator regimes — per-operator pruning waits for `dim_compensation_rules`) regardless of upstream pruning — the durable claim-retention layer. Served to the delay-alerts page via `public.v_claimable_journeys`. **NEVER `--full-refresh`** once it holds rows older than the raw horizon (collapses retention to ~10 d and silently breaks the claim-window guarantee).
   - (`fct_passenger_journeys` — removed 2026-06-11; superseded by `fct_journeys`.)
 - **Surrogate keys:** every fact has one, generated from business keys via `dbt_utils.generate_surrogate_key([...])`. Never use ingestion artifacts (like raw row UUIDs) as the basis — must be deterministic from business keys.
 - **Grain tests:** every fact has a `dbt_utils.unique_combination_of_columns` test on its natural grain. Grain violations = silent data corruption.
@@ -136,7 +136,11 @@ public.raw_departures (table — cron writes here)
        │  in practice 1–4 hours apart due to GH scheduling jitter)
        ▼
 dbt_dev.fct_departures (incremental table — consumer-less since 2026-06-11; kept as the long REST archive)
-dbt_dev.fct_claimable_journeys (incremental table — claimable journeys from fct_journeys, kept 60 d; the durable retention layer. NEVER --full-refresh)
+dbt_dev.fct_claimable_journeys (incremental table — claimable journeys from fct_journeys, kept 90 d; the durable retention layer. NEVER --full-refresh)
+       │
+       │ public.v_claimable_journeys (column-compatible with v_journeys)
+       ▼
+Delay-alerts page (useJourneys onlyClaimable:true)
 dbt_dev.dim_active_stations (table — derived from fct_journeys, §15)
        │
        │ public.v_active_stations
@@ -213,7 +217,7 @@ where origin_stop_id = :origin
 
 Never put threshold logic (the "20 minutes" rule) in the frontend. The fact pre-computes `is_claimable`; the UI consumes it.
 
-**Status (since 2026-06-11):** Both `SkanetrafikenApp.tsx` (at `/regions/skanetrafiken`) and `SkanetrafikenDelayAlerts.tsx` (at `/regions/skanetrafiken/delay-alerts`) query **`public.v_journeys`** (unified TV+REST fact, §15) via `src/hooks/useJourneys.ts`. Departures page passes `onlyClaimable: false` (shows everything on the route); delay-alerts passes `onlyClaimable: true`. Pages map `line_name ?? "Tåg {service_number}"` (TV legs have no line concept). `useStartClaim` fills `claims.trip_start_date` from `origin_local_date` (the claims app table keeps its column names). The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
+**Status (since 2026-06-11/12):** Both pages query via `src/hooks/useJourneys.ts`, but against **different sources**: the departures page (`onlyClaimable: false`) reads **`public.v_journeys`** (live unified fact, raw-horizon depth), while delay-alerts (`onlyClaimable: true`) reads **`public.v_claimable_journeys`** — the 90-day durable retention layer (§15), column-compatible with `v_journeys` — so claimables stay visible/filable for the whole claim window even after raw pruning. Its date picker reaches 90 days back. **O-D selections persist across the two views**: both pages sync `from`/`to` into the URL (replace, no history spam) and their cross-links carry the params; profile preferred-station defaults apply only when the URL had no route at mount. Pages map `line_name ?? "Tåg {service_number}"` (TV legs have no line concept). `useStartClaim` fills `claims.trip_start_date` from `origin_local_date` (the claims app table keeps its column names). The legacy edge function + corridor-collector pipeline was decommissioned (migration `20260519120000_decommission_live_departures_pipeline.sql`). All three pages' dropdowns are powered by `useStations()`.
 
 **Claim filing (implemented).** The confirm dialog inserts a `pending` row into `public.claims` via `useStartClaim`; the `claim-worker/` generates the filled PDF (§3, §6). The old **autofill-bot path is removed** — `scripts/claim-bot.js` (Playwright), the `claim-assistant` edge function, the `claim-bot` npm script, and the `playwright` dep are all deleted. There's still a non-bot "Or open the official form" link (`CLAIM_START_URL`) as a manual fallback.
 

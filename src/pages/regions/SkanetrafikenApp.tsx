@@ -81,15 +81,33 @@ export default function SkanetrafikenApp() {
   useAppShellStyles(themeCSS);
 
   const { profile } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const routeFromParam = normalizeStopParam(searchParams.get("from"));
   const routeToParam = normalizeStopParam(searchParams.get("to"));
+  // Whether the URL carried a route on MOUNT decides if profile preferences may
+  // apply — checked against mount-time params, not live ones, because we sync
+  // selections back into the URL below (live params are always set after that).
+  const hadRouteParamsOnMount = useRef(Boolean(routeFromParam || routeToParam)).current;
   const initialFromStopId =
     routeFromParam && routeFromParam !== routeToParam ? routeFromParam : DEFAULT_FROM_STOP_ID;
   const initialToStopId =
     routeToParam && routeToParam !== initialFromStopId ? routeToParam : DEFAULT_TO_STOP_ID;
   const [fromStopId, setFromStopId] = useState<string>(initialFromStopId);
   const [toStopId, setToStopId] = useState<string>(initialToStopId);
+
+  // Keep the O-D choice in the URL so it survives switching between the
+  // departures and delay-alerts views (their cross-links carry the params).
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("from", fromStopId);
+        next.set("to", toStopId);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [fromStopId, toStopId, setSearchParams]);
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -153,8 +171,7 @@ export default function SkanetrafikenApp() {
 
   useEffect(() => {
     if (!profile) return;
-    const hasRouteParams = Boolean(routeFromParam || routeToParam);
-    if (hasRouteParams) return;
+    if (hadRouteParamsOnMount) return;
     if (profile.preferred_from_stop_id && profile.preferred_from_stop_id !== fromStopId) {
       setFromStopId(profile.preferred_from_stop_id);
     }
@@ -162,7 +179,7 @@ export default function SkanetrafikenApp() {
       setToStopId(profile.preferred_to_stop_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id, routeFromParam, routeToParam]);
+  }, [profile?.preferred_from_stop_id, profile?.preferred_to_stop_id, hadRouteParamsOnMount]);
 
   const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
@@ -293,7 +310,7 @@ export default function SkanetrafikenApp() {
         </section>
 
         <div className="hero-cta-row">
-          <Link to="/regions/skanetrafiken/delay-alerts" className="btn-cmt btn-cmt--primary btn-cmt--hero">
+          <Link to={`/regions/skanetrafiken/delay-alerts?from=${fromStopId}&to=${toStopId}`} className="btn-cmt btn-cmt--primary btn-cmt--hero">
             Check Claimable Delays
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14" /><path d="m13 6 6 6-6 6" />

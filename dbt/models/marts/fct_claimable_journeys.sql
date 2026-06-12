@@ -3,15 +3,20 @@
     unique_key='journey_key',
     incremental_strategy='delete+insert',
     on_schema_change='sync_all_columns',
-    pre_hook="{% if is_incremental() %}delete from {{ this }} where origin_local_date < current_date - interval '60 days'{% else %}select 1{% endif %}"
+    pre_hook="{% if is_incremental() %}delete from {{ this }} where origin_local_date < current_date - interval '90 days'{% else %}select 1{% endif %}"
 ) }}
 
 -- fct_claimable_journeys
 -- The DURABLE claim-retention layer: every journey that was ever claimable, kept for
--- 60 days (the reklamation window) regardless of upstream pruning. Substrates are
--- short-lived (REST raw 10 d; int_stop_events bounded by raw at full-refresh), but a
--- user can file long after the delay happened — this table is what guarantees the
--- claimable set survives until the filing deadline passes.
+-- 90 days regardless of upstream pruning. Claim windows are operator-dependent
+-- (60 d regional reklamation vs 90 d) — retention uses the MAX of the regimes,
+-- because keeping a claimable too long costs kilobytes while pruning it too early
+-- silently destroys a user's claim. Per-operator pruning moves to
+-- dim_compensation_rules when operator #2 lands (§9 v3). Substrates are short-lived
+-- (REST raw 10 d; int_stop_events bounded by raw at full-refresh), but a user can
+-- file long after the delay happened — this table is what guarantees the claimable
+-- set survives until the filing deadline passes. The delay-alerts page reads it
+-- via public.v_claimable_journeys.
 --
 -- Rebuilt 2026-06-11 on the unified chain: reads fct_journeys (TV+REST), journey_key
 -- grain (service_number, origin_local_date, origin_stop_id, destination_stop_id).
