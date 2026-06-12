@@ -2,13 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -28,6 +21,7 @@ import themeCSS from "@/themes/skanetrafiken/theme.css?inline";
 import SkaneBand from "@/components/region/SkaneBand";
 import RegionUserMenu from "@/components/region/RegionUserMenu";
 import RegionDepartureCard, { type RegionDeparture } from "@/components/region/RegionDepartureCard";
+import StationCombobox from "@/components/region/StationCombobox";
 
 const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
 
@@ -413,37 +407,21 @@ export default function SkanetrafikenDelayAlerts() {
           <div className="field-grid field-grid--3">
             <div className="field">
               <span className="field__label">From</span>
-              <Select value={fromStopId} onValueChange={handleFromChange}>
-                <SelectTrigger>
-                  <SelectValue>{fromStation?.name ?? "Loading…"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {stationOptions.length === 0 ? (
-                    <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
-                  ) : (
-                    stationOptions.filter((s) => s.id !== toStopId).map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+              <StationCombobox
+                value={fromStopId}
+                options={stationOptions.filter((s) => s.id !== toStopId)}
+                onSelect={handleFromChange}
+                ariaLabel="From station"
+              />
             </div>
             <div className="field">
               <span className="field__label">To</span>
-              <Select value={toStopId} onValueChange={handleToChange}>
-                <SelectTrigger>
-                  <SelectValue>{toStation?.name ?? "Loading…"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {stationOptions.length === 0 ? (
-                    <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
-                  ) : (
-                    stationOptions.filter((s) => s.id !== fromStopId).map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+              <StationCombobox
+                value={toStopId}
+                options={stationOptions.filter((s) => s.id !== fromStopId)}
+                onSelect={handleToChange}
+                ariaLabel="To station"
+              />
             </div>
             <div className="field">
               <span className="field__label">Date</span>

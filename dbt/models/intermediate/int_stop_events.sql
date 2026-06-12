@@ -101,7 +101,9 @@ rest as (      -- Danish stop-events ONLY — REST is the Danish leg for trains
         , '23657'   -- Tårnby
         , '25313'   -- Ørestad
         , '25315'   -- København H
-      )                                                     -- Danish corridor stops. Østerport not yet present in REST data; add its id when it appears.
+        , '25318'   -- København Nørreport
+        , '25317'   -- København Østerport (corridor terminus)
+      )                                                     -- Danish corridor stops (REST = Danish leg; collector polls their boards)
       and is_realtime = true
       and route__transport_mode = 'TRAIN'
     {% if is_incremental() %}

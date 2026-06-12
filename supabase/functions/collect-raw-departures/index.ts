@@ -12,6 +12,8 @@ const CORRIDOR_STOPS = [
   { id: '860000856', name: 'København Ørestad' },
   { id: '860000857', name: 'Tårnby' },
   { id: '860050858', name: 'CPH Airport' },
+  { id: '860000646', name: 'København Nørreport' },
+  { id: '860000650', name: 'Østerport' },
 ]
 
 const REQUEST_SPACING_MS = 250

@@ -27,7 +27,7 @@ export function useJourneys({ fromStopId, toStopId, date, onlyClaimable = false 
         .eq("origin_stop_id", fromStopId!)
         .eq("destination_stop_id", toStopId!)
         .eq("origin_local_date", date)
-        .order("origin_scheduled", { ascending: false })
+        .order("origin_scheduled", { ascending: true }) // earliest first — matches the operators' own boards
         .limit(500);
       if (error) throw error;
       return (data ?? []) as Journey[];
