@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      digest_log: {
+        Row: {
+          id: string
+          journey_key: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          journey_key: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          journey_key?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       claims: {
         Row: {
           consented_at: string | null
@@ -108,6 +129,7 @@ export type Database = {
           commuter_return_start_time: string | null
           commuter_to_stop_id: string | null
           created_at: string | null
+          digest_frequency: string
           email: string | null
           first_name: string | null
           full_name: string | null
@@ -138,6 +160,7 @@ export type Database = {
           commuter_return_start_time?: string | null
           commuter_to_stop_id?: string | null
           created_at?: string | null
+          digest_frequency?: string
           email?: string | null
           first_name?: string | null
           full_name?: string | null
@@ -168,6 +191,7 @@ export type Database = {
           commuter_return_start_time?: string | null
           commuter_to_stop_id?: string | null
           created_at?: string | null
+          digest_frequency?: string
           email?: string | null
           first_name?: string | null
           full_name?: string | null

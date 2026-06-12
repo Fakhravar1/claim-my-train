@@ -131,6 +131,7 @@ const Settings = () => {
   const [commuterOutboundEndTime, setCommuterOutboundEndTime] = useState("");
   const [commuterReturnStartTime, setCommuterReturnStartTime] = useState("");
   const [commuterReturnEndTime, setCommuterReturnEndTime] = useState("");
+  const [digestFrequency, setDigestFrequency] = useState("off");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<ClaimProfileErrors>({});
   const [activeTab, setActiveTab] = useState("personal");
@@ -184,6 +185,7 @@ const Settings = () => {
     setCommuterOutboundEndTime(profile?.commuter_outbound_end_time ?? "");
     setCommuterReturnStartTime(profile?.commuter_return_start_time ?? "");
     setCommuterReturnEndTime(profile?.commuter_return_end_time ?? "");
+    setDigestFrequency(profile?.digest_frequency ?? "off");
   }, [profile]);
 
   const validityStatus = useMemo(() => {
@@ -308,6 +310,7 @@ const Settings = () => {
           commuter_outbound_end_time: commuterOutboundEndTime || null,
           commuter_return_start_time: commuterReturnStartTime || null,
           commuter_return_end_time: commuterReturnEndTime || null,
+          digest_frequency: digestFrequency,
         },
         { onConflict: "id" }
       );
@@ -827,6 +830,43 @@ const Settings = () => {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+                  <div>
+                    <p className="text-sm font-semibold">Delay digest emails</p>
+                    <p className="text-xs text-muted-foreground">
+                      Get an email listing late departures on your commute (route and time windows
+                      above), with a one-click way to claim them. Only sent when there is something
+                      to claim.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="digest-frequency">Frequency</Label>
+                      <Select value={digestFrequency} onValueChange={setDigestFrequency}>
+                        <SelectTrigger id="digest-frequency">
+                          <SelectValue>
+                            {digestFrequency === "daily"
+                              ? "Daily (evenings)"
+                              : digestFrequency === "weekly"
+                              ? "Weekly (Sunday evenings)"
+                              : "Off"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="off">Off</SelectItem>
+                          <SelectItem value="daily">Daily (evenings)</SelectItem>
+                          <SelectItem value="weekly">Weekly (Sunday evenings)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {digestFrequency !== "off" && (!commuterFromStopId || !commuterToStopId) && (
+                    <p className="text-xs text-amber-600">
+                      Set your commute stations above — the digest only covers your saved commute.
+                    </p>
+                  )}
                 </div>
               </TabsContent>
 

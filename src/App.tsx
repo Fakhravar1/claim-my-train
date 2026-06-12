@@ -15,6 +15,7 @@ import ProtectedFromAuth from "@/components/landing/ProtectedFromAuth";
 const Landing = lazy(() => import("./pages/Landing"));
 const SkanetrafikenApp = lazy(() => import("./pages/regions/SkanetrafikenApp"));
 const SkanetrafikenDelayAlerts = lazy(() => import("./pages/regions/SkanetrafikenDelayAlerts"));
+const SkanetrafikenClaimReview = lazy(() => import("./pages/regions/SkanetrafikenClaimReview"));
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
               />
               <Route path="/regions/skanetrafiken" element={<SkanetrafikenApp />} />
               <Route path="/regions/skanetrafiken/delay-alerts" element={<SkanetrafikenDelayAlerts />} />
+              <Route path="/regions/skanetrafiken/claim-review" element={<SkanetrafikenClaimReview />} />
               <Route path="/login" element={<Login />} />
               <Route path="/settings" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
