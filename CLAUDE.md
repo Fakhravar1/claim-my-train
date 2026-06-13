@@ -72,7 +72,6 @@ C:\Users\arian\trafiklab\          ← repo root
 │   │   │   ├── dim_stations.sql
 │   │   │   └── dim_active_stations.sql      ← stations appearing in fct_journeys (the dropdowns)
 │   │   └── marts/
-│   │       ├── fct_departures.sql           ← stop-event grain, REST-only (incremental table; substrate for fct_claimable_journeys)
 │   │       ├── fct_claimable_journeys.sql   ← claimable legs only (table; the durable claim-retention layer). See §13
 │   │       ├── fct_journeys.sql             ← THE journey fact (view over int_stop_events; frontend reads this)
 │   │       ├── v_active_stations.sql        ← public wrapper view (dbt-managed, schema='public')
@@ -100,7 +99,7 @@ C:\Users\arian\trafiklab\          ← repo root
 
 - **Layered models:** `raw_` (untouched ingestion) → `stg_` (cleaning, type casting, no joins) → `dim_` / `fct_` (business-ready marts). Never edit raw; only derive from it.
 - **Fact grain:** stated explicitly on every fact. Currently:
-  - `fct_departures`: one row per (trip, start_date, stop_id, event_type). Stop-event grain, REST-only. **Currently consumer-less** (since fct_claimable_journeys moved to fct_journeys 2026-06-11) but kept as the only long REST stop-event archive — retire deliberately, not by accident.
+  - (`fct_departures` — **retired 2026-06-13**. Was the REST-only stop-event substrate; became consumer-less when the retention layer moved to `fct_journeys`, so dropped to reclaim 51 MB. Model file deleted, table dropped via migration `20260613120000`. Git history is the rollback.)
   - `int_stop_events`: one row per (service_number, station_id, event_type, service_date). Conformed stop-event grain across TV + REST (§15). Incremental table.
   - `fct_journeys`: one row per (service_number, origin_local_date, origin_stop_id, destination_stop_id). Journey-leg grain, VIEW over `int_stop_events` — the fact the frontend reads.
   - `fct_claimable_journeys`: same journey_key grain as `fct_journeys`, **claimable journeys only**, captured incrementally and **kept 90 days** (pre_hook prune; max of the 60/90 d operator regimes — per-operator pruning waits for `dim_compensation_rules`) regardless of upstream pruning — the durable claim-retention layer. Served to the delay-alerts page via `public.v_claimable_journeys`. **NEVER `--full-refresh`** once it holds rows older than the raw horizon (collapses retention to ~10 d and silently breaks the claim-window guarantee).
@@ -135,7 +134,6 @@ public.raw_departures (table — cron writes here)
        │ (dbt build, every ~15 min via GitHub Actions —
        │  in practice 1–4 hours apart due to GH scheduling jitter)
        ▼
-dbt_dev.fct_departures (incremental table — consumer-less since 2026-06-11; kept as the long REST archive)
 dbt_dev.fct_claimable_journeys (incremental table — claimable journeys from fct_journeys, kept 90 d; the durable retention layer. NEVER --full-refresh)
        │
        │ public.v_claimable_journeys (column-compatible with v_journeys)
@@ -168,7 +166,7 @@ station count grows).
 - `raw_departures` ingestion from Trafiklab GTFS-RT via the `collect-raw-departures` edge function. Keep the deployed copy and `supabase/functions/collect-raw-departures/index.ts` in sync — drift between them is what masked the May 2026 Triangeln incident (§10). The table's unique constraint is `(trip__trip_id, trip__start_date, stop__id, scheduled, ingested_at, event_type)`. `event_type` MUST stay in both the constraint and the function's `onConflict` argument, otherwise arrival rows for intermediate stops collide with the same-trip departure row in the same upsert batch and get silently dropped by `ignoreDuplicates: true`.
 - Scheduled `dbt build` via `.github/workflows/dbt-run.yml` keeps `fct_*` and `dim_active_stations` tables fresh. Triggers: `schedule: */15` + `workflow_dispatch` (for manual runs from the Actions tab). Logs visible per-run in the GitHub Actions UI.
 - `stg_departures` cleaning layer.
-- `fct_departures` (incremental, `delete+insert` on `departure_key`) carries indexes on dominant query patterns: `(trip__trip_id, trip__start_date, event_type, stop_sequence)` and `(event_type, stop__id)`. It remains REST-only and exists as the substrate for `fct_claimable_journeys` (retention layer). `int_stop_events` (§15) carries its own indexes: `(event_type, station_id, service_date)` + `(service_number, event_type, scheduled)`.
+- `int_stop_events` (§15) is the materialized substrate, indexed on `(event_type, station_id, service_date)` + `(service_number, event_type, scheduled)`. (`fct_departures` — the old REST-only substrate — was retired 2026-06-13; see §15.)
 - **The date concept that is load-bearing: `origin_local_date`** = `(origin.scheduled at time zone 'Europe/Stockholm')::date` — the **calendar day the origin departure physically runs**. This is what users mean in the date picker, and what the frontend filters on. (History: filtering on the GTFS service date `trip__start_date` produced a "picked the 24th, top card says 25 May" bug — post-midnight trips belong to the previous service date. `fct_journeys` keys on `origin_local_date` natively.)
 - `dim_stations` view (from REST stops; includes the Danish corridor stops — but NOT TV-only stations, since it derives from REST-polled boards).
 - `dim_active_stations` table = every station appearing in `int_stop_events`, **names from the conformed layer itself** (each leg carries `station_name` from its own feed), coords left-joined from `dim_stations` (nullable for TV-only stations; no component reads them). Source for the frontend dropdowns. Lesson (2026-06-11, Lund): deriving names from `dim_stations` made TV-only stations vanish from dropdowns — Lund C was the first station never REST-polled. When adding stations via the TV `STATIONS` array, no dim work is needed; the chain picks them up on the next `dbt build`.
@@ -539,7 +537,9 @@ Models (both views, pushed, **NOT on `main`** so the mirror hasn't shipped them)
 - **Indexes** (dbt-managed): `(event_type, station_id, service_date)` for the board's narrow read, `(service_number, event_type, scheduled)` for the pairing join. `station_id` is **text natively** in the table — TV maps in via `right(rest_area_id,6)::int::text` — because a `station_id::text` cast in the view made the station predicate non-sargable (planner filtered instead of index-matched; harmless at 7 stations, lethal at 1000). Verified plan: both indexes index-cond on all columns, ~43 ms cold for one O-D+date.
 - **`post_hook="analyze {{ this }}"`** — dbt does NOT analyze after build, and a freshly full-refreshed table with stale stats made the planner pick a 260 ms join-filter plan (rows=1 estimates). The hook removes that footgun.
 - **Freshness consequence:** journey visibility is gated on `dbt build` again (deliberate trade). `raw_train_announcements(ingested_at)` btree added for the lookback filter (migration `20260611130000`, applied via MCP).
-- **`--full-refresh` of `int_stop_events` is bounded by raw retention** (TV raw currently unpruned; REST raw 10 days) — same §10 hazard class as `fct_departures`, but milder while TV raw is unpruned.
+- **`--full-refresh` of `int_stop_events` is bounded by raw retention** (TV raw pruned at 14 days since 2026-06-13; REST raw 10 days) — same §10 hazard class: a full-refresh now rebuilds from ≤14 days of TV raw and permanently drops older `int_stop_events` rows. The 90-day claimable table is captured independently, so claim filing survives, but the departures board's history collapses to 14 days. Don't `--full-refresh` expecting the full 90-day board depth back.
+
+**Pruning (live as of 2026-06-13).** Three pg_cron jobs bound the growers: `prune-raw-departures-10d` (REST raw), `prune-raw-train-announcements-14d` (TV raw — the conformed history lives in `int_stop_events`, which accumulates separately, so the raw buffer can be short), `prune-int-stop-events-90d` (bounds the conformed layer at the claim window; covers the departures board's 60-day picker). `fct_claimable_journeys` self-prunes at 90 d via its pre_hook. After dropping `fct_departures` (51 MB) the DB sits at ~130 MB / 26% of the 500 MB free-tier ceiling.
 
 **Multi-modal by design (trains-only today).** The whole chain is deliberately built for ALL means of transport even though only trains flow now: mode-agnostic vocabulary (`service_number` not train_number, `transport_mode` column, `line_name` not route__name), and future trams/boats/buses enter by extending `int_stop_events`' REST CTE filter (`route__transport_mode = 'TRAIN'` today) — no downstream rename needed. Don't add mode-specific columns or `CASE WHEN transport_mode` logic to the fact (§8 applies to modes as much as operators).
 

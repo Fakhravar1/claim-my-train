@@ -28,23 +28,27 @@
 -- modestly skewed. 0.10 is loose enough not to false-alarm but tight enough
 -- that the Triangeln collapse (0.006) would have triggered immediately.
 
+-- Runs against int_stop_events (the live conformed TV+REST layer; fct_departures
+-- was retired 2026-06-13). station_id/station_name/service_date replace the old
+-- stop__id/stop__name/trip__start_date.
+
 with daily_counts as (
     select
-        stop__id,
-        stop__name,
-        trip__start_date,
+        station_id,
+        station_name,
+        service_date,
         count(*) filter (where event_type = 'arrival')   as arrival_count,
         count(*) filter (where event_type = 'departure') as departure_count
-    from {{ ref('fct_departures') }}
-    where trip__start_date::date = current_date - 1
+    from {{ ref('int_stop_events') }}
+    where service_date = current_date - 1
     group by 1, 2, 3
 ),
 
 ratios as (
     select
-        stop__id,
-        stop__name,
-        trip__start_date,
+        station_id,
+        station_name,
+        service_date,
         arrival_count,
         departure_count,
         greatest(arrival_count, departure_count) as larger,
@@ -53,9 +57,9 @@ ratios as (
 )
 
 select
-    stop__id,
-    stop__name,
-    trip__start_date,
+    station_id,
+    station_name,
+    service_date,
     arrival_count,
     departure_count,
     round(smaller::numeric / nullif(larger, 0), 3) as ratio
