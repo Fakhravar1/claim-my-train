@@ -74,6 +74,8 @@ C:\Users\arian\trafiklab\          ← repo root
 │   │   └── marts/
 │   │       ├── fct_claimable_journeys.sql   ← claimable legs only (table; the durable claim-retention layer). See §13
 │   │       ├── fct_journeys.sql             ← THE journey fact (view over int_stop_events; frontend reads this)
+│       ├── agg_corridor_delays_daily.sql ← scouting: daily delay aggregate at monitored hubs (§18)
+│       ├── agg_corridor_delays.sql      ← scouting: corridor ranking view (§18)
 │   │       ├── v_active_stations.sql        ← public wrapper view (dbt-managed, schema='public')
 │   │       ├── v_journeys.sql               ← public wrapper view over fct_journeys
 │   │       └── _marts.yml                   ← model tests & docs
@@ -102,6 +104,7 @@ C:\Users\arian\trafiklab\          ← repo root
   - (`fct_departures` — **retired 2026-06-13**. Was the REST-only stop-event substrate; became consumer-less when the retention layer moved to `fct_journeys`, so dropped to reclaim 51 MB. Model file deleted, table dropped via migration `20260613120000`. Git history is the rollback.)
   - `int_stop_events`: one row per (service_number, station_id, event_type, service_date). Conformed stop-event grain across TV + REST (§15). Incremental table.
   - `fct_journeys`: one row per (service_number, origin_local_date, origin_stop_id, destination_stop_id). Journey-leg grain, VIEW over `int_stop_events` — the fact the frontend reads.
+  - `agg_corridor_delays_daily`: one row per (hub_signature, direction, counterpart_signature, operator, service_date). Corridor-scouting daily delay aggregate at monitored hubs — NOT a claim model (§18). Incremental, accumulates past the raw prune.
   - `fct_claimable_journeys`: same journey_key grain as `fct_journeys`, **claimable journeys only**, captured incrementally and **kept 90 days** (pre_hook prune; max of the 60/90 d operator regimes — per-operator pruning waits for `dim_compensation_rules`) regardless of upstream pruning — the durable claim-retention layer. Served to the delay-alerts page via `public.v_claimable_journeys`. **NEVER `--full-refresh`** once it holds rows older than the raw horizon (collapses retention to ~10 d and silently breaks the claim-window guarantee).
   - (`fct_passenger_journeys` — removed 2026-06-11; superseded by `fct_journeys`.)
 - **Surrogate keys:** every fact has one, generated from business keys via `dbt_utils.generate_surrogate_key([...])`. Never use ingestion artifacts (like raw row UUIDs) as the basis — must be deterministic from business keys.
@@ -576,3 +579,31 @@ Opt-in email listing late departures on the user's saved commute, with one-click
 **Bulk review page:** `/regions/skanetrafiken/claim-review?journeys=k1,k2,…` (`src/pages/regions/SkanetrafikenClaimReview.tsx`, lazy route). Auth-gated (links to `/login?next=…` which round-trips). All listed journeys pre-checked + select-all; same profile-completeness gate as the single-claim dialog (incl. signature); one confirm = one consent event → bulk `upsert` into `claims` with `ignoreDuplicates` on the `(user_id, journey_key, trip_start_date)` constraint, so a stale email can never double-file. Claim rows are built by `buildClaimPayload` (exported from `src/hooks/useStartClaim.ts`), shared with the single-claim dialog so the snapshot shape can't drift.
 
 **Production caveats:** (a) Resend is on the **sandbox sender** (`onboarding@resend.dev`) — it only delivers to the Resend account owner's address; verify a sending domain and change `FROM` in the function before real users. (b) The digest reads the retention layer, so it can surface journeys up to 90 days old on first opt-in — by design (still filable). (c) `digest_log` is service-role-written only; users have read-own RLS.
+
+---
+
+## 17. Product backlog (TODO, unsequenced)
+
+Standing product intentions, not yet scheduled. Unlike §9 (the data-model sequence), these are cross-cutting and can be picked up independently.
+
+- **SEO.** Landing + region pages are an SPA with minimal crawlable content. Need per-route meta/title tags, OpenGraph/Twitter cards, a sitemap, and semantic headings. Consider SSR/prerender for the marketing landing (`src/pages/Landing.tsx`) since it's the acquisition surface.
+- **Add Västtrafik (Göteborg).** Requires Västtrafik's **own** OAuth2 API — Göteborg tram/bus is NOT in Trafiklab (§14). Follow the §7 "adding a new operator" pattern (new theme, band, region routes); currently an inert "Coming soon" card on the landing OperatorPicker.
+- **Add SL (Stockholm).** Trains via **Trafikverket**, metro/bus/tram via **REST** (§14). Same §7 operator pattern; also currently a "Coming soon" card. (Note: the corridor monitor in §18 already polls Stockholm C for delay scouting — independent of launching SL as a claimable region.)
+- **Stripe payments.** Monetisation (success-fee or subscription). Needs Stripe Checkout + a webhook edge function + a `payments`/`subscriptions` table; gate claim filing and/or digest emails behind entitlement. Service-role webhook only; never the secret key in the frontend.
+- **Signup phone/email verification.** Supabase Auth email confirmation + phone OTP at signup, required before a claim profile can be completed (claims carry personnummer + payout — identity assurance matters before filing).
+
+---
+
+## 18. Corridor delay monitor (scouting tool, built 2026-06-15)
+
+A **private, internal** decision-support tool — completely separate from the claim pipeline — to answer "which train corridor should we build next?" by ranking corridors by how badly/often they're delayed over time.
+
+**What it monitors.** The TV collector `collect-train-announcements` (§15) now also polls **Stockholm C (`Cst`)** alongside Malmö C (`Mc`, already polled) — add more monitored hubs by appending their `LocationSignature` to the function's `STATIONS` array and redeploying. These hubs are **monitoring-only**: they are NOT claimable corridors.
+
+**Leak fence (important).** `Cst` is excluded in `int_stop_events`'s TV CTE (`location_signature not in ('Cst')`) so Stockholm never reaches `fct_journeys` / `dim_active_stations` / the Skånetrafiken dropdowns. The chain otherwise pulls *every* TV-polled Swedish station, so any new monitoring-only hub must likewise be added to that exclusion list, or it leaks into the claim UI on the next `dbt build`. **To launch a monitored station as a real claim corridor, just remove it from the exclusion list** — the chain picks it up automatically. (Operator/ticket-seller gating of the public views was considered as the fence and deferred — the journey `operator` label is too messy to filter on safely: ~2,335 `null`-operator corridor journeys, and the same Öresund train surfaces as `Skånetrafiken`/`Öresundståg`/`VR Sverige AB` across legs.)
+
+**The models** (both in `dbt_dev`, read `stg_train_announcements` directly — TV-only, decoupled from the claim chain):
+- `dbt/models/marts/agg_corridor_delays_daily.sql` — incremental TABLE, grain `(hub_signature, direction, counterpart_signature, operator, service_date)`. "Corridor" = the train's terminus labels on each TV announcement (`from_location` for inbound arrivals, `to_location` for outbound departures — these are **signature codes**, not names). Daily counts: `n_services`, `n_measured`, `n_late_5` (≥5 min), `n_late_20` (≥20 min), `n_cancelled`, `sum_delay_seconds`, `max_delay_seconds`. **Accumulates past the 14 d raw prune** (§13 pattern — every run reprocesses the last 14 d, older daily rows persist; pre_hook caps at 400 d). `--full-refresh` collapses history to the ~14 d raw window — don't.
+- `dbt/models/marts/agg_corridor_delays.sql` — VIEW, the ranking. Rolls the daily table up across all retained days, resolves signatures → station names via `ref_stations` (Danish `Dk.*` stay as codes), and ranks worst-first by `n_late_20`. Read it: `select * from dbt_dev.agg_corridor_delays order by n_late_20 desc limit 20;`
+
+No public wrapper, no anon grant, no pg_cron (refreshes with the scheduled `dbt build`).

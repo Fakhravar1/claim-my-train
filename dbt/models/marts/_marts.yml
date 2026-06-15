@@ -54,3 +54,26 @@ models:
                 - origin_local_date
                 - origin_stop_id
                 - destination_stop_id
+
+  - name: agg_corridor_delays_daily
+    description: >
+        Corridor-scouting daily aggregate (NOT a claim model). One row per
+        (hub, direction, counterpart, operator, service_date): daily delay counts for
+        trains seen at a monitored hub (Cst, Mc), read straight off stg_train_announcements.
+        Accumulates past the 14 d raw prune (§13 pattern); the rollup agg_corridor_delays
+        ranks corridors worst-first. NEVER --full-refresh expecting long history back.
+    columns:
+        - name: corridor_day_key
+          description: Surrogate key; hash of (hub, direction, counterpart, operator, service_date).
+          data_tests:
+            - not_null
+            - unique
+    data_tests:
+        - dbt_utils.unique_combination_of_columns:
+            arguments:
+              combination_of_columns:
+                - hub_signature
+                - direction
+                - counterpart_signature
+                - operator
+                - service_date

@@ -71,6 +71,11 @@ with tv as (   -- Swedish stop-events
         on  r.tv_signature = t.location_signature
         and r.rest_area_id ~ '^740[0-9]{6}$'                -- Swedish stops only
     where t.event_type is not null
+      -- The TV collector also polls MONITORING-ONLY hubs (corridor scouting, see
+      -- agg_corridor_delays). Exclude them here so they never leak into fct_journeys /
+      -- dim_active_stations / the dropdowns. Remove a signature from this list to
+      -- launch that station as a supported claim corridor.
+      and t.location_signature not in ('Cst')               -- Stockholm C: monitoring-only for now
     {% if is_incremental() %}
       and t.ingested_at >= (select max(ingested_at) from {{ this }}) - interval '6 hours'
     {% endif %}
