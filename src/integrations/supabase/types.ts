@@ -14,27 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      digest_log: {
-        Row: {
-          id: string
-          journey_key: string
-          sent_at: string
-          user_id: string
-        }
-        Insert: {
-          id?: string
-          journey_key: string
-          sent_at?: string
-          user_id: string
-        }
-        Update: {
-          id?: string
-          journey_key?: string
-          sent_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       claims: {
         Row: {
           consented_at: string | null
@@ -110,6 +89,99 @@ export type Database = {
           trip_start_date?: string
           user_id?: string | null
           was_cancelled?: boolean
+        }
+        Relationships: []
+      }
+      commute_routes: {
+        Row: {
+          created_at: string
+          from_stop_id: string
+          id: string
+          monitored_days: number[]
+          outbound_end_time: string | null
+          outbound_start_time: string | null
+          return_end_time: string | null
+          return_start_time: string | null
+          to_stop_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          from_stop_id: string
+          id?: string
+          monitored_days?: number[]
+          outbound_end_time?: string | null
+          outbound_start_time?: string | null
+          return_end_time?: string | null
+          return_start_time?: string | null
+          to_stop_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          from_stop_id?: string
+          id?: string
+          monitored_days?: number[]
+          outbound_end_time?: string | null
+          outbound_start_time?: string | null
+          return_end_time?: string | null
+          return_start_time?: string | null
+          to_stop_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      digest_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          frequency: string | null
+          id: string
+          link_url: string | null
+          raw: Json | null
+          resend_email_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          frequency?: string | null
+          id?: string
+          link_url?: string | null
+          raw?: Json | null
+          resend_email_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          frequency?: string | null
+          id?: string
+          link_url?: string | null
+          raw?: Json | null
+          resend_email_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      digest_log: {
+        Row: {
+          id: string
+          journey_key: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          journey_key: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          journey_key?: string
+          sent_at?: string
+          user_id?: string
         }
         Relationships: []
       }

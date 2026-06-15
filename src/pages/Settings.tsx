@@ -25,6 +25,18 @@ import {
   type ClaimProfileErrors,
 } from "@/lib/claimProfileValidation";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
+import StationCombobox from "@/components/region/StationCombobox";
+import {
+  useCommuteRoutes,
+  saveRoutes,
+  ALL_WEEKDAYS,
+  type CommuteRoute,
+} from "@/hooks/useCommuteRoutes";
+
+// Mon-first weekday chips for the commute-route monitor (ISO weekday → label).
+const WEEKDAYS: [number, string][] = [
+  [1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [7, "Sun"],
+];
 
 const PAYOUT_LABELS: Record<string, string> = {
   bank: "Bank transfer",
@@ -76,7 +88,41 @@ const Settings = () => {
   const { toast } = useToast();
   const { data: stations = [] } = useStations();
   const { data: myClaims = [], isLoading: claimsLoading } = useMyClaims(user?.id);
+  const { data: commuteRoutes = [], isSuccess: routesLoaded } = useCommuteRoutes(user?.id);
   const queryClient = useQueryClient();
+
+  // Route-card helpers. Cards carry a client temp id; the DB assigns the real id
+  // on save (saveRoutes strips it). New cards default to the preferred O-D.
+  const addRoute = () =>
+    setRoutes((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        from_stop_id: preferredFromStopId || "",
+        to_stop_id: preferredToStopId || "",
+        outbound_start_time: null,
+        outbound_end_time: null,
+        return_start_time: null,
+        return_end_time: null,
+        monitored_days: [...ALL_WEEKDAYS],
+      },
+    ]);
+  const removeRoute = (id: string) => setRoutes((prev) => prev.filter((r) => r.id !== id));
+  const updateRoute = (id: string, patch: Partial<CommuteRoute>) =>
+    setRoutes((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const toggleDay = (id: string, iso: number) =>
+    setRoutes((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              monitored_days: r.monitored_days.includes(iso)
+                ? r.monitored_days.filter((day) => day !== iso)
+                : [...r.monitored_days, iso].sort((a, b) => a - b),
+            }
+          : r
+      )
+    );
   const [outcomeSavingId, setOutcomeSavingId] = useState<string | null>(null);
 
   // Lets the user record what Skånetrafiken decided. Setting outcome back to
@@ -125,12 +171,8 @@ const Settings = () => {
   // GTFS IDs (see dim_active_stations). 3 = Malmö Centralstation, 25315 = København H.
   const [preferredFromStopId, setPreferredFromStopId] = useState("3");
   const [preferredToStopId, setPreferredToStopId] = useState("25315");
-  const [commuterFromStopId, setCommuterFromStopId] = useState("");
-  const [commuterToStopId, setCommuterToStopId] = useState("");
-  const [commuterOutboundStartTime, setCommuterOutboundStartTime] = useState("");
-  const [commuterOutboundEndTime, setCommuterOutboundEndTime] = useState("");
-  const [commuterReturnStartTime, setCommuterReturnStartTime] = useState("");
-  const [commuterReturnEndTime, setCommuterReturnEndTime] = useState("");
+  const [routes, setRoutes] = useState<CommuteRoute[]>([]);
+  const [routesInit, setRoutesInit] = useState(false);
   const [digestFrequency, setDigestFrequency] = useState("off");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<ClaimProfileErrors>({});
@@ -179,14 +221,21 @@ const Settings = () => {
     setTicketValidUntil(toIsoDate(profile?.ticket_valid_until));
     setPreferredFromStopId(profile?.preferred_from_stop_id ?? "3");
     setPreferredToStopId(profile?.preferred_to_stop_id ?? "25315");
-    setCommuterFromStopId(profile?.commuter_from_stop_id ?? "");
-    setCommuterToStopId(profile?.commuter_to_stop_id ?? "");
-    setCommuterOutboundStartTime(profile?.commuter_outbound_start_time ?? "");
-    setCommuterOutboundEndTime(profile?.commuter_outbound_end_time ?? "");
-    setCommuterReturnStartTime(profile?.commuter_return_start_time ?? "");
-    setCommuterReturnEndTime(profile?.commuter_return_end_time ?? "");
     setDigestFrequency(profile?.digest_frequency ?? "off");
   }, [profile]);
+
+  // Seed the route cards once the saved routes load. Guarded so later refetches
+  // don't clobber unsaved edits in the cards.
+  useEffect(() => {
+    if (!routesLoaded || routesInit) return;
+    setRoutes(
+      commuteRoutes.map((r) => ({
+        ...r,
+        monitored_days: r.monitored_days ?? [...ALL_WEEKDAYS],
+      }))
+    );
+    setRoutesInit(true);
+  }, [routesLoaded, commuteRoutes, routesInit]);
 
   const validityStatus = useMemo(() => {
     if (!isPeriodTicket) return null;
@@ -304,17 +353,16 @@ const Settings = () => {
           ticket_valid_until: isPeriodTicket ? ticketValidUntil || null : null,
           preferred_from_stop_id: preferredFromStopId || null,
           preferred_to_stop_id: preferredToStopId || null,
-          commuter_from_stop_id: commuterFromStopId || null,
-          commuter_to_stop_id: commuterToStopId || null,
-          commuter_outbound_start_time: commuterOutboundStartTime || null,
-          commuter_outbound_end_time: commuterOutboundEndTime || null,
-          commuter_return_start_time: commuterReturnStartTime || null,
-          commuter_return_end_time: commuterReturnEndTime || null,
           digest_frequency: digestFrequency,
         },
         { onConflict: "id" }
       );
       if (error) throw error;
+
+      // Persist the commute routes (replace-all). Throws on failure → outer catch
+      // surfaces the toast, same as the profile save.
+      await saveRoutes(user.id, routes);
+      await queryClient.invalidateQueries({ queryKey: ["commute-routes", user.id] });
 
       // Pull the saved row back into AuthContext so the new signature_path (and
       // any other change) is live everywhere — the Settings preview on revisit
@@ -732,111 +780,146 @@ const Settings = () => {
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
-                  <div>
-                    <p className="text-sm font-semibold">Commuter habits (optional)</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Monitored commutes (optional)</p>
+                      <p className="text-xs text-muted-foreground">
+                        Add each route you commute. For every back-and-forth route, set the
+                        time windows for going out and coming back, and pick which weekdays to
+                        monitor. The delay digest only covers these routes.
+                      </p>
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={addRoute}>
+                      Add route
+                    </Button>
+                  </div>
+
+                  {routes.length === 0 && (
                     <p className="text-xs text-muted-foreground">
-                      Save your usual commute stops and time windows for going out and coming back.
+                      No routes yet — add one to monitor your commute.
                     </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="commuter-from">From</Label>
-                      <Select value={commuterFromStopId || "none"} onValueChange={(value) => setCommuterFromStopId(value === "none" ? "" : value)}>
-                        <SelectTrigger id="commuter-from">
-                          <SelectValue placeholder="Loading stations…">
-                            {commuterFromStopId
-                              ? stopOptions.find((s) => s.id === commuterFromStopId)?.name ?? "Loading stations…"
-                              : "Not set"}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Not set</SelectItem>
-                          {stopOptions.length === 0 ? (
-                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
-                          ) : (
-                            stopOptions.map((stop) => (
-                              <SelectItem key={stop.id} value={stop.id}>
-                                {stop.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="commuter-to">To</Label>
-                      <Select value={commuterToStopId || "none"} onValueChange={(value) => setCommuterToStopId(value === "none" ? "" : value)}>
-                        <SelectTrigger id="commuter-to">
-                          <SelectValue placeholder="Loading stations…">
-                            {commuterToStopId
-                              ? stopOptions.find((s) => s.id === commuterToStopId)?.name ?? "Loading stations…"
-                              : "Not set"}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Not set</SelectItem>
-                          {stopOptions.length === 0 ? (
-                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
-                          ) : (
-                            stopOptions.map((stop) => (
-                              <SelectItem key={stop.id} value={stop.id}>
-                                {stop.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="commuter-outbound-start">Outbound start</Label>
-                      <Input
-                        id="commuter-outbound-start"
-                        type="time"
-                        value={commuterOutboundStartTime}
-                        onChange={(event) => setCommuterOutboundStartTime(event.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="commuter-outbound-end">Outbound end</Label>
-                      <Input
-                        id="commuter-outbound-end"
-                        type="time"
-                        value={commuterOutboundEndTime}
-                        onChange={(event) => setCommuterOutboundEndTime(event.target.value)}
-                      />
-                    </div>
-                  </div>
+                  {routes.map((route, idx) => (
+                    <div
+                      key={route.id}
+                      className="space-y-3 rounded-lg border border-border/60 bg-background/60 p-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Route {idx + 1}
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeRoute(route.id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="commuter-return-start">Return start</Label>
-                      <Input
-                        id="commuter-return-start"
-                        type="time"
-                        value={commuterReturnStartTime}
-                        onChange={(event) => setCommuterReturnStartTime(event.target.value)}
-                      />
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>From</Label>
+                          <StationCombobox
+                            value={route.from_stop_id}
+                            options={stopOptions}
+                            onSelect={(id) => updateRoute(route.id, { from_stop_id: id })}
+                            ariaLabel={`Route ${idx + 1} from station`}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>To</Label>
+                          <StationCombobox
+                            value={route.to_stop_id}
+                            options={stopOptions}
+                            onSelect={(id) => updateRoute(route.id, { to_stop_id: id })}
+                            ariaLabel={`Route ${idx + 1} to station`}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Outbound start</Label>
+                          <Input
+                            type="time"
+                            value={route.outbound_start_time ?? ""}
+                            onChange={(event) =>
+                              updateRoute(route.id, { outbound_start_time: event.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Outbound end</Label>
+                          <Input
+                            type="time"
+                            value={route.outbound_end_time ?? ""}
+                            onChange={(event) =>
+                              updateRoute(route.id, { outbound_end_time: event.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Return start</Label>
+                          <Input
+                            type="time"
+                            value={route.return_start_time ?? ""}
+                            onChange={(event) =>
+                              updateRoute(route.id, { return_start_time: event.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Return end</Label>
+                          <Input
+                            type="time"
+                            value={route.return_end_time ?? ""}
+                            onChange={(event) =>
+                              updateRoute(route.id, { return_end_time: event.target.value })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Monitor on</Label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {WEEKDAYS.map(([iso, label]) => {
+                            const on = route.monitored_days.includes(iso);
+                            return (
+                              <button
+                                key={iso}
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() => toggleDay(route.id, iso)}
+                                className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                                  on
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {route.monitored_days.length === 0 && (
+                          <p className="text-xs text-amber-600">
+                            No days selected — this route is paused.
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="commuter-return-end">Return end</Label>
-                      <Input
-                        id="commuter-return-end"
-                        type="time"
-                        value={commuterReturnEndTime}
-                        onChange={(event) => setCommuterReturnEndTime(event.target.value)}
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div>
                     <p className="text-sm font-semibold">Delay digest emails</p>
                     <p className="text-xs text-muted-foreground">
-                      Get an email listing late departures on your commute (route and time windows
+                      Get an email listing late departures on your monitored commutes (the routes
                       above), with a one-click way to claim them. Only sent when there is something
                       to claim.
                     </p>
@@ -862,9 +945,10 @@ const Settings = () => {
                       </Select>
                     </div>
                   </div>
-                  {digestFrequency !== "off" && (!commuterFromStopId || !commuterToStopId) && (
+                  {digestFrequency !== "off" && routes.length === 0 && (
                     <p className="text-xs text-amber-600">
-                      Set your commute stations above — the digest only covers your saved commute.
+                      Add at least one commute route above — the digest only covers your monitored
+                      routes.
                     </p>
                   )}
                 </div>

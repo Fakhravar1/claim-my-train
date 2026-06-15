@@ -25,6 +25,10 @@ const fmtTime = new Intl.DateTimeFormat("sv-SE", {
 const fmtDate = new Intl.DateTimeFormat("sv-SE", {
   timeZone: STOCKHOLM_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
 });
+// Day-group header: weekday + date, e.g. "Monday, 15 June 2026".
+const fmtDayHeader = new Intl.DateTimeFormat("en-GB", {
+  timeZone: STOCKHOLM_TIME_ZONE, weekday: "long", year: "numeric", month: "long", day: "numeric",
+});
 const t = (iso: string | null | undefined) => (iso ? fmtTime.format(new Date(iso)) : "—");
 const d = (iso: string | null | undefined) => (iso ? fmtDate.format(new Date(iso)) : "—");
 
@@ -69,6 +73,20 @@ export default function SkanetrafikenClaimReview() {
     () => journeys.filter((j) => j.journey_key && !claimedKeys.has(j.journey_key)),
     [journeys, claimedKeys]
   );
+
+  // Group journeys by Stockholm travel day so a multi-day digest is easy to scan.
+  // journeys arrive ordered by origin_scheduled asc, so Map insertion order is
+  // already chronological.
+  const groupedByDay = useMemo(() => {
+    const map = new Map<string, { label: string; items: Journey[] }>();
+    for (const j of journeys) {
+      const key = d(j.origin_scheduled);
+      const label = j.origin_scheduled ? fmtDayHeader.format(new Date(j.origin_scheduled)) : key;
+      if (!map.has(key)) map.set(key, { label, items: [] });
+      map.get(key)!.items.push(j);
+    }
+    return [...map.values()];
+  }, [journeys]);
 
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
@@ -200,39 +218,51 @@ export default function SkanetrafikenClaimReview() {
                 Select all ({claimable.length})
               </label>
 
-              {journeys.map((j) => {
-                const key = j.journey_key as string;
-                const alreadyClaimed = claimedKeys.has(key);
-                return (
-                  <label
-                    key={key}
+              {groupedByDay.map((group) => (
+                <div key={group.label}>
+                  <div
                     style={{
-                      display: "flex", alignItems: "center", gap: 12, padding: "10px 4px",
-                      borderTop: "1px solid var(--border, #e5e7eb)",
-                      opacity: alreadyClaimed ? 0.55 : 1, cursor: alreadyClaimed ? "default" : "pointer",
+                      fontSize: 12, fontWeight: 700, textTransform: "uppercase",
+                      letterSpacing: "0.04em", opacity: 0.6,
+                      padding: "14px 4px 4px", borderTop: "1px solid var(--border, #e5e7eb)",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={!alreadyClaimed && checked.has(key)}
-                      disabled={alreadyClaimed}
-                      onChange={() => toggleOne(key)}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600 }}>
-                        {j.origin_stop_name} → {j.destination_stop_name}
-                      </div>
-                      <div style={{ fontSize: 13, opacity: 0.8 }}>
-                        {d(j.origin_scheduled)} · dep {t(j.origin_scheduled)} · arr {t(j.destination_scheduled)} → {t(j.destination_actual)}
-                        {j.operator ? ` · ${j.operator}` : ""}
-                      </div>
-                    </div>
-                    <div style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                      {j.canceled ? "Cancelled" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
-                    </div>
-                  </label>
-                );
-              })}
+                    {group.label}
+                  </div>
+                  {group.items.map((j) => {
+                    const key = j.journey_key as string;
+                    const alreadyClaimed = claimedKeys.has(key);
+                    return (
+                      <label
+                        key={key}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 12, padding: "10px 4px",
+                          opacity: alreadyClaimed ? 0.55 : 1, cursor: alreadyClaimed ? "default" : "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!alreadyClaimed && checked.has(key)}
+                          disabled={alreadyClaimed}
+                          onChange={() => toggleOne(key)}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>
+                            {j.origin_stop_name} → {j.destination_stop_name}
+                          </div>
+                          <div style={{ fontSize: 13, opacity: 0.8 }}>
+                            dep {t(j.origin_scheduled)} · arr {t(j.destination_scheduled)} → {t(j.destination_actual)}
+                            {j.operator ? ` · ${j.operator}` : ""}
+                          </div>
+                        </div>
+                        <div style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {j.canceled ? "Cancelled" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
 
               {journeys.length === 0 && (
                 <div className="app-empty">These journeys are no longer available to claim.</div>
