@@ -597,6 +597,7 @@ Opt-in email listing late departures on the user's monitored commute routes, wit
 
 Standing product intentions, not yet scheduled. Unlike §9 (the data-model sequence), these are cross-cutting and can be picked up independently.
 
+- **Resolve Önnestad's (`Önd`) crosswalk.** Polled by the TV collector (v12) but invisible as a journey: its `ref_stations.rest_area_id` is null, so the `int_stop_events` 740-regex join silently drops it (§15). Fix by filling its `740…` extId via a ResRobot `location.name` lookup (the one-off `tmp-stop-lookup` edge-function pattern, §15); it then surfaces on the next `dbt build` with no code change. It's the only Skåne map station that didn't resolve — every other one is live.
 - **SEO.** Landing + region pages are an SPA with minimal crawlable content. Need per-route meta/title tags, OpenGraph/Twitter cards, a sitemap, and semantic headings. Consider SSR/prerender for the marketing landing (`src/pages/Landing.tsx`) since it's the acquisition surface.
 - **Add Västtrafik (Göteborg).** Requires Västtrafik's **own** OAuth2 API — Göteborg tram/bus is NOT in Trafiklab (§14). Follow the §7 "adding a new operator" pattern (new theme, band, region routes); currently an inert "Coming soon" card on the landing OperatorPicker.
 - **Add SL (Stockholm).** Trains via **Trafikverket**, metro/bus/tram via **REST** (§14). Same §7 operator pattern; also currently a "Coming soon" card. (Note: the corridor monitor in §18 already polls Stockholm C for delay scouting — independent of launching SL as a claimable region.)
