@@ -1,0 +1,31 @@
+version: 2
+
+seeds:
+  - name: claim_authorities
+    description: >
+        Versioned reference data: one row per claim AUTHORITY (the body a user files a
+        reklamation with — for us today only Skanetrafiken). Maps an authority to its
+        claimable-eligibility params. fct_journeys reads min_delay_seconds /
+        includes_cancellations from here instead of a hardcoded literal, so adding a
+        second authority is a new ROW, not a code change. NOT operator-keyed (operators
+        change concessions; the authority's rule doesn't — §5/§8). Route-distance,
+        floor-amount and divisor valuation models are deliberately NOT modelled yet
+        (wait for operator #2 → dim_compensation_rules, §9 v3).
+    columns:
+      - name: authority_key
+        description: Stable lowercase key for the claim authority (e.g. 'skanetrafiken'). Join key in fct_journeys.
+        data_tests:
+          - not_null
+          - unique
+      - name: min_delay_seconds
+        description: Destination delay (seconds) at/above which a journey is claimable. Skanetrafiken = 1200 (20 min).
+        data_tests:
+          - not_null
+      - name: includes_cancellations
+        description: When true, a cancelled service is claimable regardless of delay. Gates the OR-cancelled branch in fct_journeys.
+        data_tests:
+          - not_null
+      - name: tier_model
+        description: Label only (no resolution logic yet) for the compensation-tier regime, e.g. 'kollektivtrafiklag_50_75_100'.
+      - name: notes
+        description: Free-text provenance / legal-basis note.

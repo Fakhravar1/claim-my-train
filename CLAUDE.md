@@ -83,6 +83,9 @@ C:\Users\arian\trafiklab\          ← repo root
 │   │       ├── v_active_stations.sql        ← public wrapper view (dbt-managed, schema='public')
 │   │       ├── v_journeys.sql               ← public wrapper view over fct_journeys
 │   │       └── _marts.yml                   ← model tests & docs
+│   ├── seeds/
+│   │   ├── claim_authorities.csv           ← versioned eligibility rules per claim authority (seeds is_claimable in fct_journeys)
+│   │   └── _seeds.yml                       ← seed description + not_null/unique tests
 │   ├── packages.yml                ← dbt_utils dependency
 │   └── dbt_project.yml
 ├── claim-worker/                   ← Python claim-PDF worker (runs on GitHub Actions)
@@ -177,12 +180,12 @@ station count grows).
 - **The date concept that is load-bearing: `origin_local_date`** = `(origin.scheduled at time zone 'Europe/Stockholm')::date` — the **calendar day the origin departure physically runs**. This is what users mean in the date picker, and what the frontend filters on. (History: filtering on the GTFS service date `trip__start_date` produced a "picked the 24th, top card says 25 May" bug — post-midnight trips belong to the previous service date. `fct_journeys` keys on `origin_local_date` natively.)
 - `dim_stations` view (from REST stops; includes the Danish corridor stops — but NOT TV-only stations, since it derives from REST-polled boards).
 - `dim_active_stations` table = every station appearing in `int_stop_events`, **names from the conformed layer itself** (each leg carries `station_name` from its own feed), coords left-joined from `dim_stations` (nullable for TV-only stations; no component reads them). Source for the frontend dropdowns. Lesson (2026-06-11, Lund): deriving names from `dim_stations` made TV-only stations vanish from dropdowns — Lund C was the first station never REST-polled. When adding stations via the TV `STATIONS` array, no dim work is needed; the chain picks them up on the next `dbt build`.
-- v1 claim logic in `fct_journeys`:
+- v1 claim logic in `fct_journeys` — **seed-driven, not a literal** (since 2026-06-16):
   ```sql
-  is_claimable = (coalesce(dest.delay_seconds, 0) >= 1200)
-                 or coalesce(dest.canceled, false)
+  is_claimable = (coalesce(dest.delay_seconds, 0) >= auth.min_delay_seconds)
+                 or (auth.includes_cancellations and coalesce(dest.canceled, false))
   ```
-  Threshold is hardcoded 1200 seconds (20 minutes). Cancelled trains always claimable.
+  `auth` is a single-row cross join from the **`claim_authorities` dbt seed** (`dbt/seeds/claim_authorities.csv`), filtered `where authority_key = 'skanetrafiken'`. For Skånetrafiken the row is `min_delay_seconds=1200`, `includes_cancellations=true`, so this reduces to **exactly** the old `delay >= 1200 OR canceled` (verified: 2453 = 2453 claimable, 0 mismatches). The threshold is now **versioned reference data** — adding a second claim authority is a new **row** (and turning `authority_key` from a constant filter into a real join key), not a code edit. The `OR canceled` branch stays load-bearing (exact-20-min + cancelled cases), now gated by `includes_cancellations`. **NEVER let the seed go empty** for the active authority — the cross join would drop every journey; the seed's `not_null`/`unique` tests guard this. This is the first step of §9 v3's `dim_compensation_rules`, kept deliberately thin: no route-distance / floor-amount / divisor valuation until operator #2 forces it. The full eligibility model (route < 150 km → lag 2015:953 50/75/100%; ≥ 150 km → EU 2021/782) lives in the seed's `notes`/`tier_model` as a label only.
 - `public.v_journeys` and `public.v_active_stations` are dbt-managed views (`dbt/models/marts/v_*.sql`) materialized into the `public` schema via the `generate_schema_name` macro override. Each model declares a `post_hook` that grants `select` to `anon` and `authenticated`. Curated column lists exclude internal plumbing (`ingested_at` etc.).
 - Frontend hooks `useStations` (`src/hooks/useStations.ts`) and `useJourneys` (`src/hooks/useJourneys.ts`) consume the public wrappers. SkanetrafikenApp.tsx, SkanetrafikenDelayAlerts.tsx, and Settings.tsx all use `useStations` for dropdowns; the two region pages use `useJourneys` for the journey lists (departures with `onlyClaimable: false`, delay-alerts with `onlyClaimable: true`). Both region pages default the date filter to today and pass it as `sinceDate`.
 - `shared/stops.ts` includes a `SAMS_TO_GTFS` / `GTFS_TO_SAMS` translation map bridging Trafiklab sams-id (legacy `get-train-departures` edge function imports) and GTFS (everything in dbt and the frontend). Only used for inbound URL-param normalization on the region pages, for legacy bookmarks that pre-date the GTFS migration.

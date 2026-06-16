@@ -25,6 +25,17 @@ with departures as (
 
 arrivals as (
     select * from {{ ref('int_stop_events') }} where event_type = 'arrival'
+),
+
+-- Eligibility params as versioned reference data, not a literal. Exactly one row today
+-- (skanetrafiken), so the cross join below preserves grain. authority_key is a constant
+-- filter for now; it becomes a real join key when operator #2 / a second authority lands
+-- (§9 v3 dim_compensation_rules). NEVER let this CTE go empty — the cross join would then
+-- drop every journey. The seed's not_null/unique tests guard against that.
+authority as (
+    select min_delay_seconds, includes_cancellations
+    from {{ ref('claim_authorities') }}
+    where authority_key = 'skanetrafiken'
 )
 
 select
@@ -73,9 +84,12 @@ select
     dest.delay_seconds                      as destination_delay_seconds,
     round(dest.delay_seconds / 60.0, 1)     as destination_delay_minutes,
 
-    -- v1 claim rule: 20+ min late at destination OR cancelled
-    (coalesce(dest.delay_seconds, 0) >= 1200)
-        or coalesce(dest.canceled, false)   as is_claimable,
+    -- v1 claim rule, now seed-driven (claim_authorities) instead of a literal. For
+    -- skanetrafiken (min_delay_seconds=1200, includes_cancellations=true) this reduces
+    -- to exactly the old `delay_seconds >= 1200 OR canceled`. The OR-cancelled branch is
+    -- load-bearing (exact-20-min and cancelled-train cases), gated by includes_cancellations.
+    (coalesce(dest.delay_seconds, 0) >= auth.min_delay_seconds)
+        or (auth.includes_cancellations and coalesce(dest.canceled, false))   as is_claimable,
 
     dest.canceled,
 
@@ -89,3 +103,4 @@ join arrivals as dest
     and dest.scheduled >  origin.scheduled
     and dest.scheduled <= origin.scheduled + interval '12 hours'   -- one physical run; excludes next-day recurrence
     and origin.station_id <> dest.station_id                       -- O-D legs only; drop self-loops from services that revisit a stop
+cross join authority as auth                                        -- single-row eligibility params (claim_authorities seed)

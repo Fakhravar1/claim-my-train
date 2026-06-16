@@ -40,8 +40,19 @@ models:
             - not_null
             - unique
         - name: is_claimable
-          description: True if destination delay >= 20 min OR service cancelled.
+          description: >
+              True if the destination is claimable under the journey's claim authority.
+              Seed-driven (claim_authorities): destination_delay_seconds >= the authority's
+              min_delay_seconds OR (the authority allows it AND the service is cancelled).
+              For skanetrafiken today that is delay >= 20 min OR cancelled.
           data_tests: [not_null]
+        - name: destination_delay_seconds
+          description: >
+              Signed deviation (realtime - scheduled, in seconds) of whichever event the
+              feed returns for the DESTINATION stop — an arrival for most legs, but the
+              value is the endpoint event's deviation, NOT strictly an arrival measurement.
+              Negative = early. NULL when the destination event is unrealised. Drives
+              is_claimable against the authority's min_delay_seconds.
         - name: origin_stop_id
           data_tests: [not_null]
         - name: destination_stop_id

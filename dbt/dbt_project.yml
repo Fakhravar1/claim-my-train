@@ -29,3 +29,12 @@ clean-targets:         # directories to be removed by `dbt clean`
 # In this example config, we tell dbt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
 # files using the `{{ config(...) }}` macro.
+
+# Pin seed column types so dbt's inference can't silently turn the numeric / boolean
+# eligibility params into text (which would break the >= comparison in fct_journeys).
+seeds:
+  trafiklab:
+    claim_authorities:
+      +column_types:
+        min_delay_seconds: integer
+        includes_cancellations: boolean
