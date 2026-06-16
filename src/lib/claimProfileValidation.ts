@@ -7,6 +7,27 @@ export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
 export const isPayoutMethod = (value: unknown): value is PayoutMethod =>
   typeof value === "string" && (PAYOUT_METHODS as readonly string[]).includes(value);
 
+// Which operator/vendor the user bought their ticket from. For now this is a
+// GUARDRAIL: only Skånetrafiken tickets can be claimed through the app (the
+// single supported regime). The others are valid selections to SAVE, but block
+// filing — a user on an SJ/Snälltåget ticket should use that operator's own
+// process. Later this keys the per-operator compensation rules (§9 v3).
+export const PURCHASING_OPERATORS = [
+  { value: "skanetrafiken", label: "Skånetrafiken (JoJo, app, biljettautomat)", supported: true },
+  { value: "sj", label: "SJ", supported: false },
+  { value: "snalltaget", label: "Snälltåget", supported: false },
+  { value: "other", label: "Another operator / not sure", supported: false },
+] as const;
+export type PurchasingOperator = (typeof PURCHASING_OPERATORS)[number]["value"];
+export const SUPPORTED_PURCHASING_OPERATOR: PurchasingOperator = "skanetrafiken";
+export const isPurchasingOperator = (value: unknown): value is PurchasingOperator =>
+  typeof value === "string" && PURCHASING_OPERATORS.some((o) => o.value === value);
+/** True only for the operator whose claims the app currently supports. */
+export const isSupportedPurchasingOperator = (value: unknown): boolean =>
+  value === SUPPORTED_PURCHASING_OPERATOR;
+export const purchasingOperatorLabel = (value: string | null | undefined): string =>
+  PURCHASING_OPERATORS.find((o) => o.value === value)?.label ?? (value ?? "");
+
 export type ClaimProfileInput = {
   firstName: string;
   lastName: string;
@@ -18,6 +39,7 @@ export type ClaimProfileInput = {
   city: string;
   claimTicketId: string;
   payoutMethod: string;
+  purchasingOperator: string;
 };
 
 export type ClaimProfileErrors = Partial<Record<keyof ClaimProfileInput, string>>;
@@ -155,6 +177,15 @@ export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErro
     errors.payoutMethod = "Pick how you want to receive payouts.";
   } else if (!isPayoutMethod(input.payoutMethod)) {
     errors.payoutMethod = "Payout method must be Bank, SMS or Email.";
+  }
+
+  // Required to SAVE: the user must declare a vendor. Whether that vendor is
+  // *claimable* is enforced separately at filing time (only Skånetrafiken), so
+  // an SJ/Snälltåget selection still saves fine — it just can't file.
+  if (!input.purchasingOperator) {
+    errors.purchasingOperator = "Select where you bought your ticket.";
+  } else if (!isPurchasingOperator(input.purchasingOperator)) {
+    errors.purchasingOperator = "Pick one of the listed ticket vendors.";
   }
 
   return errors;

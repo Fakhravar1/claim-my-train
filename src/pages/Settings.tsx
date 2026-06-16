@@ -23,6 +23,9 @@ import {
 import {
   validateClaimProfile,
   type ClaimProfileErrors,
+  PURCHASING_OPERATORS,
+  purchasingOperatorLabel,
+  isSupportedPurchasingOperator,
 } from "@/lib/claimProfileValidation";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import StationCombobox from "@/components/region/StationCombobox";
@@ -162,6 +165,7 @@ const Settings = () => {
   const [claimMobile, setClaimMobile] = useState("");
   const [claimTicketId, setClaimTicketId] = useState("");
   const [claimPersonnummer, setClaimPersonnummer] = useState("");
+  const [purchasingOperator, setPurchasingOperator] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [city, setCity] = useState("");
@@ -213,6 +217,7 @@ const Settings = () => {
     setClaimMobile(profile?.claim_mobile ?? "");
     setClaimTicketId(profile?.claim_ticket_id ?? "");
     setClaimPersonnummer(profile?.claim_personnummer ?? "");
+    setPurchasingOperator(profile?.purchasing_operator ?? "");
     setStreetAddress(profile?.street_address ?? "");
     setPostalCode(profile?.postal_code ?? "");
     setCity(profile?.city ?? "");
@@ -289,6 +294,7 @@ const Settings = () => {
       city,
       claimTicketId,
       payoutMethod,
+      purchasingOperator,
     });
     setErrors(validationErrors);
 
@@ -300,7 +306,7 @@ const Settings = () => {
     if (Object.keys(validationErrors).length > 0 || signatureMissing) {
       // Surface the tab that holds the first problem. Ticket ID lives on the
       // ticket tab; everything else (incl. signature) is on the personal tab.
-      const ticketTabKeys = new Set(["claimTicketId", "payoutMethod"]);
+      const ticketTabKeys = new Set(["claimTicketId", "payoutMethod", "purchasingOperator"]);
       const allOnTicketTab =
         !signatureMissing &&
         Object.keys(validationErrors).length > 0 &&
@@ -344,6 +350,7 @@ const Settings = () => {
           claim_mobile: claimMobile || null,
           claim_ticket_id: claimTicketId || null,
           claim_personnummer: claimPersonnummer || null,
+          purchasing_operator: purchasingOperator || null,
           street_address: streetAddress || null,
           postal_code: postalCode || null,
           city: city || null,
@@ -624,6 +631,40 @@ const Settings = () => {
               </TabsContent>
 
               <TabsContent value="ticket" className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="purchasing-operator">
+                    Where did you buy your ticket? <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={purchasingOperator} onValueChange={setPurchasingOperator}>
+                    <SelectTrigger id="purchasing-operator" aria-invalid={Boolean(errors.purchasingOperator)}>
+                      <SelectValue placeholder="Choose your ticket vendor">
+                        {purchasingOperator ? purchasingOperatorLabel(purchasingOperator) : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PURCHASING_OPERATORS.map((op) => (
+                        <SelectItem key={op.value} value={op.value}>
+                          {op.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    We currently only handle <span className="font-medium">Skånetrafiken</span> claims.
+                    If you bought your ticket from another operator, use that operator's own
+                    förseningsersättning process.
+                  </p>
+                  {errors.purchasingOperator && (
+                    <p className="text-sm text-destructive">{errors.purchasingOperator}</p>
+                  )}
+                  {purchasingOperator && !isSupportedPurchasingOperator(purchasingOperator) && (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      Heads up: claims aren't supported for {purchasingOperatorLabel(purchasingOperator)} yet,
+                      so you won't be able to file from the delay pages with this selection.
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="claim-ticket-id">
                     Ticket ID <span className="text-destructive">*</span>

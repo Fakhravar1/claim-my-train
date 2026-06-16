@@ -212,6 +212,7 @@ export type Database = {
           postal_code: string | null
           preferred_from_stop_id: string | null
           preferred_to_stop_id: string | null
+          purchasing_operator: string | null
           signature_path: string | null
           street_address: string | null
           ticket_valid_until: string | null
@@ -243,6 +244,7 @@ export type Database = {
           postal_code?: string | null
           preferred_from_stop_id?: string | null
           preferred_to_stop_id?: string | null
+          purchasing_operator?: string | null
           signature_path?: string | null
           street_address?: string | null
           ticket_valid_until?: string | null
@@ -274,6 +276,7 @@ export type Database = {
           postal_code?: string | null
           preferred_from_stop_id?: string | null
           preferred_to_stop_id?: string | null
+          purchasing_operator?: string | null
           signature_path?: string | null
           street_address?: string | null
           ticket_valid_until?: string | null

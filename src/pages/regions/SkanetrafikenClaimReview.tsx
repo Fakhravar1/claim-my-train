@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { type Journey } from "@/hooks/useJourneys";
 import { buildClaimPayload } from "@/hooks/useStartClaim";
 import { useMyClaims } from "@/hooks/useMyClaims";
+import { isSupportedPurchasingOperator, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
 import { useAppShellStyles } from "@/hooks/useAppShellStyles";
 import themeCSS from "@/themes/skanetrafiken/theme.css?inline";
 import SkaneBand from "@/components/region/SkaneBand";
@@ -136,8 +137,11 @@ export default function SkanetrafikenClaimReview() {
     return { missing };
   }, [profile]);
 
+  // Guardrail: only Skånetrafiken-ticket holders can file for now (§1).
+  const operatorSupported = isSupportedPurchasingOperator(profile?.purchasing_operator);
+
   const handleFile = async () => {
-    if (!user || checked.size === 0) return;
+    if (!user || checked.size === 0 || !operatorSupported) return;
     setSubmitting(true);
     try {
       const rows = claimable
@@ -212,6 +216,18 @@ export default function SkanetrafikenClaimReview() {
               </section>
             )}
 
+            {!operatorSupported && (
+              <section className="app-card" style={{ borderColor: "var(--cmt-skt-red, #b91c1c)" }}>
+                <p style={{ fontWeight: 600 }}>Claims are only supported for Skånetrafiken tickets</p>
+                <p style={{ margin: "6px 0 12px" }}>
+                  {profile?.purchasing_operator
+                    ? `You selected ${purchasingOperatorLabel(profile.purchasing_operator)} as your ticket vendor. Claims for other operators aren't supported yet.`
+                    : "Tell us where you bought your ticket first — we currently only support Skånetrafiken tickets."}
+                </p>
+                <Link to="/settings" className="btn-cmt btn-cmt--outline">Update ticket vendor in Settings</Link>
+              </section>
+            )}
+
             <section className="app-card">
               <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>
                 <input type="checkbox" checked={allChecked} onChange={toggleAll} disabled={claimable.length === 0} />
@@ -273,7 +289,7 @@ export default function SkanetrafikenClaimReview() {
                   type="button"
                   className="btn-cmt btn-cmt--primary"
                   onClick={() => void handleFile()}
-                  disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0}
+                  disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
                 >
                   {submitting ? "Filing…" : `File ${checked.size} claim${checked.size === 1 ? "" : "s"}`}
                 </button>

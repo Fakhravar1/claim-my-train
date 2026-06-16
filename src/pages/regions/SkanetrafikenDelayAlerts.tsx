@@ -22,6 +22,7 @@ import SkaneBand from "@/components/region/SkaneBand";
 import RegionUserMenu from "@/components/region/RegionUserMenu";
 import RegionDepartureCard, { type RegionDeparture } from "@/components/region/RegionDepartureCard";
 import StationCombobox from "@/components/region/StationCombobox";
+import { isSupportedPurchasingOperator, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
 
 const CLAIM_START_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan/";
 
@@ -317,8 +318,18 @@ export default function SkanetrafikenDelayAlerts() {
     navigate(`/login?next=${encodeURIComponent("/regions/skanetrafiken/delay-alerts")}`);
   };
 
+  // Guardrail: only Skånetrafiken-ticket holders can file for now (§1). A user
+  // who bought from another operator must use that operator's own process.
+  const operatorSupported = isSupportedPurchasingOperator(profile?.purchasing_operator);
+
   const submitClaim = async (dep: RegionDeparture) => {
     if (!user) { promptLoginForClaim(); return; }
+    if (!operatorSupported) {
+      setClaimActionStatus(
+        "Claims are only supported for Skånetrafiken tickets. Set your ticket vendor in settings."
+      );
+      return;
+    }
     const journey = dep.journeyKey ? journeysByKey.get(dep.journeyKey) : undefined;
     if (!journey) {
       setClaimActionStatus("Could not match this row to a journey. Refresh and try again.");
@@ -631,11 +642,23 @@ export default function SkanetrafikenDelayAlerts() {
                 </div>
               )}
 
+              {!operatorSupported && (
+                <div className="cmt-dialog__warn">
+                  {profile?.purchasing_operator
+                    ? `Claims aren't supported for ${purchasingOperatorLabel(profile.purchasing_operator)} tickets yet — only Skånetrafiken. `
+                    : "Tell us where you bought your ticket before filing — we currently only support Skånetrafiken tickets. "}
+                  <Link to="/settings" style={{ textDecoration: "underline", fontWeight: 600 }}>
+                    Update it in settings
+                  </Link>
+                  .
+                </div>
+              )}
+
               <button
                 type="button"
                 className="btn-cmt btn-cmt--primary"
                 style={{ width: "100%" }}
-                disabled={submitting || claimProfile.missing.length > 0}
+                disabled={submitting || claimProfile.missing.length > 0 || !operatorSupported}
                 onClick={() => void submitClaim(selectedAlert)}
               >
                 {submitting ? "Submitting…" : "Confirm & submit claim"}
