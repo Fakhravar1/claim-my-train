@@ -85,6 +85,7 @@ export default function DaylightApp() {
         signedIn={Boolean(user)}
         accountLabel={profile?.full_name || profile?.first_name || user?.email || "Konto"}
         onSignOut={() => void signOut()}
+        onLogin={() => setClaim({ blank: true, loginOnly: true })}
       />
       <Hero onUnknown={() => setClaim({ blank: true })} onSearch={focusSearch} />
       <Board
@@ -110,7 +111,7 @@ export default function DaylightApp() {
       <ValueProps
         onUnknown={() => setClaim({ blank: true })}
         onSearch={focusSearch}
-        onHabits={() => navigate(user ? "/settings" : "/login?next=/settings")}
+        onHabits={() => (user ? navigate("/settings") : setClaim({ blank: true, loginOnly: true }))}
       />
       <Footer />
 

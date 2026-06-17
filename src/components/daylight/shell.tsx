@@ -14,9 +14,11 @@ type NavProps = {
   /** Display label for the signed-in account (name or email). */
   accountLabel: string;
   onSignOut: () => void;
+  /** Opens the in-modal sign-in pop-up (signed-out only). */
+  onLogin: () => void;
 };
 
-export function Nav({ signedIn, accountLabel, onSignOut }: NavProps) {
+export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
   return (
     <nav className="nav">
       <div className="wrap nav__in">
@@ -29,7 +31,7 @@ export function Nav({ signedIn, accountLabel, onSignOut }: NavProps) {
           {signedIn ? (
             <AccountMenu label={accountLabel} onSignOut={onSignOut} />
           ) : (
-            <Link to="/login?next=/" className="btn btn--dark">Logga in</Link>
+            <button className="btn btn--dark" onClick={onLogin}>Logga in</button>
           )}
         </div>
       </div>
