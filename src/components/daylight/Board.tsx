@@ -1,7 +1,7 @@
 import { forwardRef, useMemo } from "react";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
-import { ArrowIcon, CheckIcon, CloseIcon, SearchIcon } from "./icons";
+import { ArrowIcon, BellIcon, CheckIcon, CloseIcon, SearchIcon } from "./icons";
 
 /** HH:MM in Stockholm local time from an ISO timestamp. */
 function fmtTime(iso: string | null | undefined): string {
@@ -45,6 +45,7 @@ type BoardProps = {
   stationOptions: StationOption[];
   onClaim: (j: Journey) => void;
   onInfo: (j: Journey) => void;
+  onWatch: (j: Journey) => void;
   onUnknown: () => void;
 };
 
@@ -66,6 +67,7 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
     stationOptions,
     onClaim,
     onInfo,
+    onWatch,
     onUnknown,
   },
   ref
@@ -143,7 +145,7 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
               <div className="empty">Inga avgångar att visa för {date}.</div>
             )}
             {!loading && rows.map((d) => (
-              <Row key={d.journey_key} d={d} onClaim={onClaim} onInfo={onInfo} />
+              <Row key={d.journey_key} d={d} onClaim={onClaim} onInfo={onInfo} onWatch={onWatch} />
             ))}
           </div>
 
@@ -159,7 +161,17 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
   );
 });
 
-function Row({ d, onClaim, onInfo }: { d: Journey; onClaim: (j: Journey) => void; onInfo: (j: Journey) => void }) {
+function Row({
+  d,
+  onClaim,
+  onInfo,
+  onWatch,
+}: {
+  d: Journey;
+  onClaim: (j: Journey) => void;
+  onInfo: (j: Journey) => void;
+  onWatch: (j: Journey) => void;
+}) {
   const m = statusMeta(d.destination_delay_minutes, Boolean(d.canceled));
   return (
     <div className={"row row--" + m.tone}>
@@ -193,6 +205,15 @@ function Row({ d, onClaim, onInfo }: { d: Journey; onClaim: (j: Journey) => void
         {!m.eligible && !m.near && (
           <span className="row__ok"><CheckIcon width={15} height={15} /></span>
         )}
+        <button
+          type="button"
+          className="watchbtn"
+          onClick={() => onWatch(d)}
+          aria-label="Bevaka åt mig"
+          title="Bevaka åt mig"
+        >
+          <BellIcon width={16} height={16} />
+        </button>
       </div>
     </div>
   );

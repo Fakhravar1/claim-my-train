@@ -9,6 +9,8 @@ import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board, lineLabel } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
+import { WatchModal } from "@/components/daylight/WatchModal";
+import { usePendingClaimCompletion } from "@/hooks/usePendingClaimCompletion";
 
 /**
  * Merged "Daylight" app page at `/` — the design handoff's single scroll page:
@@ -18,6 +20,7 @@ import { EligibilityModal } from "@/components/daylight/EligibilityModal";
  */
 export default function DaylightApp() {
   useDaylightStyles();
+  usePendingClaimCompletion(); // finish a deferred claim after email verification
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
 
@@ -34,6 +37,7 @@ export default function DaylightApp() {
   const [to, setTo] = useState("");
   const [claim, setClaim] = useState<ClaimInitial | null>(null);
   const [info, setInfo] = useState<Journey | null>(null);
+  const [watch, setWatch] = useState<Journey | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
   const { data: stations = [] } = useStations();
@@ -106,6 +110,7 @@ export default function DaylightApp() {
         stationOptions={stationOptions}
         onClaim={(d) => setClaim(d)}
         onInfo={(d) => setInfo(d)}
+        onWatch={(d) => (user ? setWatch(d) : setClaim({ blank: true, loginOnly: true }))}
         onUnknown={() => setClaim({ blank: true })}
       />
       <ValueProps
@@ -117,6 +122,7 @@ export default function DaylightApp() {
 
       {claim && <ClaimModal initial={claim} onClose={() => setClaim(null)} />}
       {info && <EligibilityModal dep={info} onClose={() => setInfo(null)} onWatch={watchTrain} />}
+      {watch && <WatchModal journey={watch} onClose={() => setWatch(null)} />}
     </div>
   );
 }

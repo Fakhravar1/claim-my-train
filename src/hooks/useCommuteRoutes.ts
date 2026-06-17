@@ -74,3 +74,62 @@ export async function saveRoutes(userId: string, routes: CommuteRoute[]) {
   const { error: insError } = await supabase.from("commute_routes").insert(rows);
   if (insError) throw insError;
 }
+
+/**
+ * Add (or extend) a single monitored route from a "watch this departure" action
+ * — the bell on a board row. Unlike `saveRoutes` this does NOT wipe the user's
+ * other routes: if a route already watches the same O-D pair we union the
+ * weekdays onto it (and widen its outbound window to include this departure);
+ * otherwise we insert a fresh row. Keeps a recurring watch on one departure from
+ * spawning duplicate route cards in Settings.
+ *
+ * `outboundStart`/`outboundEnd` bracket the watched departure (HH:MM, Stockholm
+ * local) so the digest matches that train rather than the whole day.
+ */
+export async function addWatchRoute(params: {
+  userId: string;
+  fromStopId: string;
+  toStopId: string;
+  monitoredDays: number[];
+  outboundStart: string;
+  outboundEnd: string;
+}) {
+  const { userId, fromStopId, toStopId, monitoredDays, outboundStart, outboundEnd } = params;
+
+  const { data: existing, error: selError } = await supabase
+    .from("commute_routes")
+    .select("id, monitored_days, outbound_start_time, outbound_end_time")
+    .eq("user_id", userId)
+    .eq("from_stop_id", fromStopId)
+    .eq("to_stop_id", toStopId)
+    .limit(1);
+  if (selError) throw selError;
+
+  const match = existing?.[0];
+  if (match) {
+    const days = Array.from(new Set([...(match.monitored_days ?? []), ...monitoredDays])).sort(
+      (a, b) => a - b
+    );
+    // Widen the outbound window to cover both the old span and this departure.
+    const start = [match.outbound_start_time, outboundStart].filter(Boolean).sort()[0]!;
+    const end = [match.outbound_end_time, outboundEnd].filter(Boolean).sort().slice(-1)[0]!;
+    const { error } = await supabase
+      .from("commute_routes")
+      .update({ monitored_days: days, outbound_start_time: start, outbound_end_time: end })
+      .eq("id", match.id);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase.from("commute_routes").insert({
+    user_id: userId,
+    from_stop_id: fromStopId,
+    to_stop_id: toStopId,
+    outbound_start_time: outboundStart,
+    outbound_end_time: outboundEnd,
+    return_start_time: null,
+    return_end_time: null,
+    monitored_days: monitoredDays,
+  });
+  if (error) throw error;
+}

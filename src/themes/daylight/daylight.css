@@ -115,8 +115,12 @@
 .cmt-daylight .row__status{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;text-align:right;}
 .cmt-daylight .row__hint{font-size:.66rem;color:var(--near);letter-spacing:.02em;}
 .cmt-daylight .row__amt{font-family:var(--font-mono);font-size:.72rem;color:var(--board-muted);}
-.cmt-daylight .row__action{display:flex;justify-content:flex-end;min-width:160px;}
+.cmt-daylight .row__action{display:flex;align-items:center;gap:.5rem;justify-content:flex-end;min-width:160px;}
 .cmt-daylight .row__ok{color:var(--ok);display:inline-flex;opacity:.7;}
+
+/* "Bevaka åt mig" bell — quiet icon button on every departure row. */
+.cmt-daylight .watchbtn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none;border-radius:10px;border:1px solid var(--board-line-2,var(--line));background:transparent;color:var(--board-muted);cursor:pointer;transition:color .15s,border-color .15s,background .15s;}
+.cmt-daylight .watchbtn:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 8%,transparent);}
 
 .cmt-daylight .tag{display:inline-block;padding:.2rem .5rem;border-radius:var(--tag-radius);font-family:var(--font-mono);font-size:.7rem;letter-spacing:.03em;font-weight:600;border:1px solid transparent;}
 .cmt-daylight .tag--ontime{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent);}
@@ -245,6 +249,17 @@
 .cmt-daylight-scrim .acct__h{font-family:var(--font-display);font-size:1.3rem;font-weight:var(--h-weight);letter-spacing:-.02em;color:var(--card-text);}
 .cmt-daylight-scrim .acct__p{color:var(--card-muted);font-size:.96rem;line-height:1.55;max-width:44ch;}
 .cmt-daylight-scrim .acct__btns{display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:340px;margin-top:.5rem;}
+
+/* inline claim form (logged-out funnel) */
+.cmt-daylight-scrim .field__err{font-size:.74rem;color:var(--severe,#c0392b);font-weight:500;}
+.cmt-daylight-scrim .sigpad canvas{border-color:var(--line)!important;}
+.cmt-daylight-scrim .sigrow{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.35rem;}
+
+/* Weekday chips in the "Bevaka åt mig" pop-up. */
+.cmt-daylight-scrim .daychips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem;}
+.cmt-daylight-scrim .daychip{min-width:42px;padding:.4rem .55rem;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--board-muted,#5b6b78);font-family:var(--font-mono);font-size:.72rem;font-weight:600;cursor:pointer;transition:color .15s,border-color .15s,background .15s;}
+.cmt-daylight-scrim .daychip:hover{border-color:color-mix(in srgb,var(--accent) 40%,transparent);}
+.cmt-daylight-scrim .daychip.is-on{color:#fff;background:var(--accent);border-color:var(--accent);}
 
 @media(max-width:720px){
   .cmt-daylight .vgrid{grid-template-columns:1fr;}
