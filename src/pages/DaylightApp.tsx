@@ -110,7 +110,7 @@ export default function DaylightApp() {
       <ValueProps
         onUnknown={() => setClaim({ blank: true })}
         onSearch={focusSearch}
-        onHabits={() => setClaim({ blank: true, loginOnly: true })}
+        onHabits={() => navigate(user ? "/settings" : "/login?next=/settings")}
       />
       <Footer />
 
