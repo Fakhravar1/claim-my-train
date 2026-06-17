@@ -318,3 +318,10 @@
   .cmt-daylight .board__control select,.cmt-daylight .board__control input{min-width:0;width:100%;}
   .cmt-daylight .board__control{flex:1 1 140px;}
 }
+
+/* signed-in account menu in the nav */
+.cmt-daylight .nav__account{position:relative;}
+.cmt-daylight .nav__account>.btn{max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+.cmt-daylight .nav__menu{position:absolute;right:0;top:calc(100% + 8px);min-width:210px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r-lg);box-shadow:var(--board-shadow);padding:.4rem;display:flex;flex-direction:column;gap:.15rem;z-index:40;}
+.cmt-daylight .nav__menu a,.cmt-daylight .nav__menu button{display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;padding:.55rem .7rem;border:0;background:none;border-radius:var(--r);font-family:var(--font-sans);font-size:.9rem;font-weight:500;color:var(--ink);cursor:pointer;}
+.cmt-daylight .nav__menu a:hover,.cmt-daylight .nav__menu button:hover{background:var(--surface-2);}
