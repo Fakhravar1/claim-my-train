@@ -249,6 +249,10 @@
 .cmt-daylight-scrim .acct__h{font-family:var(--font-display);font-size:1.3rem;font-weight:var(--h-weight);letter-spacing:-.02em;color:var(--card-text);}
 .cmt-daylight-scrim .acct__p{color:var(--card-muted);font-size:.96rem;line-height:1.55;max-width:44ch;}
 .cmt-daylight-scrim .acct__btns{display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:340px;margin-top:.5rem;}
+.cmt-daylight-scrim .acct .field{width:100%;max-width:340px;text-align:left;}
+.cmt-daylight-scrim .acct__tabs{display:flex;gap:.4rem;width:100%;max-width:340px;background:var(--surface-2);padding:.25rem;border-radius:10px;}
+.cmt-daylight-scrim .acct__tab{flex:1;border:0;background:transparent;padding:.45rem;border-radius:7px;font:inherit;font-size:.9rem;font-weight:500;color:var(--card-muted);cursor:pointer;}
+.cmt-daylight-scrim .acct__tab.is-on{background:var(--card-bg,#fff);color:var(--card-text);box-shadow:0 1px 2px rgba(0,0,0,.08);}
 
 /* inline claim form (logged-out funnel) */
 .cmt-daylight-scrim .field__err{font-size:.74rem;color:var(--severe,#c0392b);font-weight:500;}
@@ -307,13 +311,34 @@
 
 /* ───────────────────────── board refinements (redesign feedback) ───────────────────────── */
 /* date + (signed-in) from/to controls under the board header */
+/* clarifying caption distinguishing the station search from the O-D bars */
+.cmt-daylight .board__cap{margin:.65rem 0 0;font-size:.78rem;line-height:1.45;color:var(--board-muted);}
+.cmt-daylight .board__cap b{color:var(--board-text);font-weight:600;}
 .cmt-daylight .board__controls{display:flex;flex-wrap:wrap;gap:.7rem;padding:.85rem 0 .25rem;border-bottom:var(--board-bw) solid var(--board-line);}
 .cmt-daylight .board__control{display:flex;flex-direction:column;gap:.25rem;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--board-muted);}
 .cmt-daylight .board__control select,.cmt-daylight .board__control input{height:38px;min-width:150px;background:var(--board-bg-2);border:var(--board-bw) solid var(--board-line-2);border-radius:var(--field-radius);color:var(--board-text);font-family:var(--font-sans);font-size:.88rem;padding:0 .7rem;outline:none;transition:border-color .18s;}
 .cmt-daylight .board__control select:focus,.cmt-daylight .board__control input:focus{border-color:var(--accent);}
 
-/* align stations on a fixed column line: origin | arrow | destination */
-.cmt-daylight .row__stations{display:grid;grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr);align-items:center;gap:.4rem;}
+/* searchable Från/Till field (StationField) — input + suggestion dropdown */
+.cmt-daylight .stationfield{position:relative;}
+.cmt-daylight .stationfield__menu{position:absolute;top:100%;left:0;right:0;z-index:30;margin-top:.3rem;max-height:264px;overflow-y:auto;list-style:none;padding:.25rem;background:var(--board-bg-2);border:var(--board-bw) solid var(--board-line-2);border-radius:var(--field-radius);box-shadow:0 12px 34px rgba(0,0,0,.14);}
+.cmt-daylight .stationfield__opt{padding:.45rem .6rem;border-radius:8px;font-size:.88rem;line-height:1.25;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--board-text);text-transform:none;letter-spacing:normal;font-family:var(--font-sans);}
+.cmt-daylight .stationfield__opt.is-active{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);}
+.cmt-daylight .stationfield__clear{color:var(--board-muted);font-style:italic;}
+
+/* delayed / cancelled filter checkboxes */
+.cmt-daylight .board__filters{display:flex;align-items:center;flex-wrap:wrap;gap:1.1rem;padding:.7rem 0 .1rem;}
+.cmt-daylight .board__filter{display:inline-flex;align-items:center;gap:.45rem;font-size:.84rem;color:var(--board-text);cursor:pointer;user-select:none;}
+.cmt-daylight .board__filter input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+
+/* "Visa tidigare avgångar" pager */
+.cmt-daylight .board__more{display:flex;justify-content:center;padding:.9rem 0 .1rem;}
+
+/* align stations on a fixed column line: origin | arrow | destination.
+   A FIXED origin track (not 1fr) keeps the arrow and the destination at the
+   same x on every row, so the destinations line up regardless of how long the
+   origin name is (it ellipsises instead of shoving the rest right). */
+.cmt-daylight .row__stations{display:grid;grid-template-columns:clamp(9rem,34vw,17rem) 18px minmax(0,1fr);align-items:center;gap:.5rem;}
 .cmt-daylight .st{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .cmt-daylight .st__arrow{justify-self:center;}
 /* nudge the route block right of the time column for a cleaner spine

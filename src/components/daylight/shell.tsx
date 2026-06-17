@@ -65,7 +65,7 @@ function AccountMenu({ label, onSignOut }: { label: string; onSignOut: () => voi
   );
 }
 
-export function Hero({ onUnknown, onSearch }: { onUnknown: () => void; onSearch: () => void }) {
+export function Hero({ onSearch }: { onSearch: () => void }) {
   return (
     <header className="hero">
       <div className="hero__glow" aria-hidden="true" />
@@ -83,9 +83,6 @@ export function Hero({ onUnknown, onSearch }: { onUnknown: () => void; onSearch:
         <div className="hero__cta">
           <button className="btn btn--accent btn--lg" onClick={onSearch}>
             Sök din resa <SearchIcon width={17} height={17} />
-          </button>
-          <button className="btn btn--ghost btn--lg" onClick={onUnknown}>
-            Vet inte vilken avgång?
           </button>
         </div>
       </div>

@@ -8,6 +8,24 @@ import { Scrim, ModalHead } from "./primitives";
 import { BellIcon, CheckIcon } from "./icons";
 import { lineLabel } from "./Board";
 
+/**
+ * Minimal shape WatchModal needs — a full board Journey satisfies it (per-row
+ * bell), but so does a synthetic route-level target with `origin_scheduled`
+ * null (the "Bevaka som pendlare" footer button, which watches a whole O-D leg
+ * with no specific departure).
+ */
+export type WatchTarget = Pick<
+  Journey,
+  | "origin_scheduled"
+  | "origin_local_date"
+  | "origin_stop_id"
+  | "destination_stop_id"
+  | "origin_stop_name"
+  | "destination_stop_name"
+  | "line_name"
+  | "service_number"
+>;
+
 /** Mon-first weekday chips (ISO weekday → Swedish short label). */
 const WEEKDAYS: [number, string][] = [
   [1, "Mån"], [2, "Tis"], [3, "Ons"], [4, "Tor"], [5, "Fre"], [6, "Lör"], [7, "Sön"],
@@ -50,11 +68,14 @@ function shiftClock(time: string, deltaMin: number): string {
  * that train is late. Defaults to the departure's own weekday; toggle more for a
  * recurring watch. Caller guarantees the user is signed in.
  */
-export function WatchModal({ journey, onClose }: { journey: Journey; onClose: () => void }) {
+export function WatchModal({ journey, onClose }: { journey: WatchTarget; onClose: () => void }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // A route-level watch (footer "Bevaka som pendlare") has no specific
+  // departure → no time window, matches all day.
+  const routeLevel = !journey.origin_scheduled;
   const depTime = hhmm(journey.origin_scheduled);
   const [days, setDays] = useState<number[]>([isoWeekday(journey.origin_local_date)]);
   const [busy, setBusy] = useState(false);
@@ -79,8 +100,8 @@ export function WatchModal({ journey, onClose }: { journey: Journey; onClose: ()
         fromStopId: journey.origin_stop_id,
         toStopId: journey.destination_stop_id,
         monitoredDays: days,
-        outboundStart: window.start,
-        outboundEnd: window.end,
+        // Route-level watch → no window (matches all day).
+        ...(routeLevel ? {} : { outboundStart: window.start, outboundEnd: window.end }),
       });
       void queryClient.invalidateQueries({ queryKey: ["commute-routes"] });
       setDone(true);
@@ -103,8 +124,8 @@ export function WatchModal({ journey, onClose }: { journey: Journey; onClose: ()
               <h3 className="acct__h">Bevakningen är sparad</h3>
               <p className="acct__p">
                 Vi mejlar dig så fort <b>{journey.origin_stop_name} → {journey.destination_stop_name}</b>{" "}
-                runt {depTime} blir 20 minuter eller mer sen på de valda dagarna. Du kan ändra
-                bevakningen under Inställningar → Pendlarvanor.
+                {routeLevel ? "" : `runt ${depTime} `}blir 20 minuter eller mer sen på de valda dagarna.
+                Du kan ändra bevakningen under Inställningar → Pendlarvanor.
               </p>
               <div className="acct__btns">
                 <button className="btn btn--accent btn--block" onClick={onClose}>Klar</button>
@@ -124,7 +145,7 @@ export function WatchModal({ journey, onClose }: { journey: Journey; onClose: ()
                 </div>
                 <div className="summary__row">
                   <span>Avgång</span>
-                  <b>{depTime} · {lineLabel(journey)}</b>
+                  <b>{routeLevel ? "Alla avgångar under dagen" : `${depTime} · ${lineLabel(journey)}`}</b>
                 </div>
               </div>
 

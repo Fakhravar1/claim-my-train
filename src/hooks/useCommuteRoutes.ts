@@ -84,15 +84,17 @@ export async function saveRoutes(userId: string, routes: CommuteRoute[]) {
  * spawning duplicate route cards in Settings.
  *
  * `outboundStart`/`outboundEnd` bracket the watched departure (HH:MM, Stockholm
- * local) so the digest matches that train rather than the whole day.
+ * local) so the digest matches that train rather than the whole day. Omit them
+ * for a route-level "Bevaka som pendlare" watch (no specific departure) — a null
+ * window means that direction matches all day (§16).
  */
 export async function addWatchRoute(params: {
   userId: string;
   fromStopId: string;
   toStopId: string;
   monitoredDays: number[];
-  outboundStart: string;
-  outboundEnd: string;
+  outboundStart?: string;
+  outboundEnd?: string;
 }) {
   const { userId, fromStopId, toStopId, monitoredDays, outboundStart, outboundEnd } = params;
 
@@ -111,8 +113,10 @@ export async function addWatchRoute(params: {
       (a, b) => a - b
     );
     // Widen the outbound window to cover both the old span and this departure.
-    const start = [match.outbound_start_time, outboundStart].filter(Boolean).sort()[0]!;
-    const end = [match.outbound_end_time, outboundEnd].filter(Boolean).sort().slice(-1)[0]!;
+    // A route-level watch (no window) leaves the existing window untouched, or
+    // null if there was none.
+    const start = [match.outbound_start_time, outboundStart].filter(Boolean).sort()[0] ?? null;
+    const end = [match.outbound_end_time, outboundEnd].filter(Boolean).sort().slice(-1)[0] ?? null;
     const { error } = await supabase
       .from("commute_routes")
       .update({ monitored_days: days, outbound_start_time: start, outbound_end_time: end })
@@ -125,8 +129,8 @@ export async function addWatchRoute(params: {
     user_id: userId,
     from_stop_id: fromStopId,
     to_stop_id: toStopId,
-    outbound_start_time: outboundStart,
-    outbound_end_time: outboundEnd,
+    outbound_start_time: outboundStart ?? null,
+    outbound_end_time: outboundEnd ?? null,
     return_start_time: null,
     return_end_time: null,
     monitored_days: monitoredDays,

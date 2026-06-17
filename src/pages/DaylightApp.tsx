@@ -1,12 +1,13 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDaylightStyles } from "@/hooks/useDaylightStyles";
-import { useNetworkBoard } from "@/hooks/useNetworkBoard";
+import { useNetworkBoard, useStationBoard } from "@/hooks/useNetworkBoard";
 import { useJourneys, type Journey } from "@/hooks/useJourneys";
+import type { WatchTarget } from "@/components/daylight/WatchModal";
 import { useStations } from "@/hooks/useStations";
 import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
-import { Board, lineLabel } from "@/components/daylight/Board";
+import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
 import { WatchModal } from "@/components/daylight/WatchModal";
@@ -35,9 +36,13 @@ export default function DaylightApp() {
   const [query, setQuery] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [onlyDelayed, setOnlyDelayed] = useState(false);
+  const [onlyCancelled, setOnlyCancelled] = useState(false);
+  const PAGE = 10;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
   const [claim, setClaim] = useState<ClaimInitial | null>(null);
   const [info, setInfo] = useState<Journey | null>(null);
-  const [watch, setWatch] = useState<Journey | null>(null);
+  const [watch, setWatch] = useState<WatchTarget | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
   const { data: stations = [] } = useStations();
@@ -48,34 +53,108 @@ export default function DaylightApp() {
         .map((s) => ({ id: s.stop__id as string, name: s.station_name as string })),
     [stations]
   );
+  const stationName = (id: string) =>
+    stationOptions.find((s) => s.id === id)?.name ?? id;
 
-  // Signed-in users can narrow the board to a specific route; otherwise it shows
-  // a representative network-wide sample. Only one of the two queries is active.
-  const routeMode = Boolean(user && from && to);
-  const network = useNetworkBoard(date, !routeMode);
+  // The free-text box resolves to the station ids whose name matches the query,
+  // so "Malmö" pulls every train touching a Malmö station (origin OR dest),
+  // not a substring filter of the network sample. Capped so a 1-char query
+  // doesn't build a giant id list.
+  const matchedStationIds = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return stationOptions
+      .filter((s) => s.name.toLowerCase().includes(q))
+      .slice(0, 25)
+      .map((s) => s.id);
+  }, [query, stationOptions]);
+
+  // Three mutually-exclusive board sources, in priority order:
+  //   1. routeMode    — an exact O-D pair is selected (anyone, incl. logged out)
+  //   2. stationMode  — the search box resolved to one or more stations
+  //   3. network      — the representative tier sample (default)
+  const routeMode = Boolean(from && to);
+  const stationMode = !routeMode && matchedStationIds.length > 0;
+  const network = useNetworkBoard(date, !routeMode && !stationMode);
+  const station = useStationBoard(matchedStationIds, date, stationMode);
   const route = useJourneys({
     fromStopId: routeMode ? from : null,
     toStopId: routeMode ? to : null,
     date,
     onlyClaimable: false,
   });
-  const allRows = routeMode ? route.data ?? [] : network.data ?? [];
-  const isLoading = routeMode ? route.isLoading : network.isLoading;
 
-  const rows = useMemo(() => {
+  const allRows = routeMode ? route.data ?? [] : stationMode ? station.data ?? [] : network.data ?? [];
+  const isLoading = routeMode ? route.isLoading : stationMode ? station.isLoading : network.isLoading;
+
+  // Full filtered set (before pagination): text filter for the network sample,
+  // then the delayed/cancelled checkboxes, then station-search ordering.
+  const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return allRows;
-    return allRows.filter(
-      (d) =>
-        (d.origin_stop_name ?? "").toLowerCase().includes(q) ||
-        (d.destination_stop_name ?? "").toLowerCase().includes(q) ||
-        lineLabel(d).toLowerCase().includes(q)
-    );
-  }, [allRows, query]);
+    let r = allRows;
+
+    // routeMode / stationMode already queried narrowly; only the network sample
+    // needs the client-side text filter (station names only, so a line's
+    // terminus string can't surface unrelated rows).
+    if (!routeMode && !stationMode && q) {
+      r = r.filter(
+        (d) =>
+          (d.origin_stop_name ?? "").toLowerCase().includes(q) ||
+          (d.destination_stop_name ?? "").toLowerCase().includes(q)
+      );
+    }
+
+    if (onlyDelayed || onlyCancelled) {
+      r = r.filter((d) => {
+        const cancelled = Boolean(d.canceled);
+        const delayed = !cancelled && (d.destination_delay_minutes ?? 0) >= 4;
+        return (onlyDelayed && delayed) || (onlyCancelled && cancelled);
+      });
+    }
+
+    // All modes stay in chronological order (earliest at top, later further
+    // down — the station query already orders ascending). Station search is
+    // paged: the first 10 show, then "Visa fler avgångar" reveals later ones.
+    return r;
+  }, [allRows, query, routeMode, stationMode, onlyDelayed, onlyCancelled]);
+
+  // Paginate only the station search; everything else shows its full (small) set.
+  const paginated = stationMode;
+  const rows = paginated ? filteredRows.slice(0, visibleCount) : filteredRows;
+  const hasMore = paginated && filteredRows.length > visibleCount;
+
+  // Reset the page size whenever the query that produced the list changes.
+  useEffect(() => {
+    setVisibleCount(PAGE);
+  }, [query, date, from, to, onlyDelayed, onlyCancelled]);
 
   const focusSearch = () => {
     boardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
     setTimeout(() => boardRef.current?.querySelector("input")?.focus(), 280);
+  };
+
+  // "Bevaka som pendlare" — watch the selected O-D leg. Needs both stops chosen
+  // and a signed-in user; otherwise nudge the user to the right place.
+  const watchCommuter = () => {
+    if (!user) {
+      setClaim({ blank: true, loginOnly: true });
+      return;
+    }
+    if (!from || !to) {
+      boardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      setTimeout(() => boardRef.current?.querySelector("select")?.focus(), 280);
+      return;
+    }
+    setWatch({
+      origin_scheduled: null,
+      origin_local_date: date,
+      origin_stop_id: from,
+      destination_stop_id: to,
+      origin_stop_name: stationName(from),
+      destination_stop_name: stationName(to),
+      line_name: null,
+      service_number: null,
+    });
   };
 
   const watchTrain = () => {
@@ -91,7 +170,7 @@ export default function DaylightApp() {
         onSignOut={() => void signOut()}
         onLogin={() => setClaim({ blank: true, loginOnly: true })}
       />
-      <Hero onUnknown={() => setClaim({ blank: true })} onSearch={focusSearch} />
+      <Hero onSearch={focusSearch} />
       <Board
         ref={boardRef}
         rows={rows}
@@ -102,16 +181,21 @@ export default function DaylightApp() {
         setDate={setDate}
         minDate={minDate}
         maxDate={today}
-        showRoute={Boolean(user)}
         from={from}
         to={to}
         setFrom={setFrom}
         setTo={setTo}
         stationOptions={stationOptions}
+        onlyDelayed={onlyDelayed}
+        onlyCancelled={onlyCancelled}
+        setOnlyDelayed={setOnlyDelayed}
+        setOnlyCancelled={setOnlyCancelled}
+        hasMore={hasMore}
+        onShowMore={() => setVisibleCount((c) => c + PAGE)}
         onClaim={(d) => setClaim(d)}
         onInfo={(d) => setInfo(d)}
         onWatch={(d) => (user ? setWatch(d) : setClaim({ blank: true, loginOnly: true }))}
-        onUnknown={() => setClaim({ blank: true })}
+        onWatchCommuter={watchCommuter}
       />
       <ValueProps
         onUnknown={() => setClaim({ blank: true })}

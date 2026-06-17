@@ -2,6 +2,7 @@ import { forwardRef, useMemo } from "react";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
 import { ArrowIcon, BellIcon, CheckIcon, CloseIcon, SearchIcon } from "./icons";
+import { StationField } from "./StationField";
 
 /** HH:MM in Stockholm local time from an ISO timestamp. */
 function fmtTime(iso: string | null | undefined): string {
@@ -21,7 +22,7 @@ function fmtDayShort(iso: string | null | undefined): string {
     .replace(".", "");
 }
 
-export function lineLabel(j: Journey): string {
+export function lineLabel(j: Pick<Journey, "line_name" | "service_number">): string {
   return j.line_name ?? "Tåg " + (j.service_number ?? "");
 }
 
@@ -36,17 +37,24 @@ type BoardProps = {
   setDate: (d: string) => void;
   maxDate: string;
   minDate: string;
-  /** Route filter is shown only to signed-in users. */
-  showRoute: boolean;
   from: string;
   to: string;
   setFrom: (id: string) => void;
   setTo: (id: string) => void;
   stationOptions: StationOption[];
+  /** Filter checkboxes (delayed / cancelled). */
+  onlyDelayed: boolean;
+  onlyCancelled: boolean;
+  setOnlyDelayed: (v: boolean) => void;
+  setOnlyCancelled: (v: boolean) => void;
+  /** Pagination — station search reveals rows in batches of 10. */
+  hasMore: boolean;
+  onShowMore: () => void;
   onClaim: (j: Journey) => void;
   onInfo: (j: Journey) => void;
   onWatch: (j: Journey) => void;
-  onUnknown: () => void;
+  /** "Bevaka som pendlare" — watch the selected O-D leg as a commuter. */
+  onWatchCommuter: () => void;
 };
 
 export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
@@ -59,16 +67,21 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
     setDate,
     maxDate,
     minDate,
-    showRoute,
     from,
     to,
     setFrom,
     setTo,
     stationOptions,
+    onlyDelayed,
+    onlyCancelled,
+    setOnlyDelayed,
+    setOnlyCancelled,
+    hasMore,
+    onShowMore,
     onClaim,
     onInfo,
     onWatch,
-    onUnknown,
+    onWatchCommuter,
   },
   ref
 ) {
@@ -102,28 +115,36 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
             </div>
           </div>
 
+          <p className="board__cap">
+            <b>Sök station</b> visar alla tåg som rör en station. Vill du se en specifik avgång?
+            Välj <b>från</b> och <b>till</b> nedan.
+          </p>
+
           <div className="board__controls">
-            {showRoute && (
-              <>
-                <label className="board__control">
-                  <span>Från</span>
-                  <select value={from} onChange={(e) => setFrom(e.target.value)}>
-                    <option value="">Alla stationer</option>
-                    {stationOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </label>
-                <label className="board__control">
-                  <span>Till</span>
-                  <select value={to} onChange={(e) => setTo(e.target.value)}>
-                    <option value="">Alla stationer</option>
-                    {stationOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </label>
-              </>
-            )}
+            <StationField label="Från" value={from} onChange={setFrom} options={stationOptions} />
+            <StationField label="Till" value={to} onChange={setTo} options={stationOptions} />
             <label className="board__control">
               <span>Datum</span>
               <input type="date" value={date} min={minDate} max={maxDate} onChange={(e) => setDate(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="board__filters">
+            <label className="board__filter">
+              <input
+                type="checkbox"
+                checked={onlyDelayed}
+                onChange={(e) => setOnlyDelayed(e.target.checked)}
+              />
+              Försenade
+            </label>
+            <label className="board__filter">
+              <input
+                type="checkbox"
+                checked={onlyCancelled}
+                onChange={(e) => setOnlyCancelled(e.target.checked)}
+              />
+              Inställda
             </label>
           </div>
 
@@ -149,10 +170,18 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
             ))}
           </div>
 
+          {!loading && hasMore && (
+            <div className="board__more">
+              <button className="btn btn--quiet btn--sm" onClick={onShowMore}>
+                Visa fler avgångar
+              </button>
+            </div>
+          )}
+
           <div className="board__foot">
-            <span>Hittar du inte din avgång?</span>
-            <button className="linkbtn" onClick={onUnknown}>
-              Ange resa manuellt <ArrowIcon width={14} height={14} />
+            <span>Pendlar du den här sträckan? Få mejl när tåget är sent.</span>
+            <button className="linkbtn" onClick={onWatchCommuter}>
+              Bevaka som pendlare <BellIcon width={14} height={14} />
             </button>
           </div>
         </div>
