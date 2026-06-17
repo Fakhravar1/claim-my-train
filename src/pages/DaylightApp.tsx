@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDaylightStyles } from "@/hooks/useDaylightStyles";
 import { useNetworkBoard, useStationBoard } from "@/hooks/useNetworkBoard";
 import { useJourneys, type Journey } from "@/hooks/useJourneys";
 import type { WatchTarget } from "@/components/daylight/WatchModal";
 import { useStations } from "@/hooks/useStations";
+import { statusMeta } from "@/lib/daylightStatus";
 import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
@@ -23,7 +24,8 @@ export default function DaylightApp() {
   useDaylightStyles();
   usePendingClaimCompletion(); // finish a deferred claim after email verification
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user, profile, loading: authLoading, signOut } = useAuth();
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const minDate = useMemo(() => {
@@ -38,6 +40,7 @@ export default function DaylightApp() {
   const [to, setTo] = useState("");
   const [onlyDelayed, setOnlyDelayed] = useState(false);
   const [onlyCancelled, setOnlyCancelled] = useState(false);
+  const [onlyClaimable, setOnlyClaimable] = useState(false);
   const PAGE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   const [claim, setClaim] = useState<ClaimInitial | null>(null);
@@ -112,11 +115,15 @@ export default function DaylightApp() {
       });
     }
 
+    if (onlyClaimable) {
+      r = r.filter((d) => statusMeta(d.destination_delay_minutes, Boolean(d.canceled)).eligible);
+    }
+
     // All modes stay in chronological order (earliest at top, later further
     // down — the station query already orders ascending). Station search is
     // paged: the first 10 show, then "Visa fler avgångar" reveals later ones.
     return r;
-  }, [allRows, query, routeMode, stationMode, onlyDelayed, onlyCancelled]);
+  }, [allRows, query, routeMode, stationMode, onlyDelayed, onlyCancelled, onlyClaimable]);
 
   // Paginate only the station search; everything else shows its full (small) set.
   const paginated = stationMode;
@@ -126,7 +133,24 @@ export default function DaylightApp() {
   // Reset the page size whenever the query that produced the list changes.
   useEffect(() => {
     setVisibleCount(PAGE);
-  }, [query, date, from, to, onlyDelayed, onlyCancelled]);
+  }, [query, date, from, to, onlyDelayed, onlyCancelled, onlyClaimable]);
+
+  // "Mina förseningar" entry point (signed-in account menu → /?mine=1#board):
+  // jump to claimable-only, seeded with the user's preferred route if they
+  // haven't picked one explicitly yet. Runs once the profile has loaded.
+  useEffect(() => {
+    if (searchParams.get("mine") !== "1" || authLoading) return;
+    setOnlyClaimable(true);
+    if (!from && !to && profile?.preferred_from_stop_id && profile?.preferred_to_stop_id) {
+      setFrom(profile.preferred_from_stop_id);
+      setTo(profile.preferred_to_stop_id);
+    }
+    boardRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const next = new URLSearchParams(searchParams);
+    next.delete("mine");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, profile]);
 
   const focusSearch = () => {
     boardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -188,8 +212,10 @@ export default function DaylightApp() {
         stationOptions={stationOptions}
         onlyDelayed={onlyDelayed}
         onlyCancelled={onlyCancelled}
+        onlyClaimable={onlyClaimable}
         setOnlyDelayed={setOnlyDelayed}
         setOnlyCancelled={setOnlyCancelled}
+        setOnlyClaimable={setOnlyClaimable}
         hasMore={hasMore}
         onShowMore={() => setVisibleCount((c) => c + PAGE)}
         onClaim={(d) => setClaim(d)}

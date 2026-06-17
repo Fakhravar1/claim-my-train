@@ -42,11 +42,13 @@ type BoardProps = {
   setFrom: (id: string) => void;
   setTo: (id: string) => void;
   stationOptions: StationOption[];
-  /** Filter checkboxes (delayed / cancelled). */
+  /** Filter checkboxes (delayed / cancelled / claimable). */
   onlyDelayed: boolean;
   onlyCancelled: boolean;
+  onlyClaimable: boolean;
   setOnlyDelayed: (v: boolean) => void;
   setOnlyCancelled: (v: boolean) => void;
+  setOnlyClaimable: (v: boolean) => void;
   /** Pagination — station search reveals rows in batches of 10. */
   hasMore: boolean;
   onShowMore: () => void;
@@ -74,8 +76,10 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
     stationOptions,
     onlyDelayed,
     onlyCancelled,
+    onlyClaimable,
     setOnlyDelayed,
     setOnlyCancelled,
+    setOnlyClaimable,
     hasMore,
     onShowMore,
     onClaim,
@@ -145,6 +149,14 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
                 onChange={(e) => setOnlyCancelled(e.target.checked)}
               />
               Inställda
+            </label>
+            <label className="board__filter">
+              <input
+                type="checkbox"
+                checked={onlyClaimable}
+                onChange={(e) => setOnlyClaimable(e.target.checked)}
+              />
+              Kan ge ersättning
             </label>
           </div>
 

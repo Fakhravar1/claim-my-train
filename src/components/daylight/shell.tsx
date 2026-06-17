@@ -57,7 +57,7 @@ function AccountMenu({ label, onSignOut }: { label: string; onSignOut: () => voi
       {open && (
         <div className="nav__menu" role="menu">
           <Link to="/settings" onClick={() => setOpen(false)}>Inställningar</Link>
-          <Link to="/regions/skanetrafiken/delay-alerts" onClick={() => setOpen(false)}>Mina förseningar</Link>
+          <Link to="/?mine=1#board" onClick={() => setOpen(false)}>Mina förseningar</Link>
           <button onClick={() => { setOpen(false); onSignOut(); }}>Logga ut</button>
         </div>
       )}
