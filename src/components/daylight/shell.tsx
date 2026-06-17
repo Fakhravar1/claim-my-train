@@ -23,7 +23,7 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
     <nav className="nav">
       <div className="wrap nav__in">
         <a href="#" className="brand">
-          <span className="brand__mark" /> Claim My Train
+          <span className="brand__mark" /> Qvitta
         </a>
         <div className="nav__right">
           <a href="#board" className="nav__link">Live-tavlan</a>
@@ -128,7 +128,7 @@ export function Footer(): ReactNode {
   return (
     <footer className="footer">
       <div className="wrap footer__in">
-        <span>© 2026 Claim My Train</span>
+        <span>© 2026 Qvitta</span>
         <div className="footer__links">
           <a href="#">Integritet</a>
           <a href="#">Så ansöker vi</a>

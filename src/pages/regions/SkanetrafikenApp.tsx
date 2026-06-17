@@ -192,7 +192,7 @@ export default function SkanetrafikenApp() {
         <header className="app-header">
           <div className="app-header__row">
             <div>
-              <h1 className="app-header__title">Claim My Train</h1>
+              <h1 className="app-header__title">Qvitta</h1>
               <span className="skt-wordmark-line">Skånetrafiken · Skåne</span>
               <p className="app-header__sub">Find delayed departures and claim what you're owed.</p>
             </div>

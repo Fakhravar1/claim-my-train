@@ -32,7 +32,7 @@ export default function Nav(props: Props) {
         ) : (
           <a href="#top" className="nav__brand">
             <span className="dot" aria-hidden="true" />
-            Claim My Train
+            Qvitta
           </a>
         )}
         <div className="nav__links">

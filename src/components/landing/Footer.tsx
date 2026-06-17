@@ -9,7 +9,7 @@ export default function Footer({ regionLabel }: Props) {
     <footer className="footer">
       <div className="wrap footer__inner">
         <div>
-          © 2026 Claim My Train
+          © 2026 Qvitta
           {regionLabel ? (
             <>
               {" "}· {regionLabel} · <Link to="/">All regions</Link>
