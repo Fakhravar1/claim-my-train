@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDaylightStyles } from "@/hooks/useDaylightStyles";
 import { useNetworkBoard, useStationBoard } from "@/hooks/useNetworkBoard";
@@ -164,6 +165,72 @@ export default function DaylightApp() {
 
   return (
     <div className="cmt-daylight">
+      <Helmet>
+        <link rel="canonical" href="https://qvitta.nu/" />
+        <meta property="og:url" content="https://qvitta.nu/" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: [
+              {
+                "@type": "Question",
+                name: "Vad gör jag om jag inte vet vilket tåg jag tog?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Du var sen men minns inte avgången. Ange sträcka och tid — vi matchar mot trafikdatan och hittar rätt tåg.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "Hur vet jag om jag har rätt till ersättning?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Precis under 20 minuter, eller bara osäker? Vi visar vad våra uppgifter säger och hur nära gränsen du ligger.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "Kan ni hålla koll på mina pendlarvanor?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Ange dina pendlarvanor så mejlar vi dig så fort tågen du brukar ta är försenade — du missar aldrig en ersättning du kan ha rätt till.",
+                },
+              },
+              {
+                "@type": "Question",
+                name: "Hur betalas ersättningen ut?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Ersättningen betalas ut direkt från operatören till din valda mottagningsmetod — Swish eller bankkonto. Pengarna passerar aldrig oss.",
+                },
+              },
+            ],
+          })}
+        </script>
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "Qvitta",
+            applicationCategory: "FinanceApplication",
+            operatingSystem: "Any",
+            offers: {
+              "@type": "Offer",
+              price: "0",
+              priceCurrency: "SEK",
+            },
+            description:
+              "Automated train delay compensation tracker and claim filing for Swedish public transport commuters.",
+            featureList: [
+              "Live train departure board with delay tracking",
+              "Automated compensation eligibility detection",
+              "Claim form generation for Skånetrafiken",
+              "Commute monitoring with email alerts",
+            ],
+          })}
+        </script>
+      </Helmet>
       <Nav
         signedIn={Boolean(user)}
         accountLabel={profile?.full_name || profile?.first_name || user?.email || "Konto"}
