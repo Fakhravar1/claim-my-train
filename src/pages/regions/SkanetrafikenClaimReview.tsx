@@ -67,7 +67,7 @@ export default function SkanetrafikenClaimReview() {
     },
   });
 
-  const { data: myClaims = [] } = useMyClaims();
+  const { data: myClaims = [] } = useMyClaims(user?.id);
   const claimedKeys = useMemo(() => new Set(myClaims.map((c) => c.journey_key)), [myClaims]);
 
   const claimable = useMemo(
