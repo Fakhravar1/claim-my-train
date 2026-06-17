@@ -10,15 +10,16 @@ import { useToast } from "@/hooks/use-toast";
 import { statusMeta } from "@/lib/daylightStatus";
 import { isSupportedPurchasingOperator, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
 import { Scrim, ModalHead, Field } from "./primitives";
-import { ArrowIcon, BellIcon, CheckIcon, GoogleIcon, ShieldIcon } from "./icons";
+import { ArrowIcon, CheckIcon, ShieldIcon } from "./icons";
 import { lineLabel } from "./Board";
 
-/** initial: a board row (pre-filled), {blank}, or {blank, loginOnly}. */
-export type ClaimInitial = Journey | { blank: true; loginOnly?: boolean };
+/** initial: a board row (pre-filled) or a blank claim. */
+export type ClaimInitial = Journey | { blank: true };
 
 const STEPS = ["Resan", "Uppgifter", "Granska"] as const;
+// "account" is reached only after a successful submit (the success screen).
+// All sign-in prompts route to the /login page instead (single login surface).
 type Phase = "journey" | "details" | "review" | "account";
-type AccountIntent = "login" | "submitted" | "save";
 
 const PAYOUT_LABELS: Record<string, string> = {
   bank: "Bankkonto",
@@ -52,17 +53,15 @@ export function ClaimModal({
   onClaimed?: () => void;
 }) {
   const navigate = useNavigate();
-  const { user, profile, signInWithGoogle } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { startClaim, pending: submitting } = useStartClaim();
   const { data: stations = [] } = useStations();
 
   const prefilled = isJourney(initial) ? initial : null;
-  const loginOnly = !isJourney(initial) && Boolean(initial.loginOnly);
 
-  const [phase, setPhase] = useState<Phase>(loginOnly ? "account" : "journey");
-  const [accountIntent, setAccountIntent] = useState<AccountIntent>(loginOnly ? "save" : "login");
+  const [phase, setPhase] = useState<Phase>("journey");
   const [from, setFrom] = useState<string>(prefilled?.origin_stop_id ?? "");
   const [to, setTo] = useState<string>(prefilled?.destination_stop_id ?? "");
   const [date, setDate] = useState<string>(
@@ -136,8 +135,9 @@ export function ClaimModal({
 
   const goFromJourney = () => {
     if (!user) {
-      setAccountIntent("login");
-      setPhase("account");
+      // Single login surface: send the user to /login, then back to `/`.
+      onClose();
+      navigate("/login?next=/");
       return;
     }
     setPhase("details");
@@ -151,7 +151,6 @@ export function ClaimModal({
       setStatus("");
       void queryClient.invalidateQueries({ queryKey: ["my-claims"] });
       onClaimed?.();
-      setAccountIntent("submitted");
       setPhase("account");
     } else {
       setStatus(result.error);
@@ -293,10 +292,6 @@ export function ClaimModal({
 
           {phase === "account" && (
             <AccountView
-              intent={accountIntent}
-              email={profile?.claim_email ?? user?.email ?? null}
-              onGoogle={() => void signInWithGoogle("/")}
-              onEmail={() => navigate("/login?next=/")}
               onHabits={() => { onClose(); navigate("/settings"); }}
               onClose={onClose}
             />
@@ -343,53 +338,20 @@ export function ClaimModal({
   );
 }
 
-function AccountView({
-  intent,
-  email,
-  onGoogle,
-  onEmail,
-  onHabits,
-  onClose,
-}: {
-  intent: AccountIntent;
-  email: string | null;
-  onGoogle: () => void;
-  onEmail: () => void;
-  onHabits: () => void;
-  onClose: () => void;
-}) {
-  if (intent === "submitted") {
-    return (
-      <div className="step acct">
-        <div className="acct__badge is-ok"><CheckIcon width={26} height={26} /></div>
-        <h3 className="acct__h">Ansökan inskickad</h3>
-        <p className="acct__p">
-          Vi har skickat in din ansökan och mejlar när den är behandlad. Ange dina pendlarvanor, så
-          mejlar vi dig så fort tågen du brukar ta blir försenade.
-        </p>
-        <div className="acct__btns">
-          <button className="btn btn--dark btn--block" onClick={onHabits}>Ställ in pendlarvanor</button>
-          <button className="btn btn--ghost btn--block" onClick={onClose}>Klar</button>
-        </div>
-      </div>
-    );
-  }
-  // login / save intents — both need the user signed in.
-  const saving = intent === "save";
+/** Post-submit success screen (the only remaining use of the account phase). */
+function AccountView({ onHabits, onClose }: { onHabits: () => void; onClose: () => void }) {
   return (
     <div className="step acct">
-      <div className="acct__badge"><BellIcon width={24} height={24} /></div>
-      <h3 className="acct__h">{saving ? "Spara dina uppgifter?" : "Logga in för att ansöka"}</h3>
+      <div className="acct__badge is-ok"><CheckIcon width={26} height={26} /></div>
+      <h3 className="acct__h">Ansökan inskickad</h3>
       <p className="acct__p">
-        {saving
-          ? "Skapa ett konto så sparar vi resa och utbetalningssätt — och ange dina pendlarvanor, så mejlar vi dig så fort tågen du brukar ta blir försenade."
-          : "Vi fyller i operatörens formulär med dina sparade uppgifter och fäster din signatur. Logga in för att fortsätta."}
+        Vi har skickat in din ansökan och mejlar när den är behandlad. Ange dina pendlarvanor, så
+        mejlar vi dig så fort tågen du brukar ta blir försenade.
       </p>
       <div className="acct__btns">
-        <button className="btn btn--dark btn--block" onClick={onGoogle}><GoogleIcon width={18} height={18} /> Fortsätt med Google</button>
-        <button className="btn btn--ghost btn--block" onClick={onEmail}>Fortsätt med {email ? email : "e-post"}</button>
+        <button className="btn btn--dark btn--block" onClick={onHabits}>Ställ in pendlarvanor</button>
+        <button className="btn btn--ghost btn--block" onClick={onClose}>Klar</button>
       </div>
-      <button className="linkbtn linkbtn--center" onClick={onClose}>Inte nu</button>
     </div>
   );
 }
