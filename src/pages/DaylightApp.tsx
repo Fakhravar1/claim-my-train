@@ -19,7 +19,7 @@ import { EligibilityModal } from "@/components/daylight/EligibilityModal";
 export default function DaylightApp() {
   useDaylightStyles();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const minDate = useMemo(() => {
@@ -81,7 +81,11 @@ export default function DaylightApp() {
 
   return (
     <div className="cmt-daylight">
-      <Nav onLogin={() => setClaim({ blank: true, loginOnly: true })} />
+      <Nav
+        signedIn={Boolean(user)}
+        accountLabel={profile?.full_name || profile?.first_name || user?.email || "Konto"}
+        onSignOut={() => void signOut()}
+      />
       <Hero onUnknown={() => setClaim({ blank: true })} onSearch={focusSearch} />
       <Board
         ref={boardRef}

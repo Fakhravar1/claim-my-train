@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { ArrowIcon, SearchIcon } from "./icons";
 
 /**
@@ -7,7 +8,15 @@ import { ArrowIcon, SearchIcon } from "./icons";
  * Swedish verbatim. Behaviour callbacks are wired by DaylightApp.
  */
 
-export function Nav({ onLogin }: { onLogin: () => void }) {
+type NavProps = {
+  /** True once auth has resolved and a user is signed in. */
+  signedIn: boolean;
+  /** Display label for the signed-in account (name or email). */
+  accountLabel: string;
+  onSignOut: () => void;
+};
+
+export function Nav({ signedIn, accountLabel, onSignOut }: NavProps) {
   return (
     <nav className="nav">
       <div className="wrap nav__in">
@@ -17,10 +26,40 @@ export function Nav({ onLogin }: { onLogin: () => void }) {
         <div className="nav__right">
           <a href="#board" className="nav__link">Live-tavlan</a>
           <a href="#how" className="nav__link">Så funkar det</a>
-          <button className="btn btn--dark" onClick={onLogin}>Logga in</button>
+          {signedIn ? (
+            <AccountMenu label={accountLabel} onSignOut={onSignOut} />
+          ) : (
+            <Link to="/login?next=/" className="btn btn--dark">Logga in</Link>
+          )}
         </div>
       </div>
     </nav>
+  );
+}
+
+function AccountMenu({ label, onSignOut }: { label: string; onSignOut: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  return (
+    <div className="nav__account" ref={ref}>
+      <button className="btn btn--ghost" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}>
+        {label}
+      </button>
+      {open && (
+        <div className="nav__menu" role="menu">
+          <Link to="/settings" onClick={() => setOpen(false)}>Inställningar</Link>
+          <Link to="/regions/skanetrafiken/delay-alerts" onClick={() => setOpen(false)}>Mina förseningar</Link>
+          <button onClick={() => { setOpen(false); onSignOut(); }}>Logga ut</button>
+        </div>
+      )}
+    </div>
   );
 }
 
