@@ -528,7 +528,6 @@ export function ClaimModal({
               intent="submitted"
               email={details.claimEmail || profile?.claim_email || user?.email || null}
               onGoogle={() => void signInWithGoogle("/")}
-              onEmail={() => navigate("/login?next=/")}
               onHabits={() => { onClose(); navigate("/settings"); }}
               onClose={onClose}
             />
@@ -539,7 +538,6 @@ export function ClaimModal({
               intent={accountIntent}
               email={profile?.claim_email ?? user?.email ?? null}
               onGoogle={() => void signInWithGoogle("/")}
-              onEmail={() => navigate("/login?next=/")}
               onHabits={() => { onClose(); navigate("/settings"); }}
               onClose={onClose}
             />
@@ -634,17 +632,23 @@ function AccountView({
   intent,
   email,
   onGoogle,
-  onEmail,
   onHabits,
   onClose,
 }: {
   intent: AccountIntent;
   email: string | null;
   onGoogle: () => void;
-  onEmail: () => void;
   onHabits: () => void;
   onClose: () => void;
 }) {
+  const { toast } = useToast();
+  // null = the Google / e-post chooser; otherwise the inline e-post form.
+  const [emailMode, setEmailMode] = useState<null | "signin" | "signup">(null);
+  const [acctEmail, setAcctEmail] = useState(email ?? "");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+
   if (intent === "submitted") {
     return (
       <div className="step acct">
@@ -661,8 +665,98 @@ function AccountView({
       </div>
     );
   }
-  // login / save intents — the in-modal sign-in pop-up.
+
   const saving = intent === "save";
+
+  // Inline e-post form — same sign-in / create-account options as /login, kept
+  // in the pop-up instead of redirecting (auth state propagates via AuthContext,
+  // which closes the modal once a session lands).
+  const submitEmail = async () => {
+    const emailErr = validateEmail(acctEmail);
+    if (emailErr) {
+      setInfo(emailErr);
+      return;
+    }
+    if (password.length < 8) {
+      setInfo("Lösenordet måste vara minst 8 tecken.");
+      return;
+    }
+    setBusy(true);
+    setInfo(null);
+    try {
+      if (emailMode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: acctEmail.trim(),
+          password,
+          options: { emailRedirectTo: `${window.location.origin}/login?next=/` },
+        });
+        if (error) {
+          setInfo(error.message);
+          toast({ title: "Kunde inte skapa konto", description: error.message, variant: "destructive" });
+          return;
+        }
+        if (!data.session) {
+          setInfo("Vi har mejlat en bekräftelselänk. Klicka på den för att slutföra registreringen.");
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email: acctEmail.trim(), password });
+        if (error) {
+          setInfo(error.message);
+          toast({ title: "Inloggning misslyckades", description: error.message, variant: "destructive" });
+          return;
+        }
+        // AuthContext picks up the session and the parent closes the modal.
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (emailMode) {
+    return (
+      <div className="step acct">
+        <div className="acct__badge"><BellIcon width={24} height={24} /></div>
+        <h3 className="acct__h">{emailMode === "signup" ? "Skapa konto" : "Logga in"}</h3>
+        <div className="acct__tabs">
+          <button
+            className={"acct__tab" + (emailMode === "signin" ? " is-on" : "")}
+            onClick={() => { setEmailMode("signin"); setInfo(null); }}
+          >
+            Logga in
+          </button>
+          <button
+            className={"acct__tab" + (emailMode === "signup" ? " is-on" : "")}
+            onClick={() => { setEmailMode("signup"); setInfo(null); }}
+          >
+            Skapa konto
+          </button>
+        </div>
+        <Field label="E-post">
+          <input type="email" value={acctEmail} onChange={(e) => setAcctEmail(e.target.value)} autoComplete="email" />
+        </Field>
+        <Field label="Lösenord">
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={emailMode === "signup" ? "Minst 8 tecken" : ""}
+            autoComplete={emailMode === "signup" ? "new-password" : "current-password"}
+          />
+        </Field>
+        {info && <p className="muted" style={{ textAlign: "center" }}>{info}</p>}
+        <div className="acct__btns">
+          <button className="btn btn--accent btn--block" disabled={busy} onClick={() => void submitEmail()}>
+            {busy ? "…" : emailMode === "signup" ? "Skapa konto" : "Logga in"}
+          </button>
+          <button className="btn btn--ghost btn--block" disabled={busy} onClick={() => { setEmailMode(null); setInfo(null); }}>
+            Tillbaka
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // login / save intents — the in-modal sign-in pop-up (Google / e-post chooser).
   return (
     <div className="step acct">
       <div className="acct__badge"><BellIcon width={24} height={24} /></div>
@@ -674,7 +768,9 @@ function AccountView({
       </p>
       <div className="acct__btns">
         <button className="btn btn--dark btn--block" onClick={onGoogle}><GoogleIcon width={18} height={18} /> Fortsätt med Google</button>
-        <button className="btn btn--ghost btn--block" onClick={onEmail}>Fortsätt med {email ? email : "e-post"}</button>
+        <button className="btn btn--ghost btn--block" onClick={() => { setEmailMode(saving ? "signup" : "signin"); setInfo(null); }}>
+          Fortsätt med e-post
+        </button>
       </div>
       <button className="linkbtn linkbtn--center" onClick={onClose}>Inte nu</button>
     </div>

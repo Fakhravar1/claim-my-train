@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import UserMenu from "@/components/UserMenu";
+import { useDaylightStyles } from "@/hooks/useDaylightStyles";
+import { Nav, Footer } from "@/components/daylight/shell";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -87,7 +88,8 @@ const claimDelayLabel = (bucket: string | null, cancelled: boolean) => {
 };
 
 const Settings = () => {
-  const { user, profile, loading, refreshProfile } = useAuth();
+  useDaylightStyles();
+  const { user, profile, loading, refreshProfile, signOut, signInWithGoogle } = useAuth();
   const { toast } = useToast();
   const { data: stations = [] } = useStations();
   const { data: myClaims = [], isLoading: claimsLoading } = useMyClaims(user?.id);
@@ -397,22 +399,26 @@ const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div style={{ minHeight: "100vh", background: "#F2F5F3" }}>
+      {/* Daylight nav/footer live in their own scoped wrapper; the shadcn form
+          below stays OUTSIDE .cmt-daylight so the theme's `* { padding:0 }`
+          reset can't clobber the form's spacing. */}
+      <div className="cmt-daylight" style={{ minHeight: 0, background: "transparent" }}>
+        <Nav
+          signedIn={Boolean(user)}
+          accountLabel={profile?.full_name || profile?.first_name || user?.email || "Konto"}
+          onSignOut={() => void signOut()}
+          onLogin={() => void signInWithGoogle("/settings")}
+        />
+      </div>
+
       <div className="container mx-auto max-w-3xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Account</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Account settings</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Save your default claim details to prefill the claim flow faster.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link to="/">
-              <Button type="button" variant="outline">Back to main page</Button>
-            </Link>
-            <UserMenu />
-          </div>
+        <div className="mb-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">Konto</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Inställningar</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Spara dina standarduppgifter så fylls ansökan i snabbare.
+          </p>
         </div>
 
         <Card className="p-5">
@@ -1138,6 +1144,10 @@ const Settings = () => {
             </div>
           </form>
         </Card>
+      </div>
+
+      <div className="cmt-daylight" style={{ minHeight: 0, background: "transparent" }}>
+        <Footer />
       </div>
     </div>
   );

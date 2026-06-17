@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { LogOut, LogIn, Settings, BarChart3, UserCircle } from "lucide-react";
+import { LogOut, LogIn, Settings, UserCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const UserMenu = () => {
@@ -31,8 +31,6 @@ const UserMenu = () => {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  const isAdmin = (user.email ?? "").toLowerCase() === "arianfakhravar@gmail.com";
-
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -67,14 +65,6 @@ const UserMenu = () => {
               <span>Account settings</span>
             </Button>
           </Link>
-          {isAdmin && (
-            <Link to="/admin/api-usage">
-              <Button variant="outline" size="default" className="h-11 w-full justify-start gap-3 rounded-xl px-4 text-sm font-semibold">
-                <BarChart3 className="h-4 w-4" />
-                API usage
-              </Button>
-            </Link>
-          )}
           <Button variant="outline" size="sm" className="w-full gap-2" onClick={signOut}>
             <LogOut className="h-4 w-4" />
             Sign out
