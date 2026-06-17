@@ -1,0 +1,17 @@
+# Qvitta
+
+> Automatiserad ersättning för försenade tåg i Sverige. Vi övervakar din sträcka, upptäcker förseningar på 20 minuter eller mer och hjälper dig skicka in din reklamation till Skånetrafiken — helt gratis.
+
+Qvitta är en webbtjänst för pendlare och resenärer i Skåne som vill få tillbaka pengar för försenade eller inställda tåg enligt Lag (2015:953) om kollektivtrafikresenärers rättigheter. Tjänsten övervakar hela Skånes järnvägsnät i realtid, flaggar anspråksberättigade resor och fyller i Skånetrafikens reklamationsblankett åt dig.
+
+## Pages
+
+- [/](/): Startsida med live nätverkstavla, så funkar det och anspråksflöde.
+- [/regions/skanetrafiken](/regions/skanetrafiken): Se avgångar och ankomster för hela Skånes järnvägsnät med aktuell trafikstatus.
+- [/regions/skanetrafiken/delay-alerts](/regions/skanetrafiken/delay-alerts): Se endast försenade och inställda tåg som kan ge rätt till ersättning.
+
+## Optional
+
+- [/regions/skanetrafiken/claim-review](/regions/skanetrafiken/claim-review): Granska och skicka in flera ersättningsanspråk på en gång (kräver inloggning).
+- [/login](/login): Logga in eller skapa konto med Google eller e-post.
+- [/settings](/settings): Hantera din profil, pendlarvanor, aviseringar och underskrift.
