@@ -2,7 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Journey } from "@/hooks/useJourneys";
 
-type Result = { ok: true } | { ok: false; error: string };
+type Result = { ok: true; error?: never } | { ok: false; error: string };
 
 function pickDelayBucket(minutes: number | null | undefined, cancelled: boolean): string {
   if (cancelled) return "120_plus";
