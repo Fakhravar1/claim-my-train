@@ -118,6 +118,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, Props>(
           onPointerMove={handleMove}
           onPointerUp={handleUp}
           onPointerLeave={handleUp}
+          aria-label="Signaturfält"
           style={{
             width: "100%",
             height: 160,

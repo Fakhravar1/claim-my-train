@@ -73,6 +73,7 @@ export function StationField({
         role="combobox"
         aria-expanded={open}
         aria-autocomplete="list"
+        aria-label={label}
         onChange={(e) => {
           setText(e.target.value);
           setOpen(true);
