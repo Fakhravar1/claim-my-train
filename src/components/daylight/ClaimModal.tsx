@@ -668,9 +668,9 @@ function AccountView({
 
   const saving = intent === "save";
 
-  // Inline e-post form — same sign-in / create-account options as /login, kept
-  // in the pop-up instead of redirecting (auth state propagates via AuthContext,
-  // which closes the modal once a session lands).
+  // Inline e-post form — the sign-in / create-account options live right in the
+  // pop-up instead of redirecting to a separate page (auth state propagates via
+  // AuthContext, which closes the modal once a session lands).
   const submitEmail = async () => {
     const emailErr = validateEmail(acctEmail);
     if (emailErr) {

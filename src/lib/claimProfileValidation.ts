@@ -16,7 +16,7 @@ export const PURCHASING_OPERATORS = [
   { value: "skanetrafiken", label: "Skånetrafiken (JoJo, app, biljettautomat)", supported: true },
   { value: "sj", label: "SJ", supported: false },
   { value: "snalltaget", label: "Snälltåget", supported: false },
-  { value: "other", label: "Another operator / not sure", supported: false },
+  { value: "other", label: "Annan operatör / vet inte", supported: false },
 ] as const;
 export type PurchasingOperator = (typeof PURCHASING_OPERATORS)[number]["value"];
 export const SUPPORTED_PURCHASING_OPERATOR: PurchasingOperator = "skanetrafiken";
@@ -48,8 +48,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const validateEmail = (raw: string): string | null => {
   const value = raw.trim();
-  if (!value) return "Email is required for the claim.";
-  if (!EMAIL_RE.test(value)) return "Enter a valid email like name@example.com.";
+  if (!value) return "E-post krävs för ansökan.";
+  if (!EMAIL_RE.test(value)) return "Ange en giltig e-postadress, t.ex. namn@exempel.se.";
   return null;
 };
 
@@ -58,18 +58,18 @@ export const validateEmail = (raw: string): string | null => {
 // E.164 caps the national+country number at 15 digits; 7 is a sane floor.
 export const validateMobile = (raw: string): string | null => {
   const value = raw.trim();
-  if (!value) return "Mobile number is required for the claim.";
+  if (!value) return "Mobilnummer krävs för ansökan.";
   const hasPlus = value.startsWith("+");
   const digits = value.replace(/[\s\-().]/g, "").replace(/^\+/, "");
   if (!/^\d+$/.test(digits)) {
-    return "Mobile number may only contain digits, spaces, +, -, ( ) and dots.";
+    return "Mobilnumret får bara innehålla siffror, mellanslag, +, -, ( ) och punkter.";
   }
   if (digits.length < 7 || digits.length > 15) {
-    return "Mobile number must be 7–15 digits. Include the country code (e.g. +46 70 123 45 67) if outside Sweden.";
+    return "Mobilnumret måste vara 7–15 siffror. Ange landskod (t.ex. +46 70 123 45 67) om du är utanför Sverige.";
   }
   // A local Swedish number (no +) should look like 07XXXXXXXX.
   if (!hasPlus && digits.startsWith("0") && !/^0\d{8,9}$/.test(digits)) {
-    return "Swedish mobile numbers look like 0701234567. For other countries, add the + country code.";
+    return "Svenska mobilnummer ser ut som 0701234567. För andra länder, lägg till + och landskod.";
   }
   return null;
 };
@@ -79,12 +79,12 @@ export const validateMobile = (raw: string): string | null => {
 // Validates the calendar date and the Luhn control digit.
 export const validatePersonnummer = (raw: string): string | null => {
   const value = raw.trim();
-  if (!value) return "Personnummer is required for the claim.";
+  if (!value) return "Personnummer krävs för ansökan.";
 
   const cleaned = value.replace(/[\s]/g, "");
   const match = cleaned.match(/^(\d{2})?(\d{2})(\d{2})(\d{2})([-+]?)(\d{4})$/);
   if (!match) {
-    return "Personnummer must be 10 or 12 digits, e.g. 19700901-3975.";
+    return "Personnummer måste vara 10 eller 12 siffror, t.ex. 19700901-3975.";
   }
 
   const [, century, yy, mm, dd, , last4] = match;
@@ -92,14 +92,14 @@ export const validatePersonnummer = (raw: string): string | null => {
   const month = Number.parseInt(mm, 10);
   const day = Number.parseInt(dd, 10);
   if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return "Personnummer contains an invalid birth date.";
+    return "Personnumret innehåller ett ogiltigt födelsedatum.";
   }
 
   // Luhn runs over the 10-digit form: YYMMDD + first 3 of the last 4,
   // with the 4th being the control digit.
   const tenDigits = `${yy}${mm}${dd}${last4}`;
   if (!passesLuhn(tenDigits)) {
-    return "Personnummer control digit is wrong — double-check the number.";
+    return "Personnumrets kontrollsiffra stämmer inte — dubbelkolla numret.";
   }
 
   // If a century was supplied, sanity-check it's plausible.
@@ -107,7 +107,7 @@ export const validatePersonnummer = (raw: string): string | null => {
     const fullYear = Number.parseInt(`${century}${yy}`, 10);
     const thisYear = new Date().getFullYear();
     if (fullYear < 1900 || fullYear > thisYear) {
-      return "Personnummer birth year looks out of range.";
+      return "Personnumrets födelseår verkar ligga utanför giltigt intervall.";
     }
   }
 
@@ -130,26 +130,26 @@ const passesLuhn = (digits: string): boolean => {
 
 export const validatePostalCode = (raw: string): string | null => {
   const value = raw.trim();
-  if (!value) return "Postal code is required for the claim.";
+  if (!value) return "Postnummer krävs för ansökan.";
   const digits = value.replace(/\s/g, "");
   if (!/^\d{5}$/.test(digits)) {
-    return "Swedish postal code must be 5 digits, e.g. 211 20.";
+    return "Svenskt postnummer måste vara 5 siffror, t.ex. 211 20.";
   }
   return null;
 };
 
 export const validateRequiredText = (raw: string, label: string): string | null => {
-  if (!raw.trim()) return `${label} is required for the claim.`;
+  if (!raw.trim()) return `${label} krävs för ansökan.`;
   return null;
 };
 
 export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErrors => {
   const errors: ClaimProfileErrors = {};
 
-  const firstName = validateRequiredText(input.firstName, "First name");
+  const firstName = validateRequiredText(input.firstName, "Förnamn");
   if (firstName) errors.firstName = firstName;
 
-  const lastName = validateRequiredText(input.lastName, "Last name");
+  const lastName = validateRequiredText(input.lastName, "Efternamn");
   if (lastName) errors.lastName = lastName;
 
   const email = validateEmail(input.claimEmail);
@@ -161,31 +161,31 @@ export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErro
   const pnr = validatePersonnummer(input.claimPersonnummer);
   if (pnr) errors.claimPersonnummer = pnr;
 
-  const street = validateRequiredText(input.streetAddress, "Street address");
+  const street = validateRequiredText(input.streetAddress, "Gatuadress");
   if (street) errors.streetAddress = street;
 
   const postal = validatePostalCode(input.postalCode);
   if (postal) errors.postalCode = postal;
 
-  const city = validateRequiredText(input.city, "City");
+  const city = validateRequiredText(input.city, "Ort");
   if (city) errors.city = city;
 
-  const ticket = validateRequiredText(input.claimTicketId, "Ticket ID");
+  const ticket = validateRequiredText(input.claimTicketId, "Biljett-ID");
   if (ticket) errors.claimTicketId = ticket;
 
   if (!input.payoutMethod) {
-    errors.payoutMethod = "Pick how you want to receive payouts.";
+    errors.payoutMethod = "Välj hur du vill få din ersättning.";
   } else if (!isPayoutMethod(input.payoutMethod)) {
-    errors.payoutMethod = "Payout method must be Bank, SMS or Email.";
+    errors.payoutMethod = "Utbetalningssätt måste vara Bank, SMS eller E-post.";
   }
 
   // Required to SAVE: the user must declare a vendor. Whether that vendor is
   // *claimable* is enforced separately at filing time (only Skånetrafiken), so
   // an SJ/Snälltåget selection still saves fine — it just can't file.
   if (!input.purchasingOperator) {
-    errors.purchasingOperator = "Select where you bought your ticket.";
+    errors.purchasingOperator = "Välj var du köpte din biljett.";
   } else if (!isPurchasingOperator(input.purchasingOperator)) {
-    errors.purchasingOperator = "Pick one of the listed ticket vendors.";
+    errors.purchasingOperator = "Välj en av de listade biljettåterförsäljarna.";
   }
 
   return errors;
