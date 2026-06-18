@@ -43,18 +43,6 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
   );
 }
 
-/** Brand "Q" mark — teal ring with a short rail-tail. */
-function BrandMark() {
-  return (
-    <span className="brand__mark" aria-hidden="true">
-      <svg viewBox="0 0 32 32" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="14" cy="15" r="9.5" stroke="currentColor" strokeWidth="2.6" />
-        <path d="M20.5 21.5 L27 28" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
-      </svg>
-    </span>
-  );
-}
-
 function AccountMenu({ label, onSignOut }: { label: string; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
