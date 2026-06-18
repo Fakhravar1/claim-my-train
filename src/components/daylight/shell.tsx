@@ -27,9 +27,9 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
   return (
     <nav className="nav">
       <div className="wrap nav__in">
-        <a href="#" className="brand" aria-label="Qvitta — till startsidan">
+        <Link to="/" className="brand" aria-label="Qvitta — till startsidan">
           <span className="brand__word">Qvitta</span>
-        </a>
+        </Link>
         <div className="nav__right">
           <a href="#how" className="nav__cta" onClick={scrollToHow}>Så funkar det</a>
           {signedIn ? (

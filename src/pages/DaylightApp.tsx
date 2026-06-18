@@ -156,8 +156,11 @@ export default function DaylightApp() {
     const next = new URLSearchParams(searchParams);
     next.delete("mine");
     setSearchParams(next, { replace: true });
+    // searchParams must be a dep: otherwise clicking "Mina förseningar" while
+    // already on `/` changes the URL but never re-fires this effect. After it
+    // deletes `mine` the effect re-runs once and early-returns (no loop).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, profile]);
+  }, [authLoading, profile, searchParams]);
 
   const focusSearch = () => {
     boardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
