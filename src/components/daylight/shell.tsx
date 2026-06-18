@@ -28,7 +28,6 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
     <nav className="nav">
       <div className="wrap nav__in">
         <a href="#" className="brand" aria-label="Qvitta — till startsidan">
-          <BrandMark />
           <span className="brand__word">Qvitta</span>
         </a>
         <div className="nav__right">
