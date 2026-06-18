@@ -19,15 +19,19 @@ type NavProps = {
 };
 
 export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
+  const scrollToHow = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    document.getElementById("how")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return (
     <nav className="nav">
       <div className="wrap nav__in">
-        <a href="#" className="brand">
-          <span className="brand__mark" /> Qvitta
+        <a href="#" className="brand" aria-label="Qvitta — till startsidan">
+          <BrandMark />
+          <span className="brand__word">Qvitta</span>
         </a>
         <div className="nav__right">
-          <a href="#board" className="nav__link">Live-tavlan</a>
-          <a href="#how" className="nav__link">Så funkar det</a>
+          <a href="#how" className="nav__cta" onClick={scrollToHow}>Så funkar det</a>
           {signedIn ? (
             <AccountMenu label={accountLabel} onSignOut={onSignOut} />
           ) : (
@@ -36,6 +40,18 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
         </div>
       </div>
     </nav>
+  );
+}
+
+/** Brand "Q" mark — teal ring with a short rail-tail. */
+function BrandMark() {
+  return (
+    <span className="brand__mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="15" r="9.5" stroke="currentColor" strokeWidth="2.6" />
+        <path d="M20.5 21.5 L27 28" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
+      </svg>
+    </span>
   );
 }
 
