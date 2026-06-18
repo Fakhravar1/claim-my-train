@@ -365,3 +365,37 @@
 .cmt-daylight .nav__menu{position:absolute;right:0;top:calc(100% + 8px);min-width:210px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r-lg);box-shadow:var(--board-shadow);padding:.4rem;display:flex;flex-direction:column;gap:.15rem;z-index:40;}
 .cmt-daylight .nav__menu a,.cmt-daylight .nav__menu button{display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;padding:.55rem .7rem;border:0;background:none;border-radius:var(--r);font-family:var(--font-sans);font-size:.9rem;font-weight:500;color:var(--ink);cursor:pointer;}
 .cmt-daylight .nav__menu a:hover,.cmt-daylight .nav__menu button:hover{background:var(--surface-2);}
+
+/* ───────── brand + nav CTA refinements ───────── */
+.cmt-daylight{overflow-x:hidden;}
+.cmt-daylight .brand{gap:.55rem;font-size:1.7rem;letter-spacing:-.02em;}
+.cmt-daylight .brand__mark{width:34px;height:34px;background:transparent;border-radius:0;display:inline-flex;align-items:center;justify-content:center;color:var(--accent);}
+.cmt-daylight .brand__mark::after{content:none;}
+.cmt-daylight .brand__word{line-height:1;}
+.cmt-daylight .nav__cta{display:inline-flex;align-items:center;height:38px;padding:0 .95rem;border-radius:var(--btn-radius);background:var(--surface-2);color:var(--ink);font-size:.92rem;font-weight:600;transition:background .18s,color .18s;}
+.cmt-daylight .nav__cta:hover{background:var(--accent);color:var(--accent-ink);}
+
+/* ───────── mobile board layout ───────── */
+@media(max-width:720px){
+  .cmt-daylight .board{padding:1rem .9rem .85rem;}
+  .cmt-daylight .board__head{gap:.6rem;}
+  .cmt-daylight .search{min-width:0;max-width:100%;width:100%;}
+  /* stack Från / Till / Datum vertically full-width with strong labels */
+  .cmt-daylight .board__controls{flex-direction:column;gap:.55rem;align-items:stretch;}
+  .cmt-daylight .board__control{flex:1 1 auto;width:100%;}
+  .cmt-daylight .board__control>span{font-size:.7rem;font-weight:700;color:var(--board-text);letter-spacing:.1em;}
+  .cmt-daylight .board__control select,
+  .cmt-daylight .board__control input{width:100%;min-width:0;height:44px;font-size:.95rem;}
+  /* visual From → To direction cue */
+  .cmt-daylight .stationfield[data-role="from"]::after,
+  .cmt-daylight .board__control:has(>span:first-child:first-letter)~.board__control:nth-of-type(2)::before{content:none;}
+  /* stack the departure row so nothing overflows horizontally */
+  .cmt-daylight .row{grid-template-columns:56px 1fr;grid-template-areas:"time route" "status status" "action action";gap:.55rem .8rem;padding:.85rem 0;}
+  .cmt-daylight .row__time{grid-area:time;}
+  .cmt-daylight .row__route{grid-area:route;min-width:0;}
+  .cmt-daylight .row__stations{grid-template-columns:minmax(0,1fr) 16px minmax(0,1fr);gap:.4rem;}
+  .cmt-daylight .st{font-size:.95rem;white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;}
+  .cmt-daylight .row__status{grid-area:status;flex-direction:row;align-items:center;justify-content:flex-start;gap:.55rem;text-align:left;}
+  .cmt-daylight .row__action{grid-area:action;justify-content:flex-start;min-width:0;}
+}
+
