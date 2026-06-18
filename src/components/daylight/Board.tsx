@@ -216,45 +216,55 @@ function Row({
   const m = statusMeta(d.destination_delay_minutes, Boolean(d.canceled));
   return (
     <div className={"row row--" + m.tone}>
-      <div className="row__time">
-        <span className="row__dep">{fmtTime(d.origin_scheduled)}</span>
-        <span className="row__date">{fmtDayShort(d.origin_local_date)}</span>
-      </div>
-      <div className="row__route">
-        <div className="row__stations">
-          <span className="st st--from">{d.origin_stop_name}</span>
-          <span className="st__arrow"><ArrowIcon width={15} height={15} /></span>
-          <span className="st st--to">{d.destination_stop_name}</span>
+      <div className="row__top">
+        <div className="row__time">
+          <span className="row__dep">{fmtTime(d.origin_scheduled)}</span>
+          <span className="row__date">{fmtDayShort(d.origin_local_date)}</span>
         </div>
+        <div className="row__status">
+          <span className={"tag tag--" + m.tone}>{m.chipLabel}</span>
+          {m.near && <span className="row__hint">Strax under gränsen</span>}
+        </div>
+      </div>
+
+      <div className="row__middle">
+        <div className="row__station row__station--from">
+          <span className="row__label">Från</span>
+          <span className="st">{d.origin_stop_name}</span>
+        </div>
+        <span className="row__arrow"><ArrowIcon width={18} height={18} /></span>
+        <div className="row__station row__station--to">
+          <span className="row__label">Till</span>
+          <span className="st">{d.destination_stop_name}</span>
+        </div>
+      </div>
+
+      <div className="row__bottom">
         <span className="row__line">{lineLabel(d)}</span>
-      </div>
-      <div className="row__status">
-        <span className={"tag tag--" + m.tone}>{m.chipLabel}</span>
-        {m.near && <span className="row__hint">Strax under gränsen</span>}
-      </div>
-      <div className="row__action">
-        {m.eligible && (
-          <button className="btn btn--accent btn--sm" onClick={() => onClaim(d)}>
-            Ansök om ersättning
+        <div className="row__action">
+          {m.eligible && (
+            <button className="btn btn--accent btn--sm" onClick={() => onClaim(d)}>
+              Ansök om ersättning
+            </button>
+          )}
+          {m.near && (
+            <button className="btn btn--quiet btn--sm" onClick={() => onInfo(d)}>
+              Har jag rätt?
+            </button>
+          )}
+          {!m.eligible && !m.near && (
+            <span className="row__ok"><CheckIcon width={15} height={15} /></span>
+          )}
+          <button
+            type="button"
+            className="watchbtn"
+            onClick={() => onWatch(d)}
+            aria-label="Bevaka åt mig"
+            title="Bevaka åt mig"
+          >
+            <BellIcon width={16} height={16} />
           </button>
-        )}
-        {m.near && (
-          <button className="btn btn--quiet btn--sm" onClick={() => onInfo(d)}>
-            Har jag rätt?
-          </button>
-        )}
-        {!m.eligible && !m.near && (
-          <span className="row__ok"><CheckIcon width={15} height={15} /></span>
-        )}
-        <button
-          type="button"
-          className="watchbtn"
-          onClick={() => onWatch(d)}
-          aria-label="Bevaka åt mig"
-          title="Bevaka åt mig"
-        >
-          <BellIcon width={16} height={16} />
-        </button>
+        </div>
       </div>
     </div>
   );
