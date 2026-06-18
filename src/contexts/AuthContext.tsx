@@ -116,7 +116,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithGoogle = async (nextPath?: string) => {
     const safeNextPath = nextPath?.startsWith("/") ? nextPath : "/";
-    const redirectTo = `${window.location.origin}/login?next=${encodeURIComponent(safeNextPath ?? "/")}`;
+    // Land OAuth straight on the destination — the Supabase client parses the
+    // token from the URL hash on any route (detectSessionInUrl), so there's no
+    // need to bounce through an intermediate /login page (which flashed the old
+    // shadcn login UI for a frame before redirecting on).
+    const redirectTo = `${window.location.origin}${safeNextPath}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo },

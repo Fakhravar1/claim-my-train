@@ -8,17 +8,22 @@ import { LogOut, Settings as SettingsIcon } from "lucide-react";
  * class; the dropdown is the existing shadcn Popover (its content lives in the
  * shadcn theme, which is fine since it floats above the cmt-themed page).
  *
- * Signed-out: links to /login.
+ * Signed-out: starts Google OAuth in place (the standalone /login page was
+ * removed); OAuth lands back on the current region URL.
  */
 export default function RegionUserMenu() {
-  const { user, profile, loading, signOut } = useAuth();
+  const { user, profile, loading, signOut, signInWithGoogle } = useAuth();
   if (loading) return null;
 
   if (!user) {
     return (
-      <Link to="/login" className="user-menu-pill">
+      <button
+        type="button"
+        className="user-menu-pill"
+        onClick={() => void signInWithGoogle(window.location.pathname + window.location.search)}
+      >
         <span>Sign in</span>
-      </Link>
+      </button>
     );
   }
 

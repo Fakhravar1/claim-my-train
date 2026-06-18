@@ -42,7 +42,7 @@ const d = (iso: string | null | undefined) => (iso ? fmtDate.format(new Date(iso
 export default function SkanetrafikenClaimReview() {
   useAppShellStyles(themeCSS);
 
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, signInWithGoogle } = useAuth();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { toast } = useToast();
@@ -164,7 +164,8 @@ export default function SkanetrafikenClaimReview() {
     }
   };
 
-  const loginNext = encodeURIComponent(location.pathname + location.search);
+  // Round-trip OAuth back to this review URL (with its ?journeys=… payload).
+  const loginNext = location.pathname + location.search;
 
   return (
     <>
@@ -192,7 +193,7 @@ export default function SkanetrafikenClaimReview() {
         {!authLoading && !user ? (
           <section className="app-card">
             <p style={{ marginBottom: 12 }}>Sign in to review and file these claims.</p>
-            <Link to={`/login?next=${loginNext}`} className="btn-cmt btn-cmt--primary">Sign in</Link>
+            <button type="button" className="btn-cmt btn-cmt--primary" onClick={() => void signInWithGoogle(loginNext)}>Sign in</button>
           </section>
         ) : journeyKeys.length === 0 ? (
           <div className="app-empty">No journeys to review — open this page from a digest email.</div>

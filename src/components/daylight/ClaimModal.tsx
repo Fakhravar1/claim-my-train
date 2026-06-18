@@ -235,7 +235,7 @@ export function ClaimModal({
       const { data, error } = await supabase.auth.signUp({
         email: acctEmail.trim(),
         password,
-        options: { emailRedirectTo: `${window.location.origin}/login?next=/` },
+        options: { emailRedirectTo: `${window.location.origin}/` },
       });
       if (error) {
         setStatus(error.message);
@@ -688,7 +688,7 @@ function AccountView({
         const { data, error } = await supabase.auth.signUp({
           email: acctEmail.trim(),
           password,
-          options: { emailRedirectTo: `${window.location.origin}/login?next=/` },
+          options: { emailRedirectTo: `${window.location.origin}/` },
         });
         if (error) {
           setInfo(error.message);

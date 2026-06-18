@@ -5,7 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
-import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -34,7 +33,6 @@ const App = () => (
               <Route path="/regions/skanetrafiken" element={<SkanetrafikenApp />} />
               <Route path="/regions/skanetrafiken/delay-alerts" element={<SkanetrafikenDelayAlerts />} />
               <Route path="/regions/skanetrafiken/claim-review" element={<SkanetrafikenClaimReview />} />
-              <Route path="/login" element={<Login />} />
               <Route path="/settings" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

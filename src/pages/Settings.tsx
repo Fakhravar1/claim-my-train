@@ -39,13 +39,13 @@ import {
 
 // Mon-first weekday chips for the commute-route monitor (ISO weekday → label).
 const WEEKDAYS: [number, string][] = [
-  [1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [7, "Sun"],
+  [1, "Mån"], [2, "Tis"], [3, "Ons"], [4, "Tor"], [5, "Fre"], [6, "Lör"], [7, "Sön"],
 ];
 
 const PAYOUT_LABELS: Record<string, string> = {
-  bank: "Bank transfer",
+  bank: "Banköverföring",
   sms: "SMS (Värdekod)",
-  email: "Email (Värdekod)",
+  email: "E-post (Värdekod)",
 };
 
 const toIsoDate = (value: string | null | undefined) => {
@@ -54,15 +54,15 @@ const toIsoDate = (value: string | null | undefined) => {
 };
 
 const CLAIM_STATUS_META: Record<string, { label: string; className: string }> = {
-  pending: { label: "Pending", className: "border-amber-300 bg-amber-50 text-amber-900" },
-  generated: { label: "Form ready", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
-  submitted: { label: "Submitted", className: "border-sky-300 bg-sky-50 text-sky-900" },
-  error: { label: "Error", className: "border-destructive/40 bg-destructive/10 text-destructive" },
+  pending: { label: "Väntar", className: "border-amber-300 bg-amber-50 text-amber-900" },
+  generated: { label: "Formulär klart", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
+  submitted: { label: "Inskickad", className: "border-sky-300 bg-sky-50 text-sky-900" },
+  error: { label: "Fel", className: "border-destructive/40 bg-destructive/10 text-destructive" },
 };
 
 const CLAIM_OUTCOME_META: Record<string, { label: string; className: string }> = {
-  paid_out: { label: "Paid out", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
-  denied: { label: "Denied", className: "border-destructive/40 bg-destructive/10 text-destructive" },
+  paid_out: { label: "Utbetald", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
+  denied: { label: "Nekad", className: "border-destructive/40 bg-destructive/10 text-destructive" },
 };
 
 const fmtStockholm = (iso: string | null) => {
@@ -77,13 +77,13 @@ const fmtStockholm = (iso: string | null) => {
 };
 
 const claimDelayLabel = (bucket: string | null, cancelled: boolean) => {
-  if (cancelled) return "Cancelled";
+  if (cancelled) return "Inställt";
   switch (bucket) {
     case "20_39": return "20–39 min";
     case "40_59": return "40–59 min";
     case "60_119": return "60–119 min";
     case "120_plus": return "120+ min";
-    default: return "Delay";
+    default: return "Försening";
   }
 };
 
@@ -143,8 +143,8 @@ const Settings = () => {
       await queryClient.invalidateQueries({ queryKey: ["my-claims"] });
     } catch (error) {
       toast({
-        title: "Could not update claim",
-        description: error instanceof Error ? error.message : "Update failed",
+        title: "Kunde inte uppdatera ansökan",
+        description: error instanceof Error ? error.message : "Uppdateringen misslyckades",
         variant: "destructive",
       });
     } finally {
@@ -249,7 +249,7 @@ const Settings = () => {
     if (!ticketValidUntil) {
       return {
         tone: "warning",
-        text: "Period ticket is enabled, but no validity end date is set.",
+        text: "Periodbiljett är aktiverad, men inget giltighetsdatum är angivet.",
       };
     }
 
@@ -262,24 +262,26 @@ const Settings = () => {
     if (diffDays < 0) {
       return {
         tone: "expired",
-        text: "Your period ticket appears expired. Claims outside validity will show a warning.",
+        text: "Din periodbiljett verkar ha gått ut. Ansökningar utanför giltigheten visar en varning.",
       };
     }
     if (diffDays <= 7) {
       return {
         tone: "warning",
-        text: `Your period ticket expires in ${diffDays} day(s). Remember to update it soon.`,
+        text: `Din periodbiljett går ut om ${diffDays} dag(ar). Kom ihåg att uppdatera den snart.`,
       };
     }
     return {
       tone: "ok",
-      text: `Your period ticket is valid for ${diffDays} more day(s).`,
+      text: `Din periodbiljett är giltig i ${diffDays} dag(ar) till.`,
     };
   }, [isPeriodTicket, ticketValidUntil]);
 
   if (loading) return null;
   if (!user) {
-    return <Navigate to="/login?next=%2Fsettings" replace />;
+    // No standalone login page anymore — bounce to the Daylight home, whose nav
+    // "Logga in" opens the in-modal sign-in pop-up.
+    return <Navigate to="/" replace />;
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -303,7 +305,7 @@ const Settings = () => {
     // Signature lives outside validateClaimProfile (it's a canvas, not a text
     // field). The form requires one, so block save without a saved or new signature.
     const signatureMissing = !hasSignatureOnFile;
-    setSigError(signatureMissing ? "A signature is required for the claim form." : null);
+    setSigError(signatureMissing ? "En signatur krävs för ansökningsformuläret." : null);
 
     if (Object.keys(validationErrors).length > 0 || signatureMissing) {
       // Surface the tab that holds the first problem. Ticket ID lives on the
@@ -315,9 +317,9 @@ const Settings = () => {
         Object.keys(validationErrors).every((key) => ticketTabKeys.has(key));
       setActiveTab(allOnTicketTab ? "ticket" : "personal");
       toast({
-        title: "Please fix the highlighted fields",
+        title: "Åtgärda de markerade fälten",
         description:
-          "These details go on your Skånetrafiken claim. Incomplete or wrongly formatted data can get the claim rejected.",
+          "Dessa uppgifter hamnar på din Skånetrafiken-reklamation. Ofullständiga eller felaktigt formaterade uppgifter kan göra att ansökan nekas.",
         variant: "destructive",
       });
       return;
@@ -383,13 +385,13 @@ const Settings = () => {
       await refreshProfile();
 
       toast({
-        title: "Settings saved",
-        description: "Your claim profile is updated.",
+        title: "Inställningar sparade",
+        description: "Din ansökningsprofil är uppdaterad.",
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save settings";
+      const message = error instanceof Error ? error.message : "Det gick inte att spara inställningarna";
       toast({
-        title: "Save failed",
+        title: "Sparningen misslyckades",
         description: message,
         variant: "destructive",
       });
@@ -424,28 +426,28 @@ const Settings = () => {
         <Card className="p-5">
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <p className="font-semibold">Why these details matter</p>
+              <p className="font-semibold">Varför dessa uppgifter spelar roll</p>
               <p className="mt-1">
-                Your personal details, address, personnummer and ticket ID are submitted on the
-                Skånetrafiken reklamation. If any required field is missing or wrongly formatted,
-                Skånetrafiken can reject the claim. Fields marked with{" "}
-                <span className="font-semibold text-destructive">*</span> are mandatory.
+                Dina personuppgifter, adress, personnummer och biljett-ID skickas in på
+                Skånetrafiken-reklamationen. Om något obligatoriskt fält saknas eller är fel
+                formaterat kan Skånetrafiken neka ansökan. Fält markerade med{" "}
+                <span className="font-semibold text-destructive">*</span> är obligatoriska.
               </p>
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList className="!grid h-auto w-full !grid-cols-2 gap-1 p-1 sm:!grid-cols-4">
-                <TabsTrigger value="personal" className="w-full">Personal info</TabsTrigger>
-                <TabsTrigger value="ticket" className="w-full">Ticket</TabsTrigger>
-                <TabsTrigger value="commuter" className="w-full">Commuter habits</TabsTrigger>
-                <TabsTrigger value="claims" className="w-full">My claims</TabsTrigger>
+                <TabsTrigger value="personal" className="w-full">Personuppgifter</TabsTrigger>
+                <TabsTrigger value="ticket" className="w-full">Biljett</TabsTrigger>
+                <TabsTrigger value="commuter" className="w-full">Pendlarvanor</TabsTrigger>
+                <TabsTrigger value="claims" className="w-full">Mina ansökningar</TabsTrigger>
               </TabsList>
 
               <TabsContent value="personal" className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="first-name">
-                      First name <span className="text-destructive">*</span>
+                      Förnamn <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="first-name"
@@ -461,7 +463,7 @@ const Settings = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="last-name">
-                      Last name <span className="text-destructive">*</span>
+                      Efternamn <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="last-name"
@@ -479,14 +481,14 @@ const Settings = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="claim-email">
-                    Claim email <span className="text-destructive">*</span>
+                    E-post för ansökan <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="claim-email"
                     type="email"
                     value={claimEmail}
                     onChange={(event) => setClaimEmail(event.target.value)}
-                    placeholder="name@example.com"
+                    placeholder="namn@exempel.se"
                     aria-invalid={Boolean(errors.claimEmail)}
                   />
                   {errors.claimEmail && (
@@ -496,7 +498,7 @@ const Settings = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="claim-mobile">
-                    Mobile number <span className="text-destructive">*</span>
+                    Mobilnummer <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="claim-mobile"
@@ -507,7 +509,7 @@ const Settings = () => {
                     aria-invalid={Boolean(errors.claimMobile)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Swedish (0701234567) or international with country code (+46…).
+                    Svenskt (0701234567) eller internationellt med landskod (+46…).
                   </p>
                   {errors.claimMobile && (
                     <p className="text-sm text-destructive">{errors.claimMobile}</p>
@@ -532,7 +534,7 @@ const Settings = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="street-address">
-                    Street address <span className="text-destructive">*</span>
+                    Gatuadress <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="street-address"
@@ -550,7 +552,7 @@ const Settings = () => {
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="postal-code">
-                      Postal code <span className="text-destructive">*</span>
+                      Postnummer <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="postal-code"
@@ -566,7 +568,7 @@ const Settings = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="city">
-                      City <span className="text-destructive">*</span>
+                      Ort <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="city"
@@ -583,24 +585,25 @@ const Settings = () => {
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div>
                     <p className="text-sm font-semibold">
-                      Signature <span className="text-destructive">*</span>
+                      Signatur <span className="text-destructive">*</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Drawn once and reused on every claim form. The Skånetrafiken reklamation
-                      requires a signature; we add it only when you confirm and submit a claim.
+                      Ritas en gång och återanvänds på varje ansökningsformulär. Skånetrafiken-
+                      reklamationen kräver en signatur; vi lägger till den först när du bekräftar
+                      och skickar in en ansökan.
                     </p>
                   </div>
 
                   {existingSigUrl && !hasNewSignature && (
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Signature on file:</p>
+                      <p className="text-xs text-muted-foreground">Sparad signatur:</p>
                       <img
                         src={existingSigUrl}
-                        alt="Your saved signature"
+                        alt="Din sparade signatur"
                         className="h-20 w-auto max-w-full rounded-md border border-border/70 bg-white p-1"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Draw below to replace it.
+                        Rita nedan för att ersätta den.
                       </p>
                     </div>
                   )}
@@ -622,14 +625,14 @@ const Settings = () => {
                         setHasNewSignature(false);
                       }}
                     >
-                      Clear
+                      Rensa
                     </Button>
                     <span className="text-xs text-muted-foreground">
                       {hasNewSignature
-                        ? "New signature ready — Save to store it."
+                        ? "Ny signatur klar — spara för att lagra den."
                         : existingSigUrl
-                          ? "Using your saved signature."
-                          : "Draw your signature in the box."}
+                          ? "Använder din sparade signatur."
+                          : "Rita din signatur i rutan."}
                     </span>
                   </div>
                   {sigError && <p className="text-sm text-destructive">{sigError}</p>}
@@ -639,11 +642,11 @@ const Settings = () => {
               <TabsContent value="ticket" className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="purchasing-operator">
-                    Where did you buy your ticket? <span className="text-destructive">*</span>
+                    Var köpte du din biljett? <span className="text-destructive">*</span>
                   </Label>
                   <Select value={purchasingOperator} onValueChange={setPurchasingOperator}>
                     <SelectTrigger id="purchasing-operator" aria-invalid={Boolean(errors.purchasingOperator)}>
-                      <SelectValue placeholder="Choose your ticket vendor">
+                      <SelectValue placeholder="Välj din biljettåterförsäljare">
                         {purchasingOperator ? purchasingOperatorLabel(purchasingOperator) : undefined}
                       </SelectValue>
                     </SelectTrigger>
@@ -656,24 +659,24 @@ const Settings = () => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    We currently only handle <span className="font-medium">Skånetrafiken</span> claims.
-                    If you bought your ticket from another operator, use that operator's own
-                    förseningsersättning process.
+                    Vi hanterar för närvarande bara <span className="font-medium">Skånetrafiken</span>-ansökningar.
+                    Om du köpte din biljett från en annan operatör, använd den operatörens egen
+                    process för förseningsersättning.
                   </p>
                   {errors.purchasingOperator && (
                     <p className="text-sm text-destructive">{errors.purchasingOperator}</p>
                   )}
                   {purchasingOperator && !isSupportedPurchasingOperator(purchasingOperator) && (
                     <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                      Heads up: claims aren't supported for {purchasingOperatorLabel(purchasingOperator)} yet,
-                      so you won't be able to file from the delay pages with this selection.
+                      Obs: ansökningar stöds inte för {purchasingOperatorLabel(purchasingOperator)} ännu,
+                      så du kommer inte kunna ansöka från förseningssidorna med detta val.
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="claim-ticket-id">
-                    Ticket ID <span className="text-destructive">*</span>
+                    Biljett-ID <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="claim-ticket-id"
@@ -689,22 +692,22 @@ const Settings = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="payout-method">
-                    Preferred payout method <span className="text-destructive">*</span>
+                    Önskat utbetalningssätt <span className="text-destructive">*</span>
                   </Label>
                   <Select value={payoutMethod} onValueChange={setPayoutMethod}>
                     <SelectTrigger id="payout-method" aria-invalid={Boolean(errors.payoutMethod)}>
-                      <SelectValue placeholder="Choose how you want to be paid">
+                      <SelectValue placeholder="Välj hur du vill få betalt">
                         {payoutMethod ? PAYOUT_LABELS[payoutMethod] ?? payoutMethod : undefined}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="bank">Bank transfer</SelectItem>
+                      <SelectItem value="bank">Banköverföring</SelectItem>
                       <SelectItem value="sms">SMS (Värdekod)</SelectItem>
-                      <SelectItem value="email">Email (Värdekod)</SelectItem>
+                      <SelectItem value="email">E-post (Värdekod)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Skånetrafiken pays out either by bank transfer or as a Värdekod sent by SMS or email.
+                    Skånetrafiken betalar ut antingen via banköverföring eller som en Värdekod via SMS eller e-post.
                   </p>
                   {errors.payoutMethod && (
                     <p className="text-sm text-destructive">{errors.payoutMethod}</p>
@@ -713,9 +716,9 @@ const Settings = () => {
 
                 <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/70 p-3">
                   <div>
-                    <p className="text-sm font-medium">Period ticket</p>
+                    <p className="text-sm font-medium">Periodbiljett</p>
                     <p className="text-xs text-muted-foreground">
-                      Enable if your claim uses a ticket with date validity.
+                      Aktivera om din ansökan gäller en biljett med datumgiltighet.
                     </p>
                   </div>
                   <Switch checked={isPeriodTicket} onCheckedChange={setIsPeriodTicket} />
@@ -723,7 +726,7 @@ const Settings = () => {
 
                 {isPeriodTicket && (
                   <div className="space-y-2">
-                    <Label htmlFor="ticket-valid-until">Ticket valid until</Label>
+                    <Label htmlFor="ticket-valid-until">Biljett giltig till</Label>
                     <Input
                       id="ticket-valid-until"
                       type="date"
@@ -749,13 +752,13 @@ const Settings = () => {
 
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div>
-                    <p className="text-sm font-semibold">Claims tracker</p>
+                    <p className="text-sm font-semibold">Ansökningsräknare</p>
                     <p className="text-xs text-muted-foreground">
-                      Track total submitted claims and estimated payout at {CLAIM_VALUE_SEK} KR per claim.
+                      Håll koll på totalt antal inskickade ansökningar och uppskattad utbetalning på {CLAIM_VALUE_SEK} KR per ansökan.
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="claims-done-count">Claims done</Label>
+                    <Label htmlFor="claims-done-count">Antal ansökningar</Label>
                     <Input
                       id="claims-done-count"
                       type="number"
@@ -767,7 +770,7 @@ const Settings = () => {
                     />
                   </div>
                   <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-foreground">
-                    Amount received: <span className="font-semibold">{claimsDoneCount * CLAIM_VALUE_SEK} KR</span>
+                    Mottaget belopp: <span className="font-semibold">{claimsDoneCount * CLAIM_VALUE_SEK} KR</span>
                   </div>
                 </div>
               </TabsContent>
@@ -775,23 +778,23 @@ const Settings = () => {
               <TabsContent value="commuter" className="space-y-4">
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div>
-                    <p className="text-sm font-semibold">Usual travel route</p>
+                    <p className="text-sm font-semibold">Vanlig resväg</p>
                     <p className="text-xs text-muted-foreground">
-                      Set the stations you usually travel between so potential claims can be monitored for your route.
+                      Ange stationerna du brukar resa mellan så att potentiella ansökningar kan bevakas för din sträcka.
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="preferred-from">From</Label>
+                      <Label htmlFor="preferred-from">Från</Label>
                       <Select value={preferredFromStopId} onValueChange={setPreferredFromStopId}>
                         <SelectTrigger id="preferred-from">
-                          <SelectValue placeholder="Loading stations…">
-                            {stopOptions.find((s) => s.id === preferredFromStopId)?.name ?? "Loading stations…"}
+                          <SelectValue placeholder="Laddar stationer…">
+                            {stopOptions.find((s) => s.id === preferredFromStopId)?.name ?? "Laddar stationer…"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {stopOptions.length === 0 ? (
-                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                            <SelectItem value="__loading__" disabled>Laddar stationer…</SelectItem>
                           ) : (
                             stopOptions.map((stop) => (
                               <SelectItem key={stop.id} value={stop.id}>
@@ -803,16 +806,16 @@ const Settings = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="preferred-to">To</Label>
+                      <Label htmlFor="preferred-to">Till</Label>
                       <Select value={preferredToStopId} onValueChange={setPreferredToStopId}>
                         <SelectTrigger id="preferred-to">
-                          <SelectValue placeholder="Loading stations…">
-                            {stopOptions.find((s) => s.id === preferredToStopId)?.name ?? "Loading stations…"}
+                          <SelectValue placeholder="Laddar stationer…">
+                            {stopOptions.find((s) => s.id === preferredToStopId)?.name ?? "Laddar stationer…"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {stopOptions.length === 0 ? (
-                            <SelectItem value="__loading__" disabled>Loading stations…</SelectItem>
+                            <SelectItem value="__loading__" disabled>Laddar stationer…</SelectItem>
                           ) : (
                             stopOptions.map((stop) => (
                               <SelectItem key={stop.id} value={stop.id}>
@@ -829,21 +832,21 @@ const Settings = () => {
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">Monitored commutes (optional)</p>
+                      <p className="text-sm font-semibold">Bevakade pendlingar (valfritt)</p>
                       <p className="text-xs text-muted-foreground">
-                        Add each route you commute. For every back-and-forth route, set the
-                        time windows for going out and coming back, and pick which weekdays to
-                        monitor. The delay digest only covers these routes.
+                        Lägg till varje sträcka du pendlar. För varje tur-och-retur-sträcka, ange
+                        tidsfönstren för dit- och hemresan, och välj vilka veckodagar som ska
+                        bevakas. Förseningssammanfattningen täcker endast dessa sträckor.
                       </p>
                     </div>
                     <Button type="button" size="sm" variant="outline" onClick={addRoute}>
-                      Add route
+                      Lägg till sträcka
                     </Button>
                   </div>
 
                   {routes.length === 0 && (
                     <p className="text-xs text-muted-foreground">
-                      No routes yet — add one to monitor your commute.
+                      Inga sträckor än — lägg till en för att bevaka din pendling.
                     </p>
                   )}
 
@@ -854,7 +857,7 @@ const Settings = () => {
                     >
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Route {idx + 1}
+                          Sträcka {idx + 1}
                         </p>
                         <Button
                           type="button"
@@ -862,34 +865,34 @@ const Settings = () => {
                           variant="ghost"
                           onClick={() => removeRoute(route.id)}
                         >
-                          Remove
+                          Ta bort
                         </Button>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <Label>From</Label>
+                          <Label>Från</Label>
                           <StationCombobox
                             value={route.from_stop_id}
                             options={stopOptions}
                             onSelect={(id) => updateRoute(route.id, { from_stop_id: id })}
-                            ariaLabel={`Route ${idx + 1} from station`}
+                            ariaLabel={`Sträcka ${idx + 1} från-station`}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>To</Label>
+                          <Label>Till</Label>
                           <StationCombobox
                             value={route.to_stop_id}
                             options={stopOptions}
                             onSelect={(id) => updateRoute(route.id, { to_stop_id: id })}
-                            ariaLabel={`Route ${idx + 1} to station`}
+                            ariaLabel={`Sträcka ${idx + 1} till-station`}
                           />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <Label>Outbound start</Label>
+                          <Label>Utresa från</Label>
                           <Input
                             type="time"
                             value={route.outbound_start_time ?? ""}
@@ -899,7 +902,7 @@ const Settings = () => {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Outbound end</Label>
+                          <Label>Utresa till</Label>
                           <Input
                             type="time"
                             value={route.outbound_end_time ?? ""}
@@ -909,7 +912,7 @@ const Settings = () => {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Return start</Label>
+                          <Label>Hemresa från</Label>
                           <Input
                             type="time"
                             value={route.return_start_time ?? ""}
@@ -919,7 +922,7 @@ const Settings = () => {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Return end</Label>
+                          <Label>Hemresa till</Label>
                           <Input
                             type="time"
                             value={route.return_end_time ?? ""}
@@ -931,7 +934,7 @@ const Settings = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <Label>Monitor on</Label>
+                        <Label>Bevaka på</Label>
                         <div className="flex flex-wrap gap-1.5">
                           {WEEKDAYS.map(([iso, label]) => {
                             const on = route.monitored_days.includes(iso);
@@ -954,7 +957,7 @@ const Settings = () => {
                         </div>
                         {route.monitored_days.length === 0 && (
                           <p className="text-xs text-amber-600">
-                            No days selected — this route is paused.
+                            Inga dagar valda — den här sträckan är pausad.
                           </p>
                         )}
                       </div>
@@ -964,38 +967,38 @@ const Settings = () => {
 
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div>
-                    <p className="text-sm font-semibold">Delay digest emails</p>
+                    <p className="text-sm font-semibold">Förseningsmejl</p>
                     <p className="text-xs text-muted-foreground">
-                      Get an email listing late departures on your monitored commutes (the routes
-                      above), with a one-click way to claim them. Only sent when there is something
-                      to claim.
+                      Få ett mejl som listar sena avgångar på dina bevakade pendlingar (sträckorna
+                      ovan), med ett klick för att ansöka om dem. Skickas bara när det finns något
+                      att ansöka om.
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="digest-frequency">Frequency</Label>
+                      <Label htmlFor="digest-frequency">Frekvens</Label>
                       <Select value={digestFrequency} onValueChange={setDigestFrequency}>
                         <SelectTrigger id="digest-frequency">
                           <SelectValue>
                             {digestFrequency === "daily"
-                              ? "Daily (evenings)"
+                              ? "Dagligen (kvällar)"
                               : digestFrequency === "weekly"
-                              ? "Weekly (Sunday evenings)"
-                              : "Off"}
+                              ? "Veckovis (söndagskvällar)"
+                              : "Av"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="off">Off</SelectItem>
-                          <SelectItem value="daily">Daily (evenings)</SelectItem>
-                          <SelectItem value="weekly">Weekly (Sunday evenings)</SelectItem>
+                          <SelectItem value="off">Av</SelectItem>
+                          <SelectItem value="daily">Dagligen (kvällar)</SelectItem>
+                          <SelectItem value="weekly">Veckovis (söndagskvällar)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   {digestFrequency !== "off" && routes.length === 0 && (
                     <p className="text-xs text-amber-600">
-                      Add at least one commute route above — the digest only covers your monitored
-                      routes.
+                      Lägg till minst en pendlingssträcka ovan — mejlet täcker bara dina bevakade
+                      sträckor.
                     </p>
                   )}
                 </div>
@@ -1003,22 +1006,22 @@ const Settings = () => {
 
               <TabsContent value="claims" className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold">Your filed claims</p>
+                  <p className="text-sm font-semibold">Dina inskickade ansökningar</p>
                   <p className="text-xs text-muted-foreground">
-                    Each delay you submit appears here. Once we've generated the filled
-                    Skånetrafiken form, you can download it.
+                    Varje försening du skickar in dyker upp här. När vi har genererat det ifyllda
+                    Skånetrafiken-formuläret kan du ladda ner det.
                   </p>
                 </div>
 
                 {claimsLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading your claims…</p>
+                  <p className="text-sm text-muted-foreground">Laddar dina ansökningar…</p>
                 ) : myClaims.length === 0 ? (
                   <div className="rounded-xl border border-border/70 bg-card/70 p-4 text-sm text-muted-foreground">
-                    No claims yet. Find a delayed trip on{" "}
+                    Inga ansökningar än. Hitta en försenad resa bland{" "}
                     <Link to="/regions/skanetrafiken/delay-alerts" className="underline font-medium">
-                      claimable delays
+                      ersättningsbara förseningar
                     </Link>{" "}
-                    and hit “Start claim”.
+                    och tryck på ”Ansök om ersättning”.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1057,33 +1060,33 @@ const Settings = () => {
                           {/* What was filed on this claim (the stored journey snapshot). */}
                           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
                             <div>
-                              <dt className="text-muted-foreground">Travel date</dt>
+                              <dt className="text-muted-foreground">Resdatum</dt>
                               <dd>{toIsoDate(claim.trip_start_date)}</dd>
                             </div>
                             <div>
-                              <dt className="text-muted-foreground">Compensation tier</dt>
+                              <dt className="text-muted-foreground">Ersättningsnivå</dt>
                               <dd>{claimDelayLabel(claim.delay_bucket, claim.was_cancelled)}</dd>
                             </div>
                             <div>
-                              <dt className="text-muted-foreground">Filed</dt>
+                              <dt className="text-muted-foreground">Inskickad</dt>
                               <dd>{toIsoDate(claim.created_at)}</dd>
                             </div>
                             <div>
-                              <dt className="text-muted-foreground">Scheduled departure</dt>
+                              <dt className="text-muted-foreground">Planerad avgång</dt>
                               <dd>{fmtStockholm(claim.origin_scheduled)}</dd>
                             </div>
                             <div>
-                              <dt className="text-muted-foreground">Scheduled arrival</dt>
+                              <dt className="text-muted-foreground">Planerad ankomst</dt>
                               <dd>{fmtStockholm(claim.destination_scheduled)}</dd>
                             </div>
                             <div>
-                              <dt className="text-muted-foreground">Actual arrival</dt>
-                              <dd>{claim.was_cancelled ? "Cancelled" : fmtStockholm(claim.destination_actual)}</dd>
+                              <dt className="text-muted-foreground">Faktisk ankomst</dt>
+                              <dd>{claim.was_cancelled ? "Inställt" : fmtStockholm(claim.destination_actual)}</dd>
                             </div>
                           </dl>
                           <p className="text-[11px] text-muted-foreground">
-                            Personal details (name, personnummer, address, payout) are taken from your
-                            profile above at the time the form is generated.
+                            Personuppgifter (namn, personnummer, adress, utbetalning) hämtas från din
+                            profil ovan när formuläret genereras.
                           </p>
 
                           {claim.status === "error" && claim.error_message && (
@@ -1092,7 +1095,7 @@ const Settings = () => {
 
                           {/* Outcome controls */}
                           <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
-                            <span className="text-xs text-muted-foreground">Outcome:</span>
+                            <span className="text-xs text-muted-foreground">Resultat:</span>
                             <Button
                               type="button"
                               size="sm"
@@ -1100,7 +1103,7 @@ const Settings = () => {
                               disabled={saving}
                               onClick={() => void setClaimOutcome(claim.id, "paid_out")}
                             >
-                              Paid out
+                              Utbetald
                             </Button>
                             <Button
                               type="button"
@@ -1109,7 +1112,7 @@ const Settings = () => {
                               disabled={saving}
                               onClick={() => void setClaimOutcome(claim.id, "denied")}
                             >
-                              Denied
+                              Nekad
                             </Button>
                             {claim.outcome && (
                               <Button
@@ -1119,7 +1122,7 @@ const Settings = () => {
                                 disabled={saving}
                                 onClick={() => void setClaimOutcome(claim.id, null)}
                               >
-                                Clear
+                                Rensa
                               </Button>
                             )}
                           </div>
@@ -1133,13 +1136,13 @@ const Settings = () => {
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Save settings"}
+                {saving ? "Sparar..." : "Spara inställningar"}
               </Button>
               <Link to="/">
-                <Button type="button" variant="outline">Back to main page</Button>
+                <Button type="button" variant="outline">Tillbaka till startsidan</Button>
               </Link>
               <Link to="/regions/skanetrafiken/delay-alerts">
-                <Button type="button" variant="outline">Back to claimable delays</Button>
+                <Button type="button" variant="outline">Tillbaka till förseningar</Button>
               </Link>
             </div>
           </form>

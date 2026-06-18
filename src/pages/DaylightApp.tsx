@@ -184,7 +184,11 @@ export default function DaylightApp() {
 
   const watchTrain = () => {
     setInfo(null);
-    navigate(user ? "/settings" : "/login?next=/settings");
+    if (user) {
+      navigate("/settings");
+    } else {
+      setClaim({ blank: true, loginOnly: true });
+    }
   };
 
   return (
