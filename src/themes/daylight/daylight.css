@@ -9,7 +9,7 @@
 
 /* ───────────────────────── structural base ───────────────────────── */
 :root{
-  --page:#F4F3EE; --ink:#0E0F10; --ink-2:#3A3C3B; --muted:#74766F;
+  --page:#F4F3EE; --ink:#0E0F10; --ink-2:#3A3C3B; --muted:#5B5D56;
   --surface:#FFFFFF; --surface-2:#ECEBE3;
   --line:#E2E1D8; --line-2:#D2D1C6;
   --accent:#E89200; --accent-deep:#C97A00; --accent-ink:#0E0F10;
