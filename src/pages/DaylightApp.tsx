@@ -274,40 +274,42 @@ export default function DaylightApp() {
         onSignOut={() => void signOut()}
         onLogin={() => setClaim({ blank: true, loginOnly: true })}
       />
-      <Hero onSearch={focusSearch} />
-      <Board
-        ref={boardRef}
-        rows={rows}
-        loading={isLoading}
-        query={query}
-        setQuery={setQuery}
-        date={date}
-        setDate={setDate}
-        minDate={minDate}
-        maxDate={today}
-        from={from}
-        to={to}
-        setFrom={setFrom}
-        setTo={setTo}
-        stationOptions={stationOptions}
-        onlyDelayed={onlyDelayed}
-        onlyCancelled={onlyCancelled}
-        onlyClaimable={onlyClaimable}
-        setOnlyDelayed={setOnlyDelayed}
-        setOnlyCancelled={setOnlyCancelled}
-        setOnlyClaimable={setOnlyClaimable}
-        hasMore={hasMore}
-        onShowMore={() => setVisibleCount((c) => c + PAGE)}
-        onClaim={(d) => setClaim(d)}
-        onInfo={(d) => setInfo(d)}
-        onWatch={(d) => (user ? setWatch(d) : setClaim({ blank: true, loginOnly: true }))}
-        onWatchCommuter={watchCommuter}
-      />
-      <ValueProps
-        onUnknown={() => setClaim({ blank: true })}
-        onSearch={focusSearch}
-        onHabits={() => (user ? navigate("/settings") : setClaim({ blank: true, loginOnly: true }))}
-      />
+      <main>
+        <Hero onSearch={focusSearch} />
+        <Board
+          ref={boardRef}
+          rows={rows}
+          loading={isLoading}
+          query={query}
+          setQuery={setQuery}
+          date={date}
+          setDate={setDate}
+          minDate={minDate}
+          maxDate={today}
+          from={from}
+          to={to}
+          setFrom={setFrom}
+          setTo={setTo}
+          stationOptions={stationOptions}
+          onlyDelayed={onlyDelayed}
+          onlyCancelled={onlyCancelled}
+          onlyClaimable={onlyClaimable}
+          setOnlyDelayed={setOnlyDelayed}
+          setOnlyCancelled={setOnlyCancelled}
+          setOnlyClaimable={setOnlyClaimable}
+          hasMore={hasMore}
+          onShowMore={() => setVisibleCount((c) => c + PAGE)}
+          onClaim={(d) => setClaim(d)}
+          onInfo={(d) => setInfo(d)}
+          onWatch={(d) => (user ? setWatch(d) : setClaim({ blank: true, loginOnly: true }))}
+          onWatchCommuter={watchCommuter}
+        />
+        <ValueProps
+          onUnknown={() => setClaim({ blank: true })}
+          onSearch={focusSearch}
+          onHabits={() => (user ? navigate("/settings") : setClaim({ blank: true, loginOnly: true }))}
+        />
+      </main>
       <Footer />
 
       {claim && <ClaimModal initial={claim} onClose={() => setClaim(null)} />}
