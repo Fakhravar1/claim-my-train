@@ -28,6 +28,13 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
     <nav className="nav">
       <div className="wrap nav__in">
         <Link to="/" className="brand" aria-label="Qvitta — till startsidan">
+          <span className="brand__mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="100%" height="100%" style={{ display: "block" }}>
+              <rect width="64" height="64" rx="14" fill="#0E1B17" />
+              <circle cx="29" cy="29" r="15" fill="none" stroke="#37E5B0" strokeWidth="7" />
+              <line x1="33" y1="33" x2="49" y2="51" stroke="#37E5B0" strokeWidth="7" strokeLinecap="round" />
+            </svg>
+          </span>
           <span className="brand__word">Qvitta</span>
         </Link>
         <div className="nav__right">
