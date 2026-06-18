@@ -13,6 +13,7 @@ import NotFound from "./pages/NotFound";
 // board + claim flow). ClaimReview is the bulk digest-email landing.
 const DaylightApp = lazy(() => import("./pages/DaylightApp"));
 const ClaimReview = lazy(() => import("./pages/ClaimReview"));
+const MyDelays = lazy(() => import("./pages/MyDelays"));
 
 // The region pages (/regions/skanetrafiken/*) were retired — their function
 // moved onto `/` and `/claim-review`. This preserves links in digest emails
@@ -36,6 +37,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<DaylightApp />} />
               <Route path="/claim-review" element={<ClaimReview />} />
+              <Route path="/my-delays" element={<MyDelays />} />
               {/* Retired region pages → forward old bookmarks/emails. */}
               <Route path="/regions/skanetrafiken/claim-review" element={<ClaimReviewRedirect />} />
               <Route path="/regions/skanetrafiken/delay-alerts" element={<Navigate to="/" replace />} />

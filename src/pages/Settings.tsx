@@ -1018,7 +1018,7 @@ const Settings = () => {
                 ) : myClaims.length === 0 ? (
                   <div className="rounded-xl border border-border/70 bg-card/70 p-4 text-sm text-muted-foreground">
                     Inga ansökningar än. Hitta en försenad resa bland{" "}
-                    <Link to="/?mine=1#board" className="underline font-medium">
+                    <Link to="/my-delays" className="underline font-medium">
                       ersättningsbara förseningar
                     </Link>{" "}
                     och tryck på ”Ansök om ersättning”.
@@ -1141,8 +1141,8 @@ const Settings = () => {
               <Link to="/">
                 <Button type="button" variant="outline">Tillbaka till startsidan</Button>
               </Link>
-              <Link to="/?mine=1#board">
-                <Button type="button" variant="outline">Tillbaka till förseningar</Button>
+              <Link to="/my-delays">
+                <Button type="button" variant="outline">Mina förseningar</Button>
               </Link>
             </div>
           </form>
