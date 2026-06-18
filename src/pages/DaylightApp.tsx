@@ -29,11 +29,6 @@ export default function DaylightApp() {
   const { user, profile, loading: authLoading, signOut } = useAuth();
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const minDate = useMemo(() => {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - 14); // v_journeys only reaches back ~raw retention
-    return d.toISOString().slice(0, 10);
-  }, []);
 
   const [date, setDate] = useState(today);
   const [query, setQuery] = useState("");
@@ -42,6 +37,15 @@ export default function DaylightApp() {
   const [onlyDelayed, setOnlyDelayed] = useState(false);
   const [onlyCancelled, setOnlyCancelled] = useState(false);
   const [onlyClaimable, setOnlyClaimable] = useState(false);
+
+  // Live departures (v_journeys) only reach back ~raw retention (14 d), but the
+  // claimable view reads the 90-day durable retention layer — so when the user
+  // is browsing claimables let the date picker reach the full claim window.
+  const minDate = useMemo(() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - (onlyClaimable ? 90 : 14));
+    return d.toISOString().slice(0, 10);
+  }, [onlyClaimable]);
   const PAGE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   const [claim, setClaim] = useState<ClaimInitial | null>(null);
@@ -85,7 +89,9 @@ export default function DaylightApp() {
     fromStopId: routeMode ? from : null,
     toStopId: routeMode ? to : null,
     date,
-    onlyClaimable: false,
+    // Route mode pulls from the 90-day claimable layer when the claimable
+    // filter is on (older delays stay filable past the 14-day live horizon).
+    onlyClaimable: routeMode && onlyClaimable,
   });
 
   const allRows = routeMode ? route.data ?? [] : stationMode ? station.data ?? [] : network.data ?? [];

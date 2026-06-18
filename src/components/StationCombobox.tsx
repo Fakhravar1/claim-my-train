@@ -24,10 +24,9 @@ interface Props {
 }
 
 /**
- * Searchable station picker for the O/D fields on the region pages.
- * Replaces the plain Select: type to filter (cmdk does the matching on the
- * station name), click or Enter to pick. Trigger mirrors SelectTrigger styling
- * so the route card looks unchanged.
+ * Searchable station picker for O/D fields (Settings commute routes). Built on
+ * shadcn Popover + cmdk Command: type to filter (cmdk matches on the station
+ * name), click or Enter to pick. Trigger mirrors SelectTrigger styling.
  */
 export default function StationCombobox({ value, options, onSelect, ariaLabel }: Props) {
   const [open, setOpen] = useState(false);

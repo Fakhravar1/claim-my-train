@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDaylightStyles } from "@/hooks/useDaylightStyles";
 import { supabase } from "@/integrations/supabase/client";
 import { type Journey } from "@/hooks/useJourneys";
 import { buildClaimPayload } from "@/hooks/useStartClaim";
 import { useMyClaims } from "@/hooks/useMyClaims";
 import { isSupportedPurchasingOperator, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
-import { useAppShellStyles } from "@/hooks/useAppShellStyles";
-import themeCSS from "@/themes/skanetrafiken/theme.css?inline";
-import SkaneBand from "@/components/region/SkaneBand";
-import RegionUserMenu from "@/components/region/RegionUserMenu";
+import { Nav, Footer } from "@/components/daylight/shell";
 
 const PAYOUT_LABELS: Record<string, string> = {
   bank: "Bank transfer",
@@ -34,17 +33,18 @@ const t = (iso: string | null | undefined) => (iso ? fmtTime.format(new Date(iso
 const d = (iso: string | null | undefined) => (iso ? fmtDate.format(new Date(iso)) : "—");
 
 /**
- * Bulk claim review — the landing page for the digest email's "Review & claim"
- * button (also usable standalone). Lists the journeys named in ?journeys=k1,k2,…,
- * all pre-checked; one confirm files every checked claim through the same
- * snapshot/consent path as the single-claim dialog.
+ * Bulk claim review at `/claim-review?journeys=k1,k2,…` — the landing page for
+ * the digest email's "Review & claim" button (also usable standalone). Lists
+ * the journeys named in the query, all pre-checked; one confirm files every
+ * checked claim through the same snapshot/consent path as the single-claim
+ * dialog. Daylight-themed (the region pages it replaced are retired).
  */
-export default function SkanetrafikenClaimReview() {
-  useAppShellStyles(themeCSS);
+export default function ClaimReview() {
+  useDaylightStyles();
 
-  const { user, profile, loading: authLoading, signInWithGoogle } = useAuth();
+  const { user, profile, loading: authLoading, signOut, signInWithGoogle } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const location = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -166,73 +166,73 @@ export default function SkanetrafikenClaimReview() {
 
   // Round-trip OAuth back to this review URL (with its ?journeys=… payload).
   const loginNext = location.pathname + location.search;
+  const accountLabel = profile?.full_name || profile?.first_name || user?.email || "Konto";
 
   return (
-    <>
-      <Link className="back-link" to="/regions/skanetrafiken/delay-alerts">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M19 12H5" /><path d="m11 18-6-6 6-6" />
-        </svg>
-        Claimable delays
-      </Link>
+    <div className="cmt-daylight">
+      <Helmet>
+        <title>Granska & ansök — Qvitta</title>
+        <meta name="robots" content="noindex" />
+      </Helmet>
 
-      <SkaneBand />
+      <Nav
+        signedIn={Boolean(user)}
+        accountLabel={accountLabel}
+        onSignOut={() => void signOut()}
+        onLogin={() => void signInWithGoogle(loginNext)}
+      />
 
-      <main className="app-shell">
-        <header className="app-header">
-          <div className="app-header__row">
-            <div>
-              <h1 className="app-header__title">Review &amp; claim</h1>
-              <span className="skt-wordmark-line">Skånetrafiken · Skåne</span>
-              <p className="app-header__sub">Late departures on your commute — check what you travelled, file in one go.</p>
-            </div>
-            <RegionUserMenu />
-          </div>
-        </header>
+      <main className="wrap" style={{ paddingTop: "2rem", paddingBottom: "4rem", maxWidth: 720 }}>
+        <h1 style={{ fontSize: "1.6rem", margin: "0 0 .25rem" }}>Granska &amp; ansök</h1>
+        <p className="muted" style={{ margin: "0 0 1.5rem" }}>
+          Sena avgångar på din pendling — bocka för det du reste och ansök på en gång.
+        </p>
 
         {!authLoading && !user ? (
-          <section className="app-card">
-            <p style={{ marginBottom: 12 }}>Sign in to review and file these claims.</p>
-            <button type="button" className="btn-cmt btn-cmt--primary" onClick={() => void signInWithGoogle(loginNext)}>Sign in</button>
-          </section>
+          <div className="board">
+            <p style={{ marginBottom: 12 }}>Logga in för att granska och skicka in dessa ansökningar.</p>
+            <button type="button" className="btn btn--dark" onClick={() => void signInWithGoogle(loginNext)}>
+              Logga in
+            </button>
+          </div>
         ) : journeyKeys.length === 0 ? (
-          <div className="app-empty">No journeys to review — open this page from a digest email.</div>
+          <div className="board"><p className="muted">Inga resor att granska — öppna den här sidan från ett aviseringsmejl.</p></div>
         ) : isLoading ? (
-          <div className="app-empty">Loading journeys…</div>
+          <div className="board"><p className="muted">Laddar resor…</p></div>
         ) : filedCount !== null ? (
-          <section className="app-card">
-            <p style={{ fontWeight: 600, marginBottom: 8 }}>✓ {filedCount} claim{filedCount === 1 ? "" : "s"} filed</p>
-            <p style={{ marginBottom: 12 }}>Forms are generated automatically. Track status under Settings → My claims.</p>
-            <Link to="/settings" className="btn-cmt btn-cmt--primary">Go to My claims</Link>
-          </section>
+          <div className="board">
+            <p style={{ fontWeight: 600, marginBottom: 8 }}>✓ {filedCount} ansökning{filedCount === 1 ? "" : "ar"} inskickade</p>
+            <p style={{ marginBottom: 12 }}>Blanketterna fylls i automatiskt. Följ status under Inställningar → Mina ansökningar.</p>
+            <button type="button" className="btn btn--accent" onClick={() => navigate("/settings")}>Till Mina ansökningar</button>
+          </div>
         ) : (
           <>
             {claimProfile.missing.length > 0 && (
-              <section className="app-card" style={{ borderColor: "var(--cmt-skt-red, #b91c1c)" }}>
-                <p style={{ fontWeight: 600 }}>Your claim profile is incomplete</p>
+              <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
+                <p style={{ fontWeight: 600 }}>Din ansökningsprofil är ofullständig</p>
                 <p style={{ margin: "6px 0 12px" }}>
-                  Missing: {claimProfile.missing.join(", ")}. Claims can't be filed until these are saved.
+                  Saknas: {claimProfile.missing.join(", ")}. Ansökningar kan inte skickas in förrän dessa är sparade.
                 </p>
-                <Link to="/settings" className="btn-cmt btn-cmt--outline">Complete profile in Settings</Link>
-              </section>
+                <button type="button" className="btn btn--ghost" onClick={() => navigate("/settings")}>Komplettera i Inställningar</button>
+              </div>
             )}
 
             {!operatorSupported && (
-              <section className="app-card" style={{ borderColor: "var(--cmt-skt-red, #b91c1c)" }}>
-                <p style={{ fontWeight: 600 }}>Claims are only supported for Skånetrafiken tickets</p>
+              <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
+                <p style={{ fontWeight: 600 }}>Ansökningar stöds endast för Skånetrafiken-biljetter</p>
                 <p style={{ margin: "6px 0 12px" }}>
                   {profile?.purchasing_operator
-                    ? `You selected ${purchasingOperatorLabel(profile.purchasing_operator)} as your ticket vendor. Claims for other operators aren't supported yet.`
-                    : "Tell us where you bought your ticket first — we currently only support Skånetrafiken tickets."}
+                    ? `Du valde ${purchasingOperatorLabel(profile.purchasing_operator)} som biljettleverantör. Ansökningar för andra operatörer stöds inte än.`
+                    : "Ange var du köpte din biljett först — vi stöder för närvarande bara Skånetrafiken-biljetter."}
                 </p>
-                <Link to="/settings" className="btn-cmt btn-cmt--outline">Update ticket vendor in Settings</Link>
-              </section>
+                <button type="button" className="btn btn--ghost" onClick={() => navigate("/settings")}>Uppdatera biljettleverantör</button>
+              </div>
             )}
 
-            <section className="app-card">
-              <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>
+            <div className="board">
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", marginBottom: 4 }}>
                 <input type="checkbox" checked={allChecked} onChange={toggleAll} disabled={claimable.length === 0} />
-                Select all ({claimable.length})
+                Markera alla ({claimable.length})
               </label>
 
               {groupedByDay.map((group) => (
@@ -241,7 +241,7 @@ export default function SkanetrafikenClaimReview() {
                     style={{
                       fontSize: 12, fontWeight: 700, textTransform: "uppercase",
                       letterSpacing: "0.04em", opacity: 0.6,
-                      padding: "14px 4px 4px", borderTop: "1px solid var(--border, #e5e7eb)",
+                      padding: "14px 0 4px", borderTop: "1px solid var(--board-line)", marginTop: 8,
                     }}
                   >
                     {group.label}
@@ -253,7 +253,7 @@ export default function SkanetrafikenClaimReview() {
                       <label
                         key={key}
                         style={{
-                          display: "flex", alignItems: "center", gap: 12, padding: "10px 4px",
+                          display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
                           opacity: alreadyClaimed ? 0.55 : 1, cursor: alreadyClaimed ? "default" : "pointer",
                         }}
                       >
@@ -272,9 +272,9 @@ export default function SkanetrafikenClaimReview() {
                             {j.operator ? ` · ${j.operator}` : ""}
                           </div>
                         </div>
-                        <div style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {j.canceled ? "Cancelled" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
-                        </div>
+                        <span className={`tag ${j.canceled ? "tag--cancelled" : "tag--eligible"}`}>
+                          {j.canceled ? "Inställt" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
+                        </span>
                       </label>
                     );
                   })}
@@ -282,28 +282,30 @@ export default function SkanetrafikenClaimReview() {
               ))}
 
               {journeys.length === 0 && (
-                <div className="app-empty">These journeys are no longer available to claim.</div>
+                <p className="muted" style={{ marginTop: 12 }}>Dessa resor går inte längre att ansöka om.</p>
               )}
 
-              <div className="btn-row" style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 16 }}>
                 <button
                   type="button"
-                  className="btn-cmt btn-cmt--primary"
+                  className="btn btn--accent"
                   onClick={() => void handleFile()}
                   disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
                 >
-                  {submitting ? "Filing…" : `File ${checked.size} claim${checked.size === 1 ? "" : "s"}`}
+                  {submitting ? "Skickar…" : `Ansök om ${checked.size} ersättning${checked.size === 1 ? "" : "ar"}`}
                 </button>
               </div>
               <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                By filing you confirm you took these journeys and authorise the use of your saved
-                signature on the Skånetrafiken forms. False claims are reported to the police by
-                Skånetrafiken.
+                Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
+                sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
+                polisanmäls av Skånetrafiken.
               </p>
-            </section>
+            </div>
           </>
         )}
       </main>
-    </>
+
+      <Footer />
+    </div>
   );
 }
