@@ -400,12 +400,13 @@
   .cmt-daylight .stationfield[data-role="from"]::after,
   .cmt-daylight .board__control:has(>span:first-child:first-letter)~.board__control:nth-of-type(2)::before{content:none;}
   /* stack the departure row so nothing overflows horizontally */
-  .cmt-daylight .row{grid-template-columns:56px 1fr;grid-template-areas:"time route" "status status" "action action";gap:.55rem .8rem;padding:.85rem 0;}
-  .cmt-daylight .row__time{grid-area:time;}
-  .cmt-daylight .row__route{grid-area:route;min-width:0;}
-  .cmt-daylight .row__stations{grid-template-columns:minmax(0,1fr) 16px minmax(0,1fr);gap:.4rem;}
+  .cmt-daylight .row{gap:.5rem;padding:.85rem 0;}
+  .cmt-daylight .row__top{gap:.6rem;}
+  .cmt-daylight .row__dep{font-size:1rem;}
+  .cmt-daylight .row__middle{gap:.5rem;padding:.25rem 0 .1rem;}
   .cmt-daylight .st{font-size:.95rem;white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;}
-  .cmt-daylight .row__status{grid-area:status;flex-direction:row;align-items:center;justify-content:flex-start;gap:.55rem;text-align:left;}
-  .cmt-daylight .row__action{grid-area:action;justify-content:flex-start;min-width:0;}
+  .cmt-daylight .row__status{flex-direction:row;align-items:center;gap:.55rem;text-align:left;}
+  .cmt-daylight .row__bottom{gap:.6rem;flex-wrap:wrap;}
+  .cmt-daylight .row__action{gap:.4rem;}
 }
 
