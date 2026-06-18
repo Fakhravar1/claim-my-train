@@ -1,37 +1,26 @@
-## 1. Email + password authentication
+## Changes
 
-**Login page (`src/pages/Login.tsx`)**
-- Add tabs: "Sign in" / "Create account", each with email + password fields.
-- Sign in → `supabase.auth.signInWithPassword({ email, password })`.
-- Sign up → `supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + '/login?next=...' } })`. The existing `handle_new_user` trigger creates the profile row automatically.
-- Keep the existing Google button above the form, separated by a divider.
-- Validate with zod (email format, password ≥ 8 chars). Show toast on auth errors.
+### 1. Brand logo + larger nav text (`src/components/daylight/shell.tsx`)
+- Replace the current `<span class="brand__mark" />` dot with a small SVG "Q" mark — a teal circle outline with a tail, sized ~28px, accent color matching the Daylight theme (`#0E8C7E`).
+- Bump the `.brand` text size (currently small). Add a CSS override scoped under `.cmt-daylight .brand` in `src/themes/daylight/daylight.css` to increase font-size (~1.25rem), weight, and align the SVG vertically with the wordmark.
 
-**Supabase config**
-- Email provider is on by default; no migration needed for that. Email confirmation stays on (default) — user must click the link before signing in. We surface that in a toast after signup.
+### 2. "Så funkar det" nav button (`src/components/daylight/shell.tsx`)
+- The nav already has an anchor `<a href="#how">Så funkar det</a>` — the `ValueProps` section already has `id="how"`. Verify it works; if scroll isn't smooth, add `scroll-behavior: smooth` on `html` within the daylight scope, or convert to a click handler doing `scrollIntoView({behavior:"smooth"})`.
+- Likely the user wants this as a more visible **button** rather than a plain link. Restyle the existing `#how` link as a button (`btn btn--quiet` style) so it reads as a CTA, while keeping the anchor jump.
 
-## 2. Personal info: address fields
+### 3. Mobile horizontal scroll + clearer From/To (`src/themes/daylight/daylight.css`, possibly `Board.tsx`)
+- Root cause of horizontal scroll on phone is almost certainly the `.board__controls` grid or `.row` flex laying out wider than the viewport. Fix by:
+  - Adding `overflow-x: hidden` on `.cmt-daylight` body wrapper as a safety net.
+  - Making `.board__controls` stack vertically (`grid-template-columns: 1fr`) below ~640px so Från/Till/Datum each take full width.
+  - Making `.row` wrap (`flex-wrap: wrap`) on mobile and reducing min-widths; ensure `.row__stations` allows text to wrap instead of forcing overflow.
+- Clearer From/To on mobile: in `StationField` (label + select), ensure labels "Från"/"Till" sit above full-width inputs with strong visual separation, and add a subtle arrow/divider between them on mobile so the direction reads naturally.
 
-**Migration** — add three nullable columns to `public.profiles`:
-- `street_address text`
-- `postal_code text`
-- `city text`
+## Files touched
+- `src/components/daylight/shell.tsx` — new Q logo SVG, restyle "Så funkar det" as a button.
+- `src/themes/daylight/daylight.css` — larger brand text, mobile stack for `.board__controls`, fix row overflow, From/To clarity, smooth-scroll.
+- (Possibly) `src/components/daylight/Board.tsx` — minor markup tweak if needed for mobile From→To layout.
 
-No RLS changes (existing "Users can update own profile" policy covers them). Types in `src/integrations/supabase/types.ts` regenerate after the migration.
+No business logic / data changes.
 
-**AuthContext (`src/contexts/AuthContext.tsx`)**
-- Extend `Profile` interface and the `select(...)` column lists to include the three new fields.
-
-**Settings page (`src/pages/Settings.tsx`)**
-- In the "Personal info" tab, after Personnummer, add three inputs: Street address, Postal code, City (postal code + city on one row on `md+`).
-- Wire local state + `useEffect` hydrate + include in the `profiles` upsert in `handleSubmit`.
-
-## Technical notes
-
-- No changes to edge functions, dbt, or region pages.
-- Google sign-in flow is untouched.
-- Auth-state listener in `AuthContext` already handles password sessions — no changes needed there.
-
-## Open question
-
-Should sign-up require **email confirmation** (current Supabase default — user clicks link, then can sign in), or do you want it disabled so accounts work immediately? Default is more secure; disabling is friendlier for testing. I'll go with the default unless you say otherwise.
+## Question before building
+For the Q logo — do you want (a) a simple geometric Q mark in the teal accent color matching the existing minimal aesthetic, or (b) something more distinctive (e.g. Q drawn as a train circle with a tail like a rail)?
