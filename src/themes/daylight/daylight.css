@@ -102,20 +102,30 @@
 
 .cmt-daylight .rows{display:flex;flex-direction:column;}
 .cmt-daylight .empty{padding:2.5rem 1rem;text-align:center;color:var(--board-muted);font-size:.95rem;}
-.cmt-daylight .row{display:grid;grid-template-columns:64px 1fr auto auto;gap:1rem;align-items:center;padding:.95rem 0;border-bottom:var(--row-bw) solid var(--board-line);}
+.cmt-daylight .row{display:flex;flex-direction:column;gap:.55rem;padding:.95rem 0;border-bottom:var(--row-bw) solid var(--board-line);}
 .cmt-daylight .row:last-child{border-bottom:0;}
+
+/* top: time left, status right */
+.cmt-daylight .row__top{display:flex;align-items:center;justify-content:space-between;gap:1rem;}
 .cmt-daylight .row__time{display:flex;flex-direction:column;font-family:var(--font-mono);}
-.cmt-daylight .row__dep{font-size:1.02rem;font-weight:500;letter-spacing:.01em;}
+.cmt-daylight .row__dep{font-size:1.08rem;font-weight:500;letter-spacing:.01em;}
 .cmt-daylight .row__date{font-size:.64rem;color:var(--board-muted);letter-spacing:.04em;text-transform:uppercase;margin-top:.1rem;}
-.cmt-daylight .row__route{display:flex;flex-direction:column;gap:.2rem;min-width:0;}
-.cmt-daylight .row__stations{display:flex;align-items:center;gap:.55rem;}
-.cmt-daylight .st{font-size:.97rem;font-weight:600;letter-spacing:-.01em;white-space:nowrap;}
-.cmt-daylight .st__arrow{color:var(--board-muted);display:inline-flex;flex-shrink:0;}
-.cmt-daylight .row__line{font-family:var(--font-mono);font-size:.7rem;color:var(--board-muted);letter-spacing:.04em;}
 .cmt-daylight .row__status{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;text-align:right;}
 .cmt-daylight .row__hint{font-size:.66rem;color:var(--near);letter-spacing:.02em;}
-.cmt-daylight .row__amt{font-family:var(--font-mono);font-size:.72rem;color:var(--board-muted);}
-.cmt-daylight .row__action{display:flex;align-items:center;gap:.5rem;justify-content:flex-end;min-width:160px;}
+
+/* middle: from / to */
+.cmt-daylight .row__middle{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.35rem 0 .15rem;}
+.cmt-daylight .row__station{display:flex;flex-direction:column;gap:.15rem;min-width:0;}
+.cmt-daylight .row__station--from{align-items:flex-start;}
+.cmt-daylight .row__station--to{align-items:flex-end;text-align:right;}
+.cmt-daylight .row__label{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--board-muted);}
+.cmt-daylight .st{font-size:1.05rem;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cmt-daylight .row__arrow{color:var(--board-muted);display:inline-flex;flex-shrink:0;}
+
+/* bottom: line + actions */
+.cmt-daylight .row__bottom{display:flex;align-items:center;justify-content:space-between;gap:1rem;}
+.cmt-daylight .row__line{font-family:var(--font-mono);font-size:.7rem;color:var(--board-muted);letter-spacing:.04em;}
+.cmt-daylight .row__action{display:flex;align-items:center;gap:.5rem;}
 .cmt-daylight .row__ok{color:var(--ok);display:inline-flex;opacity:.7;}
 
 /* "Bevaka åt mig" bell — quiet icon button on every departure row. */
@@ -390,12 +400,13 @@
   .cmt-daylight .stationfield[data-role="from"]::after,
   .cmt-daylight .board__control:has(>span:first-child:first-letter)~.board__control:nth-of-type(2)::before{content:none;}
   /* stack the departure row so nothing overflows horizontally */
-  .cmt-daylight .row{grid-template-columns:56px 1fr;grid-template-areas:"time route" "status status" "action action";gap:.55rem .8rem;padding:.85rem 0;}
-  .cmt-daylight .row__time{grid-area:time;}
-  .cmt-daylight .row__route{grid-area:route;min-width:0;}
-  .cmt-daylight .row__stations{grid-template-columns:minmax(0,1fr) 16px minmax(0,1fr);gap:.4rem;}
+  .cmt-daylight .row{gap:.5rem;padding:.85rem 0;}
+  .cmt-daylight .row__top{gap:.6rem;}
+  .cmt-daylight .row__dep{font-size:1rem;}
+  .cmt-daylight .row__middle{gap:.5rem;padding:.25rem 0 .1rem;}
   .cmt-daylight .st{font-size:.95rem;white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;}
-  .cmt-daylight .row__status{grid-area:status;flex-direction:row;align-items:center;justify-content:flex-start;gap:.55rem;text-align:left;}
-  .cmt-daylight .row__action{grid-area:action;justify-content:flex-start;min-width:0;}
+  .cmt-daylight .row__status{flex-direction:row;align-items:center;gap:.55rem;text-align:left;}
+  .cmt-daylight .row__bottom{gap:.6rem;flex-wrap:wrap;}
+  .cmt-daylight .row__action{gap:.4rem;}
 }
 
