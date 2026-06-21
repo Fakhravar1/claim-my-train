@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type * as React from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { ADMIN_USER_ID } from "@/lib/admin";
 import { ArrowIcon, SearchIcon } from "./icons";
 
 /**
@@ -51,6 +53,8 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
 }
 
 function AccountMenu({ label, onSignOut }: { label: string; onSignOut: () => void }) {
+  const { user } = useAuth();
+  const isAdmin = user?.id === ADMIN_USER_ID;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -69,6 +73,7 @@ function AccountMenu({ label, onSignOut }: { label: string; onSignOut: () => voi
         <div className="nav__menu" role="menu">
           <Link to="/settings" onClick={() => setOpen(false)}>Inställningar</Link>
           <Link to="/my-delays" onClick={() => setOpen(false)}>Mina förseningar</Link>
+          {isAdmin && <Link to="/admin" onClick={() => setOpen(false)}>Digest-statistik</Link>}
           <button onClick={() => { setOpen(false); onSignOut(); }}>Logga ut</button>
         </div>
       )}
