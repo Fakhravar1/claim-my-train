@@ -1,7 +1,7 @@
 import { forwardRef, useMemo } from "react";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
-import { ArrowIcon, BellIcon, CheckIcon, CloseIcon, SearchIcon } from "./icons";
+import { ArrowIcon, BellIcon, CloseIcon, SearchIcon } from "./icons";
 import { StationField } from "./StationField";
 
 /** HH:MM in Stockholm local time from an ISO timestamp. */
@@ -24,6 +24,26 @@ function fmtDayShort(iso: string | null | undefined): string {
 
 export function lineLabel(j: Pick<Journey, "line_name" | "service_number">): string {
   return j.line_name ?? "Tåg " + (j.service_number ?? "");
+}
+
+/**
+ * Transport-mode label taken straight from the data (`transport_mode`), so the
+ * board says what the service actually IS — "Tåg" for trains — instead of
+ * stamping a line name / train number on every row. Only trains flow today;
+ * future modes map here. Unknown/null falls back to the raw value so we never
+ * arbitrarily call a non-train a "Tåg".
+ */
+const MODE_LABELS: Record<string, string> = {
+  train: "Tåg",
+  bus: "Buss",
+  tram: "Spårvagn",
+  metro: "Tunnelbana",
+  ferry: "Båt",
+  boat: "Båt",
+};
+export function modeLabel(j: Pick<Journey, "transport_mode">): string {
+  const m = (j.transport_mode ?? "").toLowerCase();
+  return MODE_LABELS[m] ?? (m ? m[0].toUpperCase() + m.slice(1) : "");
 }
 
 export type StationOption = { id: string; name: string };
@@ -216,55 +236,41 @@ function Row({
   const m = statusMeta(d.destination_delay_minutes, Boolean(d.canceled));
   return (
     <div className={"row row--" + m.tone}>
-      <div className="row__top">
-        <div className="row__time">
-          <span className="row__dep">{fmtTime(d.origin_scheduled)}</span>
-          <span className="row__date">{fmtDayShort(d.origin_local_date)}</span>
-        </div>
-        <div className="row__status">
-          <span className={"tag tag--" + m.tone}>{m.chipLabel}</span>
-          {m.near && <span className="row__hint">Strax under gränsen</span>}
-        </div>
+      <div className="row__time">
+        <span className="row__dep">{fmtTime(d.origin_scheduled)}</span>
+        <span className="row__date">{fmtDayShort(d.origin_local_date)}</span>
       </div>
 
-      <div className="row__middle">
-        <div className="row__station row__station--from">
-          <span className="row__label">Från</span>
-          <span className="st">{d.origin_stop_name}</span>
-        </div>
-        <span className="row__arrow"><ArrowIcon width={18} height={18} /></span>
-        <div className="row__station row__station--to">
-          <span className="row__label">Till</span>
-          <span className="st">{d.destination_stop_name}</span>
-        </div>
+      <div className="row__route">
+        <span className="st st--from">{d.origin_stop_name}</span>
+        <span className="row__to">
+          <ArrowIcon className="row__arrow row__arrow--down" width={13} height={13} />
+          <span className="st st--to">{d.destination_stop_name}</span>
+        </span>
       </div>
 
-      <div className="row__bottom">
-        <span className="row__line">{lineLabel(d)}</span>
-        <div className="row__action">
-          {m.eligible && (
-            <button className="btn btn--accent btn--sm" onClick={() => onClaim(d)}>
-              Ansök om ersättning
-            </button>
-          )}
-          {m.near && (
-            <button className="btn btn--quiet btn--sm" onClick={() => onInfo(d)}>
-              Har jag rätt?
-            </button>
-          )}
-          {!m.eligible && !m.near && (
-            <span className="row__ok"><CheckIcon width={15} height={15} /></span>
-          )}
-          <button
-            type="button"
-            className="watchbtn"
-            onClick={() => onWatch(d)}
-            aria-label="Bevaka åt mig"
-            title="Bevaka åt mig"
-          >
-            <BellIcon width={16} height={16} />
-          </button>
-        </div>
+      <span className="row__line">{modeLabel(d)}</span>
+
+      <div className="row__status">
+        <span className={"tag tag--" + m.tone}>{m.chipLabel}</span>
+        {m.near && <span className="row__hint">Strax under gränsen</span>}
+      </div>
+
+      <div className="row__action">
+        {/* Everyone can file — it's their right; our tiers only indicate what
+            our data thinks is eligible. So the claim button is always shown. */}
+        <button className="btn btn--accent btn--sm" onClick={() => onClaim(d)}>
+          Ansök om ersättning
+        </button>
+        <button
+          type="button"
+          className="watchbtn"
+          onClick={() => onWatch(d)}
+          aria-label="Bevaka åt mig"
+          title="Bevaka åt mig"
+        >
+          <BellIcon width={16} height={16} />
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useQueryClient } from "@tanstack/react-query";
@@ -70,15 +70,8 @@ export default function MyDelays() {
   }, [journeys]);
 
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [initialized, setInitialized] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [filedCount, setFiledCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (initialized || claimable.length === 0) return;
-    setChecked(new Set(claimable.map((j) => j.journey_key as string)));
-    setInitialized(true);
-  }, [claimable, initialized]);
 
   const allChecked = claimable.length > 0 && claimable.every((j) => checked.has(j.journey_key as string));
   const toggleAll = () =>
@@ -221,22 +214,55 @@ export default function MyDelays() {
             )}
 
             <div className="board">
-              <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", marginBottom: 4 }}>
+              <div style={{ marginBottom: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn--accent"
+                  onClick={() => void handleFile()}
+                  disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
+                >
+                  {submitting ? "Skickar…" : `Ansök om ${checked.size} ersättning${checked.size === 1 ? "" : "ar"}`}
+                </button>
+                <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8, marginBottom: 0 }}>
+                  Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
+                  sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
+                  polisanmäls av Skånetrafiken.
+                </p>
+              </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", padding: "12px 0", borderTop: "1px solid var(--board-line)" }}>
                 <input type="checkbox" checked={allChecked} onChange={toggleAll} disabled={claimable.length === 0} />
                 Markera alla ({claimable.length})
               </label>
 
-              {groupedByDay.map((group) => (
-                <div key={group.label}>
-                  <div
+              {groupedByDay.map((group, groupIndex) => {
+                const groupClaimable = group.items.filter(
+                  (j) => j.journey_key && !claimedKeys.has(j.journey_key as string)
+                ).length;
+                return (
+                <details
+                  key={group.label}
+                  className="day__group"
+                  open={groupIndex === 0}
+                  style={{ borderTop: "1px solid var(--board-line)" }}
+                >
+                  <summary
                     style={{
+                      display: "flex", alignItems: "center", gap: 8,
                       fontSize: 12, fontWeight: 700, textTransform: "uppercase",
-                      letterSpacing: "0.04em", opacity: 0.6,
-                      padding: "14px 0 4px", borderTop: "1px solid var(--board-line)", marginTop: 8,
+                      letterSpacing: "0.04em", opacity: 0.75,
+                      padding: "14px 0", cursor: "pointer",
                     }}
                   >
-                    {group.label}
-                  </div>
+                    <svg className="day__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                    <span>{group.label}</span>
+                    <span style={{ marginLeft: "auto", opacity: 0.7 }}>
+                      {group.items.length} försening{group.items.length === 1 ? "" : "ar"}
+                      {groupClaimable > 0 ? ` · ${groupClaimable} att ansöka` : ""}
+                    </span>
+                  </summary>
                   {group.items.map((j) => {
                     const key = j.journey_key as string;
                     const alreadyClaimed = claimedKeys.has(key);
@@ -269,24 +295,9 @@ export default function MyDelays() {
                       </label>
                     );
                   })}
-                </div>
-              ))}
-
-              <div style={{ marginTop: 16 }}>
-                <button
-                  type="button"
-                  className="btn btn--accent"
-                  onClick={() => void handleFile()}
-                  disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
-                >
-                  {submitting ? "Skickar…" : `Ansök om ${checked.size} ersättning${checked.size === 1 ? "" : "ar"}`}
-                </button>
-              </div>
-              <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
-                sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
-                polisanmäls av Skånetrafiken.
-              </p>
+                </details>
+                );
+              })}
             </div>
           </>
         )}

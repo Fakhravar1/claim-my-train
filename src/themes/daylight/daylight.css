@@ -83,6 +83,11 @@
 /* board */
 .cmt-daylight .board-wrap{padding-top:1rem;padding-bottom:clamp(3rem,7vw,5rem);}
 .cmt-daylight .board{background:var(--board-bg);border:var(--board-border);border-radius:var(--board-radius);padding:1.25rem 1.35rem 1rem;color:var(--board-text);box-shadow:var(--board-shadow);}
+.cmt-daylight .day__group > summary{list-style:none;}
+.cmt-daylight .day__group > summary::-webkit-details-marker{display:none;}
+.cmt-daylight .day__group > summary:hover{opacity:1;}
+.cmt-daylight .day__chevron{flex:0 0 auto;transition:transform .18s ease;color:var(--accent);}
+.cmt-daylight .day__group[open] > summary .day__chevron{transform:rotate(180deg);}
 .cmt-daylight .board__head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding-bottom:1rem;border-bottom:var(--board-bw) solid var(--board-line);}
 .cmt-daylight .board__title{display:flex;align-items:center;gap:.85rem;}
 .cmt-daylight .live{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;color:var(--accent);}
@@ -408,5 +413,105 @@
   .cmt-daylight .row__status{flex-direction:row;align-items:center;gap:.55rem;text-align:left;}
   .cmt-daylight .row__bottom{gap:.6rem;flex-wrap:wrap;}
   .cmt-daylight .row__action{gap:.4rem;}
+}
+
+/* ───────── per-status row cards (compact single-line) ─────────
+   Each board row carries a `row--{tone}` class (daylightStatus.ts). Rows are
+   dense single-line cards — time | route | line | status | action on one row
+   (stacked to two rows on mobile). Status colour shows as a coloured LEFT SPINE
+   plus a subtle diagonal STRIPE pattern on the near/claimable tiers; the base
+   fill stays neutral (no solid colour flood). Visual only — `is_claimable`
+   stays authoritative (CLAUDE.md §1). */
+.cmt-daylight .rows{gap:.5rem;}
+.cmt-daylight .row{
+  display:grid;
+  grid-template-columns:56px minmax(0,1fr) auto auto auto;
+  align-items:center;
+  gap:.85rem;
+  padding:.55rem .9rem .55rem .85rem;
+  background:var(--board-bg-2);
+  border:1px solid var(--board-line);
+  border-left:4px solid var(--board-line-2);
+  border-radius:var(--r);
+  transition:border-left-color .16s,box-shadow .16s,transform .12s;
+}
+/* base set border-bottom:0 on the last list item for the old hairline look;
+   restore it so the last card keeps a full box border (same specificity, later). */
+.cmt-daylight .row:last-child{border-bottom:1px solid var(--board-line);}
+.cmt-daylight .row:hover{box-shadow:0 8px 20px -12px rgba(16,33,30,.28);transform:translateY(-1px);}
+
+/* compact cells: route (from → to, ellipsised), line, inline status */
+.cmt-daylight .row__time{flex-direction:column;}
+/* route: FROM on top, TO below, with a small downward arrow on the TO line */
+.cmt-daylight .row__route{display:flex;flex-direction:column;align-items:flex-start;gap:.28rem;min-width:0;}
+/* Origin/destination names sit on small solid cards so the text stays readable
+   over the diagonal status stripes behind the row (accessibility/contrast). */
+.cmt-daylight .row__route .st{
+  display:inline-block;max-width:100%;min-width:0;
+  padding:.15rem .5rem;
+  background:var(--board-bg);
+  border:1px solid var(--board-line-2);
+  border-radius:8px;
+  box-shadow:0 1px 1.5px rgba(16,33,30,.06);
+  font-size:.95rem;font-weight:600;line-height:1.3;letter-spacing:-.01em;
+  color:var(--board-text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.cmt-daylight .row__to{display:flex;align-items:center;gap:.35rem;min-width:0;max-width:100%;}
+.cmt-daylight .row__to .st{flex:0 1 auto;}
+.cmt-daylight .row__arrow--down{transform:rotate(90deg);flex:0 0 auto;color:var(--board-muted);}
+.cmt-daylight .row__line{white-space:nowrap;}
+.cmt-daylight .row__status{flex-direction:row;align-items:center;gap:.45rem;text-align:left;}
+
+/* coloured left spine + diagonal stripe pattern per tier, over the neutral
+   base. Per request: cancelled = black, severe (40+ min) = dark red,
+   eligible (20+ min) = bright orange. near keeps the soft amber cue;
+   on-time/minor get a quiet spine and no stripe. */
+.cmt-daylight .row--ontime{border-left-color:color-mix(in srgb,var(--ok) 60%,transparent);}
+.cmt-daylight .row--minor{border-left-color:var(--board-line-2);}
+.cmt-daylight .row--near{
+  border-left-color:var(--near);
+  background:repeating-linear-gradient(45deg,
+    color-mix(in srgb,var(--near) 10%,transparent) 0 5px,
+    transparent 5px 13px), var(--board-bg-2);
+}
+.cmt-daylight .row--eligible{
+  border-left-color:#F97316; /* bright orange — 20+ min */
+  background:repeating-linear-gradient(45deg,
+    color-mix(in srgb,#F97316 15%,transparent) 0 5px,
+    transparent 5px 13px), var(--board-bg-2);
+}
+.cmt-daylight .row--severe{
+  border-left-color:#B42318; /* dark red — 40+ min */
+  background:repeating-linear-gradient(45deg,
+    color-mix(in srgb,#B42318 14%,transparent) 0 5px,
+    transparent 5px 13px), var(--board-bg-2);
+}
+.cmt-daylight .row--cancelled{
+  border-left-color:#14171A; /* black — cancelled */
+  background:repeating-linear-gradient(45deg,
+    color-mix(in srgb,#14171A 12%,transparent) 0 5px,
+    transparent 5px 13px), var(--board-bg-2);
+}
+
+/* keep the 5-col single line on desktop (wins over older prototype .row rules) */
+@media(min-width:721px){
+  .cmt-daylight .row{grid-template-columns:56px minmax(0,1fr) auto auto auto;}
+}
+
+/* mobile: stack to two compact rows (time spine spans both) */
+@media(max-width:720px){
+  .cmt-daylight .row{
+    grid-template-columns:44px minmax(0,1fr) auto;
+    grid-template-areas:"time route status" "time line action";
+    gap:.2rem .6rem;
+    padding:.55rem .75rem;
+  }
+  .cmt-daylight .row__time{grid-area:time;}
+  .cmt-daylight .row__route{grid-area:route;}
+  .cmt-daylight .row__line{grid-area:line;}
+  .cmt-daylight .row__status{grid-area:status;justify-self:end;}
+  .cmt-daylight .row__action{grid-area:action;justify-self:end;gap:.4rem;}
+  .cmt-daylight .row__route .st{white-space:nowrap;}
 }
 

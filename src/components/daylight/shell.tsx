@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ADMIN_USER_ID } from "@/lib/admin";
 import { ArrowIcon, SearchIcon } from "./icons";
@@ -22,9 +22,29 @@ type NavProps = {
 };
 
 export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
+  const navigate = useNavigate();
   const scrollToHow = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    document.getElementById("how")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const how = document.getElementById("how");
+    if (how) {
+      // The "Så funkar det" section is on this page (the home app) — smooth-scroll.
+      how.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      // Not on the home page (e.g. /settings, /claim-review) — go home, then scroll
+      // once it mounts. The home page is lazy-loaded, so poll briefly for #how
+      // (rather than a single frame) and give up after ~2s.
+      navigate("/");
+      const start = Date.now();
+      const tryScroll = () => {
+        const target = document.getElementById("how");
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else if (Date.now() - start < 2000) {
+          requestAnimationFrame(tryScroll);
+        }
+      };
+      requestAnimationFrame(tryScroll);
+    }
   };
   return (
     <nav className="nav">

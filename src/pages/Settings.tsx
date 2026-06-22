@@ -405,7 +405,10 @@ const Settings = () => {
       {/* Daylight nav/footer live in their own scoped wrapper; the shadcn form
           below stays OUTSIDE .cmt-daylight so the theme's `* { padding:0 }`
           reset can't clobber the form's spacing. */}
-      <div className="cmt-daylight" style={{ minHeight: 0, background: "transparent" }}>
+      {/* overflow:visible overrides .cmt-daylight's overflow-x:hidden — without it
+          this collapsed (nav-height) wrapper clips the account dropdown, which
+          extends below the nav, making its menu items unclickable. */}
+      <div className="cmt-daylight" style={{ minHeight: 0, background: "transparent", overflow: "visible" }}>
         <Nav
           signedIn={Boolean(user)}
           accountLabel={profile?.full_name || profile?.first_name || user?.email || "Konto"}
