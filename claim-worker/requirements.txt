@@ -3,3 +3,4 @@ pillow>=10.0  # reportlab needs PIL to decode the transparent signature PNG (mas
 pypdf>=4.0,<6
 supabase>=2.4,<3
 tzdata>=2024.1  # zoneinfo has no bundled tz DB on Windows; harmless on Linux
+playwright>=1.44,<2  # SJ web-form submit path (submit_sj.py); needs `playwright install chromium`

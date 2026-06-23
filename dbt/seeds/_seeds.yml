@@ -1,31 +1,60 @@
 version: 2
 
 seeds:
-  - name: claim_authorities
+  - name: dim_compensation_rules
     description: >
-        Versioned reference data: one row per claim AUTHORITY (the body a user files a
-        reklamation with — for us today only Skanetrafiken). Maps an authority to its
-        claimable-eligibility params. fct_journeys reads min_delay_seconds /
-        includes_cancellations from here instead of a hardcoded literal, so adding a
-        second authority is a new ROW, not a code change. NOT operator-keyed (operators
-        change concessions; the authority's rule doesn't — §5/§8). Route-distance,
-        floor-amount and divisor valuation models are deliberately NOT modelled yet
-        (wait for operator #2 → dim_compensation_rules, §9 v3).
+        Versioned reference data for claim eligibility + valuation. Grain: one row per
+        (authority_key, route-distance band). Maps a claim authority + the journey's route
+        distance to the binding compensation rule (trigger threshold, cancellation handling,
+        tier breakpoints and percentages). fct_journeys reads only the FLOOR (min threshold
+        across all rows) for display/retention; the binding per-USER rule is resolved lazily
+        by public.claim_eligibility(...) keyed on the user's attested operator + the journey's
+        route_distance_km (§5/§8/§9 v3 — rules attach to authority + route characteristics,
+        NOT operator-as-rule-key). Distance, not operator, picks the regime: <150 km uses the
+        Swedish regional regime (Lag 2015:953, 50/75/100 @ 20/40/60 min); >=150 km uses EU
+        2021/782 (25/50 @ 60/120 min). Skanetrafiken/SL sit voluntarily at the 20-min floor on
+        all traffic (single 0-inf band). NEVER let this seed go empty for the active floor — the
+        cross join in fct_journeys would drop every journey (the not_null tests guard it).
     columns:
       - name: authority_key
-        description: Stable lowercase key for the claim authority (e.g. 'skanetrafiken'). Join key in fct_journeys.
+        description: Stable lowercase key for the claim authority / ticket vendor (skanetrafiken, sj, sl, snalltaget). Matches profiles.purchasing_operator; the claim_eligibility() lookup key.
         data_tests:
           - not_null
-          - unique
+      - name: route_distance_min_km
+        description: Inclusive lower bound (km) of the route-distance band this rule applies to. 0 for the regional/short band.
+        data_tests:
+          - not_null
+      - name: route_distance_max_km
+        description: Exclusive upper bound (km) of the band. NULL = unbounded (the long-distance EU band, or a single all-distance band).
       - name: min_delay_seconds
-        description: Destination delay (seconds) at/above which a journey is claimable. Skanetrafiken = 1200 (20 min).
+        description: Destination delay (seconds) at/above which a journey is claimable in this band. Equal to tier1_min_seconds. Regional = 1200 (20 min); EU = 3600 (60 min).
         data_tests:
           - not_null
       - name: includes_cancellations
-        description: When true, a cancelled service is claimable regardless of delay. Gates the OR-cancelled branch in fct_journeys.
+        description: When true, a cancelled service is claimable regardless of delay. Gates the OR-cancelled branch.
         data_tests:
           - not_null
       - name: tier_model
-        description: Label only (no resolution logic yet) for the compensation-tier regime, e.g. 'kollektivtrafiklag_50_75_100'.
+        description: Label for the compensation-tier regime, e.g. kollektivtrafiklag_50_75_100 or eu_2021_782_25_50.
+      - name: tier1_min_seconds
+        description: Lowest compensation tier threshold (seconds). = min_delay_seconds.
+        data_tests:
+          - not_null
+      - name: tier1_pct
+        description: Percentage of fare refunded at tier 1.
+        data_tests:
+          - not_null
+      - name: tier2_min_seconds
+        description: Second tier threshold (seconds). NULL for 2-tier (EU) regimes that only have tier1/tier2-as-top.
+      - name: tier2_pct
+        description: Percentage at tier 2.
+      - name: tier3_min_seconds
+        description: Third tier threshold (seconds). NULL for EU regimes (only 2 tiers).
+      - name: tier3_pct
+        description: Percentage at tier 3 (the 100 pct / top tier in the regional regime).
       - name: notes
         description: Free-text provenance / legal-basis note.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [authority_key, route_distance_min_km]

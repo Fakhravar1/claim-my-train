@@ -11,6 +11,7 @@ import { statusMeta } from "@/lib/daylightStatus";
 import {
   isSupportedPurchasingOperator,
   purchasingOperatorLabel,
+  purchasingOperatorClaimUrl,
   validateClaimProfile,
   validateEmail,
   PURCHASING_OPERATORS,
@@ -97,6 +98,9 @@ export function ClaimModal({
   const [sel, setSel] = useState<Journey | null>(prefilled);
   const [sigUrl, setSigUrl] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  // Per-claim booking/ticket number — required by SJ's web form (keyed on the trip's
+  // booking ref, not a standing profile field). Only collected for SJ tickets.
+  const [bookingReference, setBookingReference] = useState("");
 
   // Logged-out inline claim details (typed by the user; nothing is persisted
   // until the account is created on the final step).
@@ -176,8 +180,17 @@ export function ClaimModal({
 
   const STEPS = user ? (["Resan", "Uppgifter", "Granska"] as const) : (["Resan", "Uppgifter", "Konto"] as const);
   const stepIndex = { journey: 0, details: 1, review: 2, account: 2 }[phase];
-  const selMeta = sel ? statusMeta(sel.destination_delay_minutes, Boolean(sel.canceled)) : null;
+  const selMeta = sel ? statusMeta(sel.destination_delay_minutes, Boolean(sel.canceled), sel.route_distance_km) : null;
   const detailsOperatorSupported = isSupportedPurchasingOperator(details.purchasingOperator);
+  // Which operator/ticket this claim files under: a signed-in user's saved choice,
+  // else the inline (logged-out) selection. SJ keys its web form on the booking number.
+  const activeOperator = user ? profile?.purchasing_operator ?? null : details.purchasingOperator;
+  const needsBookingRef = activeOperator === "sj";
+  // Operators that file on their own site (SL): we don't store a claim — the CTA links out.
+  const externalClaimUrl = purchasingOperatorClaimUrl(activeOperator);
+  const openExternalClaim = () => {
+    if (externalClaimUrl) window.open(externalClaimUrl, "_blank", "noopener,noreferrer");
+  };
 
   // Chrome (header + stepper + footer) shows only during the claim funnel — not
   // on the login pop-up (loginOnly) nor the post-submit success screen.
@@ -203,7 +216,12 @@ export function ClaimModal({
   const submit = async () => {
     if (!sel) return;
     setStatus("Skickar…");
-    const result = await startClaim(sel, profile?.signature_path ?? null);
+    const result = await startClaim(
+      sel,
+      profile?.signature_path ?? null,
+      profile?.purchasing_operator ?? null,
+      bookingReference
+    );
     if (result.ok) {
       setStatus("");
       void queryClient.invalidateQueries({ queryKey: ["my-claims"] });
@@ -281,7 +299,13 @@ export function ClaimModal({
       if (pErr) throw pErr;
 
       // 3. The claim itself (shared snapshot builder).
-      const payload = buildClaimPayload(sel, uid, signaturePath);
+      const payload = buildClaimPayload(
+        sel,
+        uid,
+        signaturePath,
+        details.purchasingOperator,
+        bookingReference
+      );
       const { error: cErr } = await supabase.from("claims").insert(payload);
       if (cErr && cErr.code !== "23505") throw cErr;
 
@@ -370,7 +394,7 @@ export function ClaimModal({
                         {matches.length ? "Avgångar på sträckan" : "Inga registrerade avgångar — prova en annan sträcka"}
                       </span>
                       {matches.map((d) => {
-                        const mm = statusMeta(d.destination_delay_minutes, Boolean(d.canceled));
+                        const mm = statusMeta(d.destination_delay_minutes, Boolean(d.canceled), d.route_distance_km);
                         const on = sel?.journey_key === d.journey_key;
                         return (
                           <button key={d.journey_key} className={"match" + (on ? " is-on" : "")} onClick={() => setSel(d)}>
@@ -423,13 +447,30 @@ export function ClaimModal({
                   <button className="linkbtn" onClick={() => navigate("/settings")}>Komplettera i inställningar</button>
                 </div>
               )}
-              {!operatorSupported && (
+              {!operatorSupported && externalClaimUrl && (
+                <div className="verdict verdict--near">
+                  {purchasingOperatorLabel(activeOperator)} hanterar förseningsersättning på sin egen sida.
+                  Vi har hittat din resa — klicka nedan så öppnar vi {purchasingOperatorLabel(activeOperator)}:s
+                  formulär där du slutför ansökan.
+                </div>
+              )}
+              {!operatorSupported && !externalClaimUrl && (
                 <div className="verdict verdict--near">
                   {profile?.purchasing_operator
                     ? `Ansökningar stöds inte för ${purchasingOperatorLabel(profile.purchasing_operator)}-biljetter ännu — bara Skånetrafiken. `
                     : "Ange var du köpte biljetten innan du ansöker — just nu stöds bara Skånetrafiken. "}
                   <button className="linkbtn" onClick={() => navigate("/settings")}>Uppdatera i inställningar</button>
                 </div>
+              )}
+              {needsBookingRef && (
+                <FormField label="SJ bokningsnummer eller biljettnummer">
+                  <input
+                    value={bookingReference}
+                    onChange={(e) => setBookingReference(e.target.value)}
+                    placeholder="t.ex. SJ12345678"
+                    autoComplete="off"
+                  />
+                </FormField>
               )}
               <PayoutNote />
             </div>
@@ -476,6 +517,16 @@ export function ClaimModal({
                   {PURCHASING_OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </FormField>
+              {needsBookingRef && (
+                <FormField label="SJ bokningsnummer eller biljettnummer">
+                  <input
+                    value={bookingReference}
+                    onChange={(e) => setBookingReference(e.target.value)}
+                    placeholder="t.ex. SJ12345678"
+                    autoComplete="off"
+                  />
+                </FormField>
+              )}
               <div className="grid2">
                 <FormField label="Biljett-ID / referens" err={detailErrors.claimTicketId}>
                   <input value={details.claimTicketId} onChange={(e) => setField("claimTicketId", e.target.value)} />
@@ -586,27 +637,36 @@ export function ClaimModal({
             >
               {phase === "journey" ? "Avbryt" : "Tillbaka"}
             </button>
-            {phase === "journey" && (
-              <button className="btn btn--accent" disabled={!sel || !selMeta?.eligible} onClick={() => setPhase("details")}>
-                Nästa <ArrowIcon width={16} height={16} />
+            {externalClaimUrl ? (
+              // External operators (SL): we don't file in-app — link out to their own form.
+              <button className="btn btn--accent" onClick={openExternalClaim}>
+                Öppna {purchasingOperatorLabel(activeOperator)}:s formulär ↗
               </button>
-            )}
-            {phase === "details" && (
-              <button
-                className="btn btn--accent"
-                disabled={user ? !canFile : false}
-                onClick={proceedFromDetails}
-              >
-                {user ? "Granska" : "Nästa"} <ArrowIcon width={16} height={16} />
-              </button>
-            )}
-            {phase === "review" && (
-              <div className="foot__pair">
-                <button className="btn btn--quiet" onClick={onClose}>Avbryt</button>
-                <button className="btn btn--accent" disabled={submitting || !canFile} onClick={() => void submit()}>
-                  {submitting ? "Skickar…" : "Skicka ansökan"} <CheckIcon width={16} height={16} />
-                </button>
-              </div>
+            ) : (
+              <>
+                {phase === "journey" && (
+                  <button className="btn btn--accent" disabled={!sel || !selMeta?.eligible} onClick={() => setPhase("details")}>
+                    Nästa <ArrowIcon width={16} height={16} />
+                  </button>
+                )}
+                {phase === "details" && (
+                  <button
+                    className="btn btn--accent"
+                    disabled={user ? !canFile : false}
+                    onClick={proceedFromDetails}
+                  >
+                    {user ? "Granska" : "Nästa"} <ArrowIcon width={16} height={16} />
+                  </button>
+                )}
+                {phase === "review" && (
+                  <div className="foot__pair">
+                    <button className="btn btn--quiet" onClick={onClose}>Avbryt</button>
+                    <button className="btn btn--accent" disabled={submitting || !canFile} onClick={() => void submit()}>
+                      {submitting ? "Skickar…" : "Skicka ansökan"} <CheckIcon width={16} height={16} />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

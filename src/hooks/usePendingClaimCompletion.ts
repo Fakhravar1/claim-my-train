@@ -55,8 +55,14 @@ export function usePendingClaimCompletion() {
           .upsert(buildProfileRow(user.id, pending.details, signaturePath), { onConflict: "id" });
         if (pErr) throw pErr;
 
-        // 3. The claim itself.
-        const payload = buildClaimPayload(pending.journey, user.id, signaturePath);
+        // 3. The claim itself. Snapshot the attested operator from the stashed
+        // details (the deferred funnel doesn't carry a per-claim booking ref yet).
+        const payload = buildClaimPayload(
+          pending.journey,
+          user.id,
+          signaturePath,
+          pending.details.purchasingOperator
+        );
         const { error: cErr } = await supabase.from("claims").insert(payload);
         if (cErr && cErr.code !== "23505") throw cErr;
 

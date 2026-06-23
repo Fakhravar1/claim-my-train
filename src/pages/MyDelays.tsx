@@ -11,7 +11,7 @@ import { buildClaimPayload } from "@/hooks/useStartClaim";
 import { useMyClaims } from "@/hooks/useMyClaims";
 import { useCommuteRoutes } from "@/hooks/useCommuteRoutes";
 import { useMyDelays } from "@/hooks/useMyDelays";
-import { isSupportedPurchasingOperator, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
+import { isSupportedPurchasingOperator, purchasingOperatorLabel, purchasingOperatorClaimUrl } from "@/lib/claimProfileValidation";
 import { Nav, Footer } from "@/components/daylight/shell";
 
 const PAYOUT_LABELS: Record<string, string> = {
@@ -109,6 +109,7 @@ export default function MyDelays() {
   }, [profile]);
 
   const operatorSupported = isSupportedPurchasingOperator(profile?.purchasing_operator);
+  const externalClaimUrl = purchasingOperatorClaimUrl(profile?.purchasing_operator);
 
   const handleFile = async () => {
     if (!user || checked.size === 0 || !operatorSupported) return;
@@ -116,7 +117,9 @@ export default function MyDelays() {
     try {
       const rows = claimable
         .filter((j) => checked.has(j.journey_key as string))
-        .map((j) => buildClaimPayload(j, user.id, profile?.signature_path ?? null));
+        // Snapshot the user's attested operator; booking_reference stays null here
+        // (bulk SJ filing isn't wired yet — and SJ is still guardrail-blocked).
+        .map((j) => buildClaimPayload(j, user.id, profile?.signature_path ?? null, profile?.purchasing_operator ?? null));
       const { error } = await supabase
         .from("claims")
         .upsert(rows, { onConflict: "user_id,journey_key,trip_start_date", ignoreDuplicates: true });
@@ -201,7 +204,19 @@ export default function MyDelays() {
               </div>
             )}
 
-            {!operatorSupported && (
+            {!operatorSupported && externalClaimUrl && (
+              <div className="board" style={{ marginBottom: 16 }}>
+                <p style={{ fontWeight: 600 }}>{purchasingOperatorLabel(profile?.purchasing_operator)} hanterar ersättning på sin egen sida</p>
+                <p style={{ margin: "6px 0 12px" }}>
+                  Vi listar dina förseningar här, men själva ansökan görs hos {purchasingOperatorLabel(profile?.purchasing_operator)}.
+                </p>
+                <a className="btn btn--accent" href={externalClaimUrl} target="_blank" rel="noopener noreferrer">
+                  Öppna {purchasingOperatorLabel(profile?.purchasing_operator)}:s formulär ↗
+                </a>
+              </div>
+            )}
+
+            {!operatorSupported && !externalClaimUrl && (
               <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
                 <p style={{ fontWeight: 600 }}>Ansökningar stöds endast för Skånetrafiken-biljetter</p>
                 <p style={{ margin: "6px 0 12px" }}>

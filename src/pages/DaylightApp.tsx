@@ -11,6 +11,7 @@ import { statusMeta } from "@/lib/daylightStatus";
 import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
+import { SjClaimModal } from "@/components/daylight/SjClaimModal";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
 import { WatchModal } from "@/components/daylight/WatchModal";
 import { usePendingClaimCompletion } from "@/hooks/usePendingClaimCompletion";
@@ -123,7 +124,7 @@ export default function DaylightApp() {
     }
 
     if (onlyClaimable) {
-      r = r.filter((d) => statusMeta(d.destination_delay_minutes, Boolean(d.canceled)).eligible);
+      r = r.filter((d) => statusMeta(d.destination_delay_minutes, Boolean(d.canceled), d.route_distance_km).eligible);
     }
 
     // All modes stay in chronological order (earliest at top, later further
@@ -223,7 +224,7 @@ export default function DaylightApp() {
                 name: "Hur vet jag om jag har rätt till ersättning?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Precis under 20 minuter, eller bara osäker? Vi visar vad våra uppgifter säger och hur nära gränsen du ligger.",
+                  text: "Precis under gränsen, eller bara osäker? Vi visar vad våra uppgifter säger och hur nära gränsen du ligger.",
                 },
               },
               {
@@ -312,7 +313,16 @@ export default function DaylightApp() {
       </main>
       <Footer />
 
-      {claim && <ClaimModal initial={claim} onClose={() => setClaim(null)} />}
+      {claim && (
+        // SJ trips aren't standing commutes — a signed-in SJ user claiming a known journey
+        // gets the focused SJ pop-up (booking + purchase email). Blank/login entries and
+        // every other operator use the standard multi-step ClaimModal.
+        user && profile?.purchasing_operator === "sj" && !(claim as { blank?: boolean }).blank ? (
+          <SjClaimModal journey={claim as Journey} onClose={() => setClaim(null)} />
+        ) : (
+          <ClaimModal initial={claim} onClose={() => setClaim(null)} />
+        )
+      )}
       {info && <EligibilityModal dep={info} onClose={() => setInfo(null)} onWatch={watchTrain} />}
       {watch && <WatchModal journey={watch} onClose={() => setWatch(null)} />}
     </div>

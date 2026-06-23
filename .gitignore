@@ -38,3 +38,5 @@ supabase/.branches/
 .env
 .env.*
 !.env.example
+# SJ form-spike screenshots (may contain real journey data)
+claim-worker/spike_out/

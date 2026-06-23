@@ -27,15 +27,22 @@ arrivals as (
     select * from {{ ref('int_stop_events') }} where event_type = 'arrival'
 ),
 
--- Eligibility params as versioned reference data, not a literal. Exactly one row today
--- (skanetrafiken), so the cross join below preserves grain. authority_key is a constant
--- filter for now; it becomes a real join key when operator #2 / a second authority lands
--- (§9 v3 dim_compensation_rules). NEVER let this CTE go empty — the cross join would then
--- drop every journey. The seed's not_null/unique tests guard against that.
+-- Claim FLOOR, not the per-operator rule. is_claimable here is used only for DISPLAY and
+-- for the durable retention layer (fct_claimable_journeys / v_claimable_journeys): it flags
+-- a journey claimable under the MOST LENIENT regime across all authorities (the 20-min/cancel
+-- floor today). That keeps retention a safe SUPERSET — a stricter 60-min set is a subset of
+-- the 20-min set, so no SJ-claimable journey is ever pruned. The BINDING per-user rule (does
+-- THIS journey clear the threshold for the user's attested operator, and at what tier %) is
+-- resolved lazily downstream by public.claim_eligibility(...) keyed on profiles.purchasing_operator
+-- + route_distance_km (§8: user-side resolution stays lazy; §5: rules attach to authority +
+-- route characteristics, never operator-as-rule-key). Single-row aggregate -> grain preserved.
+-- NEVER let dim_compensation_rules go empty — the cross join would drop every journey; the
+-- seed's not_null tests guard that.
 authority as (
-    select min_delay_seconds, includes_cancellations
-    from {{ ref('claim_authorities') }}
-    where authority_key = 'skanetrafiken'
+    select
+        min(min_delay_seconds)         as min_delay_seconds,
+        bool_or(includes_cancellations) as includes_cancellations
+    from {{ ref('dim_compensation_rules') }}
 )
 
 select
@@ -84,10 +91,27 @@ select
     dest.delay_seconds                      as destination_delay_seconds,
     round(dest.delay_seconds / 60.0, 1)     as destination_delay_minutes,
 
-    -- v1 claim rule, now seed-driven (claim_authorities) instead of a literal. For
-    -- skanetrafiken (min_delay_seconds=1200, includes_cancellations=true) this reduces
-    -- to exactly the old `delay_seconds >= 1200 OR canceled`. The OR-cancelled branch is
-    -- load-bearing (exact-20-min and cancelled-train cases), gated by includes_cancellations.
+    -- Great-circle O-D distance (km) x a ~1.2 detour factor to approximate rail distance.
+    -- This is what picks the legal regime in dim_compensation_rules / claim_eligibility:
+    -- <150 km = Swedish regional regime, >=150 km = EU 2021/782. APPROXIMATE near the 150 km
+    -- band edge (straight-line underestimates real track length); the only journeys this can
+    -- misclassify are routes straddling that boundary (§ legal nuance, _marts.yml). NULL when
+    -- either endpoint lacks coords (e.g. an unresolved crosswalk) — claim_eligibility then
+    -- defaults the unknown distance to the conservative (long-distance / higher-threshold) band.
+    case
+        when oc.lat is not null and dc.lat is not null then
+            round(
+                (6371 * acos(least(1.0, greatest(-1.0,
+                    cos(radians(oc.lat)) * cos(radians(dc.lat)) * cos(radians(dc.lon - oc.lon))
+                    + sin(radians(oc.lat)) * sin(radians(dc.lat))
+                ))) * 1.2)::numeric
+            , 1)
+    end                                     as route_distance_km,
+
+    -- Claim FLOOR (display + retention only, NOT the per-operator rule): clears the most
+    -- lenient regime across dim_compensation_rules (auth = the min threshold / any-cancel
+    -- aggregate above) -> today delay >= 1200 OR canceled. Binding per-user eligibility is
+    -- resolved by public.claim_eligibility(...) on purchasing_operator + route_distance_km.
     (coalesce(dest.delay_seconds, 0) >= auth.min_delay_seconds)
         or (auth.includes_cancellations and coalesce(dest.canceled, false))   as is_claimable,
 
@@ -103,4 +127,6 @@ join arrivals as dest
     and dest.scheduled >  origin.scheduled
     and dest.scheduled <= origin.scheduled + interval '12 hours'   -- one physical run; excludes next-day recurrence
     and origin.station_id <> dest.station_id                       -- O-D legs only; drop self-loops from services that revisit a stop
-cross join authority as auth                                        -- single-row eligibility params (claim_authorities seed)
+cross join authority as auth                                        -- single-row claim FLOOR (min across dim_compensation_rules)
+left join {{ ref('dim_station_coords') }} oc on oc.stop__id = origin.station_id   -- origin coords for route_distance_km
+left join {{ ref('dim_station_coords') }} dc on dc.stop__id = dest.station_id     -- destination coords

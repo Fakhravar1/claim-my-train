@@ -1,12 +1,13 @@
 import type { Journey } from "@/hooks/useJourneys";
-import { statusMeta } from "@/lib/daylightStatus";
+import { statusMeta, tiersFor } from "@/lib/daylightStatus";
 import { Scrim, ModalHead } from "./primitives";
 import { BellIcon } from "./icons";
 
 /**
  * Near-threshold "Har jag rätt?" modal — opened from a board row just under the
- * 20-min line. Presentational; "Bevaka åt mig" hands off to the watch flow
- * (commuter habits / digest) via onWatch.
+ * eligibility line. The line is DISTANCE-DEPENDENT: 60 min for routes >= 150 km
+ * (EU 2021/782), 20 min for shorter regional routes (Lag 2015:953). Presentational;
+ * "Bevaka åt mig" hands off to the watch flow (commuter habits / digest) via onWatch.
  */
 export function EligibilityModal({
   dep,
@@ -17,8 +18,9 @@ export function EligibilityModal({
   onClose: () => void;
   onWatch: () => void;
 }) {
-  const { minutes } = statusMeta(dep.destination_delay_minutes, Boolean(dep.canceled));
-  const gap = Math.max(0, 20 - minutes);
+  const { minutes } = statusMeta(dep.destination_delay_minutes, Boolean(dep.canceled), dep.route_distance_km);
+  const threshold = tiersFor(dep.route_distance_km).eligible;
+  const gap = Math.max(0, threshold - minutes);
   return (
     <Scrim onClose={onClose}>
       <div className="modal modal--sm">
@@ -26,16 +28,16 @@ export function EligibilityModal({
         <div className="modal__body">
           <p className="lead">
             Enligt våra uppgifter är den här avgången <b>{minutes} min</b> sen. Gränsen för ersättning
-            går vid <b>20 min</b> — du är <b>{gap} {gap === 1 ? "minut" : "minuter"}</b> ifrån.
+            går vid <b>{threshold} min</b> — du är <b>{gap} {gap === 1 ? "minut" : "minuter"}</b> ifrån.
           </p>
           <div className="thresh">
             <div className="thresh__bar">
-              <span style={{ width: Math.min(100, (minutes / 20) * 100) + "%" }} />
+              <span style={{ width: Math.min(100, (minutes / threshold) * 100) + "%" }} />
             </div>
-            <div className="thresh__labels"><span>0</span><span>20 min · gräns</span></div>
+            <div className="thresh__labels"><span>0</span><span>{threshold} min · gräns</span></div>
           </div>
           <p className="muted">
-            Förseningar växer ofta efter avgång. Låt oss bevaka den – tippar den över 20 minuter
+            Förseningar växer ofta efter avgång. Låt oss bevaka den – tippar den över {threshold} minuter
             förbereder vi din ansökan och hör av oss.
           </p>
         </div>

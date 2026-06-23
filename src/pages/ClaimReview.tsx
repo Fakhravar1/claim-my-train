@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { type Journey } from "@/hooks/useJourneys";
 import { buildClaimPayload } from "@/hooks/useStartClaim";
 import { useMyClaims } from "@/hooks/useMyClaims";
-import { isSupportedPurchasingOperator, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
+import { isSupportedPurchasingOperator, purchasingOperatorLabel, purchasingOperatorClaimUrl } from "@/lib/claimProfileValidation";
 import { Nav, Footer } from "@/components/daylight/shell";
 
 const PAYOUT_LABELS: Record<string, string> = {
@@ -137,8 +137,10 @@ export default function ClaimReview() {
     return { missing };
   }, [profile]);
 
-  // Guardrail: only Skånetrafiken-ticket holders can file for now (§1).
+  // Guardrail: only Skånetrafiken-ticket holders file in-app for now (§1). SL files on
+  // its own site (externalClaimUrl) — we link out instead.
   const operatorSupported = isSupportedPurchasingOperator(profile?.purchasing_operator);
+  const externalClaimUrl = purchasingOperatorClaimUrl(profile?.purchasing_operator);
 
   const handleFile = async () => {
     if (!user || checked.size === 0 || !operatorSupported) return;
@@ -146,7 +148,9 @@ export default function ClaimReview() {
     try {
       const rows = claimable
         .filter((j) => checked.has(j.journey_key as string))
-        .map((j) => buildClaimPayload(j, user.id, profile?.signature_path ?? null));
+        // Snapshot the user's attested operator; booking_reference stays null here
+        // (bulk SJ filing isn't wired yet — and SJ is still guardrail-blocked).
+        .map((j) => buildClaimPayload(j, user.id, profile?.signature_path ?? null, profile?.purchasing_operator ?? null));
       // ignoreDuplicates: a stale email can never double-file — the unique
       // (user_id, journey_key, trip_start_date) constraint silently skips dupes.
       const { error } = await supabase
@@ -217,7 +221,19 @@ export default function ClaimReview() {
               </div>
             )}
 
-            {!operatorSupported && (
+            {!operatorSupported && externalClaimUrl && (
+              <div className="board" style={{ marginBottom: 16 }}>
+                <p style={{ fontWeight: 600 }}>{purchasingOperatorLabel(profile?.purchasing_operator)} hanterar ersättning på sin egen sida</p>
+                <p style={{ margin: "6px 0 12px" }}>
+                  Vi visar dina förseningar här, men själva ansökan görs hos {purchasingOperatorLabel(profile?.purchasing_operator)}.
+                </p>
+                <a className="btn btn--accent" href={externalClaimUrl} target="_blank" rel="noopener noreferrer">
+                  Öppna {purchasingOperatorLabel(profile?.purchasing_operator)}:s formulär ↗
+                </a>
+              </div>
+            )}
+
+            {!operatorSupported && !externalClaimUrl && (
               <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
                 <p style={{ fontWeight: 600 }}>Ansökningar stöds endast för Skånetrafiken-biljetter</p>
                 <p style={{ margin: "6px 0 12px" }}>

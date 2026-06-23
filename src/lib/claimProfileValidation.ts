@@ -1,30 +1,40 @@
 // Validation for the claim profile fields collected on the Settings page.
-// These fields end up on the Skånetrafiken reklamation, so bad data here can
-// get a claim rejected. Each validator returns an error string, or null if ok.
+// These fields end up on the claim filing (the Skånetrafiken reklamation PDF, or
+// the SL web form), so bad data here can get a claim rejected. Each validator
+// returns an error string, or null if ok.
 
 export const PAYOUT_METHODS = ["bank", "sms", "email"] as const;
 export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
 export const isPayoutMethod = (value: unknown): value is PayoutMethod =>
   typeof value === "string" && (PAYOUT_METHODS as readonly string[]).includes(value);
 
-// Which operator/vendor the user bought their ticket from. For now this is a
-// GUARDRAIL: only Skånetrafiken tickets can be claimed through the app (the
-// single supported regime). The others are valid selections to SAVE, but block
-// filing — a user on an SJ/Snälltåget ticket should use that operator's own
-// process. Later this keys the per-operator compensation rules (§9 v3).
+// Which operator/vendor the user bought their ticket from. This is a GUARDRAIL:
+// only operators flagged `supported` are filed IN-APP (Skånetrafiken = PDF reklamation).
+// An operator can instead carry `externalClaimUrl`: we don't file for it — the "ansök"
+// CTA just links out to the operator's own form (SL → its Resegaranti web form), and no
+// claims row is ever stored. The rest are valid to SAVE but have no path yet (SJ becomes
+// in-app once submit_sj lands; Snälltåget/other inert). Keys per-operator rules (§9 v3).
 export const PURCHASING_OPERATORS = [
   { value: "skanetrafiken", label: "Skånetrafiken (JoJo, app, biljettautomat)", supported: true },
+  { value: "sl", label: "SL (Stockholm)", supported: false, externalClaimUrl: "https://sl.se/kundservice/forseningsersattning/resan" },
   { value: "sj", label: "SJ", supported: false },
   { value: "snalltaget", label: "Snälltåget", supported: false },
   { value: "other", label: "Annan operatör / vet inte", supported: false },
 ] as const;
 export type PurchasingOperator = (typeof PURCHASING_OPERATORS)[number]["value"];
-export const SUPPORTED_PURCHASING_OPERATOR: PurchasingOperator = "skanetrafiken";
+/** Operators whose claims the app files IN-APP, derived from the `supported` flag. */
+export const SUPPORTED_PURCHASING_OPERATORS: readonly PurchasingOperator[] =
+  PURCHASING_OPERATORS.filter((o) => o.supported).map((o) => o.value);
 export const isPurchasingOperator = (value: unknown): value is PurchasingOperator =>
   typeof value === "string" && PURCHASING_OPERATORS.some((o) => o.value === value);
-/** True only for the operator whose claims the app currently supports. */
+/** True for any operator whose claims the app currently files IN-APP. */
 export const isSupportedPurchasingOperator = (value: unknown): boolean =>
-  value === SUPPORTED_PURCHASING_OPERATOR;
+  PURCHASING_OPERATORS.some((o) => o.value === value && o.supported);
+/** External operator form URL (e.g. SL), or null. When set, the claim CTA links out to
+ *  the operator's own form instead of filing in-app — no claims row is stored. */
+export const purchasingOperatorClaimUrl = (value: string | null | undefined): string | null =>
+  (PURCHASING_OPERATORS.find((o) => o.value === value) as { externalClaimUrl?: string } | undefined)
+    ?.externalClaimUrl ?? null;
 export const purchasingOperatorLabel = (value: string | null | undefined): string =>
   PURCHASING_OPERATORS.find((o) => o.value === value)?.label ?? (value ?? "");
 
@@ -180,7 +190,7 @@ export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErro
   }
 
   // Required to SAVE: the user must declare a vendor. Whether that vendor is
-  // *claimable* is enforced separately at filing time (only Skånetrafiken), so
+  // *claimable* is enforced separately at filing time (only `supported` ones), so
   // an SJ/Snälltåget selection still saves fine — it just can't file.
   if (!input.purchasingOperator) {
     errors.purchasingOperator = "Välj var du köpte din biljett.";

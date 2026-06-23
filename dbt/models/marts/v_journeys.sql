@@ -18,6 +18,7 @@ select
     destination_scheduled,
     destination_actual,
     destination_delay_minutes,
+    route_distance_km,
     is_claimable,
     canceled,
     line_name,

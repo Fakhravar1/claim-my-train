@@ -135,7 +135,7 @@ type ValuePropsHandlers = {
 export function ValueProps({ onUnknown, onSearch, onHabits }: ValuePropsHandlers) {
   const items: { h: string; p: string; a: string; on: () => void }[] = [
     { h: "Du vet inte vilket tåg", p: "Du var sen men minns inte avgången. Ange sträcka och tid — vi matchar mot trafikdatan och hittar rätt tåg.", a: "Hitta min avgång", on: onUnknown },
-    { h: "Du är osäker på din rätt", p: "Precis under 20 minuter, eller bara osäker? Vi visar vad våra uppgifter säger och hur nära gränsen du ligger.", a: "Sök din resa", on: onSearch },
+    { h: "Du är osäker på din rätt", p: "Precis under gränsen, eller bara osäker? Vi visar vad våra uppgifter säger och hur nära gränsen du ligger.", a: "Sök din resa", on: onSearch },
     { h: "Vi håller koll åt dig", p: "Ange dina pendlarvanor så mejlar vi dig så fort tågen du brukar ta är försenade — du missar aldrig en ersättning du kan ha rätt till.", a: "Ställ in pendlarvanor", on: onHabits },
     { h: "Vi rör aldrig dina pengar", p: "Ersättningen betalas ut direkt från operatören till din valda mottagningsmetod — Swish eller bankkonto. Pengarna passerar aldrig oss.", a: "Så funkar utbetalningen", on: onSearch },
   ];

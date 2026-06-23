@@ -58,6 +58,7 @@ select
     destination_actual,
     destination_delay_seconds,
     destination_delay_minutes,
+    route_distance_km,
     canceled,
     ingested_at,
     current_timestamp as captured_at

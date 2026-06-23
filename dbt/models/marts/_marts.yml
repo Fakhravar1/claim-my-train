@@ -32,7 +32,7 @@ models:
         within a 12h window (handles cross-midnight; excludes next-day recurrence).
         Mode-agnostic column contract (service_number, transport_mode, line_name);
         trains only for now. origin_source/destination_source say which feed supplied
-        each leg. Destination delay drives is_claimable (20+ min or cancelled).
+        each leg. Destination delay drives is_claimable (the 20-min/cancel FLOOR).
     columns:
         - name: journey_key
           description: Surrogate key; hash of (service_number, origin_local_date, origin_stop, destination_stop).
@@ -41,11 +41,21 @@ models:
             - unique
         - name: is_claimable
           description: >
-              True if the destination is claimable under the journey's claim authority.
-              Seed-driven (claim_authorities): destination_delay_seconds >= the authority's
-              min_delay_seconds OR (the authority allows it AND the service is cancelled).
-              For skanetrafiken today that is delay >= 20 min OR cancelled.
+              FLOOR flag for display + retention only — NOT the per-operator rule. True when the
+              destination clears the most lenient regime across dim_compensation_rules (today the
+              20-min/cancel floor): destination_delay_seconds >= min(min_delay_seconds) OR cancelled.
+              Keeps v_claimable_journeys a safe superset. The BINDING per-user eligibility (does this
+              journey clear the threshold for the user's attested operator, at what tier %) is resolved
+              lazily by public.claim_eligibility(delay_seconds, canceled, route_distance_km, operator).
           data_tests: [not_null]
+        - name: route_distance_km
+          description: >
+              Great-circle O-D distance (km) x ~1.2 detour factor, approximating rail distance.
+              Picks the legal regime: <150 km = Swedish regional, >=150 km = EU 2021/782. APPROXIMATE
+              near the 150 km edge (straight-line underestimates track length) — only band-straddling
+              routes can be misclassified. NULL when an endpoint lacks coords (claim_eligibility then
+              defaults the unknown distance to the conservative long-distance band). Coords from
+              dim_station_coords (REST Danish + ref_stations Swedish).
         - name: destination_delay_seconds
           description: >
               Signed deviation (realtime - scheduled, in seconds) of whichever event the

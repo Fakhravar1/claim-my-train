@@ -31,10 +31,20 @@ clean-targets:         # directories to be removed by `dbt clean`
 # files using the `{{ config(...) }}` macro.
 
 # Pin seed column types so dbt's inference can't silently turn the numeric / boolean
-# eligibility params into text (which would break the >= comparison in fct_journeys).
+# eligibility params into text (which would break the >= comparison in fct_journeys
+# and claim_eligibility). Empty cells (e.g. unbounded route_distance_max_km, the absent
+# tier3 of EU 2-tier regimes) load as NULL.
 seeds:
   trafiklab:
-    claim_authorities:
+    dim_compensation_rules:
       +column_types:
+        route_distance_min_km: integer
+        route_distance_max_km: integer
         min_delay_seconds: integer
         includes_cancellations: boolean
+        tier1_min_seconds: integer
+        tier1_pct: integer
+        tier2_min_seconds: integer
+        tier2_pct: integer
+        tier3_min_seconds: integer
+        tier3_pct: integer

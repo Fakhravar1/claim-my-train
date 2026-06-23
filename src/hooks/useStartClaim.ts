@@ -19,11 +19,28 @@ function pickDelayBucket(minutes: number | null | undefined, cancelled: boolean)
  * the bulk digest review page so the snapshot shape can't drift between them.
  * consented_at is stamped at call time — per-filing consent (CLAUDE.md §3).
  */
-export function buildClaimPayload(journey: Journey, userId: string, signaturePath?: string | null) {
+export function buildClaimPayload(
+  journey: Journey,
+  userId: string,
+  signaturePath?: string | null,
+  // Snapshotted at filing time — the worker routes on THIS, not the live profile
+  // (a later profile change can't re-route an already-filed claim). NULL is treated
+  // as skanetrafiken (the PDF path) for backward compatibility.
+  purchasingOperator?: string | null,
+  // SJ's no-login web form keys on the trip's booking/ticket number — per-claim,
+  // entered at filing. NULL for the Skånetrafiken PDF path.
+  bookingReference?: string | null,
+  // Per-claim contact (email/phone used at purchase) for SJ's form. Defaults to the
+  // account email in the pop-up; NULL falls back to the profile in the worker.
+  bookingEmail?: string | null
+) {
   return {
     user_id: userId,
     consented_at: new Date().toISOString(),
     signature_path: signaturePath ?? null,
+    purchasing_operator: purchasingOperator ?? null,
+    booking_reference: bookingReference?.trim() || null,
+    booking_email: bookingEmail?.trim() || null,
     journey_key: journey.journey_key ?? "",
     // v_journeys has no GTFS trip__start_date; the origin's local date fills the
     // claims.trip_start_date column (part of the per-user uniqueness constraint).
@@ -58,14 +75,24 @@ export function useStartClaim() {
 
   async function startClaim(
     journey: Journey,
-    signaturePath?: string | null
+    signaturePath?: string | null,
+    purchasingOperator?: string | null,
+    bookingReference?: string | null,
+    bookingEmail?: string | null
   ): Promise<Result> {
     setPending(true);
     try {
       const { data: userResp } = await supabase.auth.getUser();
       if (!userResp.user) return { ok: false, error: "Not signed in" };
 
-      const payload = buildClaimPayload(journey, userResp.user.id, signaturePath);
+      const payload = buildClaimPayload(
+        journey,
+        userResp.user.id,
+        signaturePath,
+        purchasingOperator,
+        bookingReference,
+        bookingEmail
+      );
 
       const { error } = await supabase.from("claims").insert(payload);
       if (error) {

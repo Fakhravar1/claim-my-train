@@ -46,6 +46,16 @@ export function modeLabel(j: Pick<Journey, "transport_mode">): string {
   return MODE_LABELS[m] ?? (m ? m[0].toUpperCase() + m.slice(1) : "");
 }
 
+/**
+ * Operator brand for the card — the name riders recognize (SJ / Öresundståg /
+ * Skånetrafiken / Pågatåg), taken from the journey's descriptive `operator`
+ * (information_owner on the TV side). Falls back to the mode ("Tåg") when the
+ * feed didn't label the leg (some intermediate-station pairings have no operator).
+ */
+export function operatorLabel(j: Pick<Journey, "operator" | "transport_mode">): string {
+  return (j.operator ?? "").trim() || modeLabel(j);
+}
+
 export type StationOption = { id: string; name: string };
 
 type BoardProps = {
@@ -110,7 +120,7 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
   ref
 ) {
   const elig = useMemo(
-    () => rows.filter((d) => statusMeta(d.destination_delay_minutes, Boolean(d.canceled)).eligible).length,
+    () => rows.filter((d) => statusMeta(d.destination_delay_minutes, Boolean(d.canceled), d.route_distance_km).eligible).length,
     [rows]
   );
 
@@ -233,7 +243,7 @@ function Row({
   onInfo: (j: Journey) => void;
   onWatch: (j: Journey) => void;
 }) {
-  const m = statusMeta(d.destination_delay_minutes, Boolean(d.canceled));
+  const m = statusMeta(d.destination_delay_minutes, Boolean(d.canceled), d.route_distance_km);
   return (
     <div className={"row row--" + m.tone}>
       <div className="row__time">
@@ -249,7 +259,7 @@ function Row({
         </span>
       </div>
 
-      <span className="row__line">{modeLabel(d)}</span>
+      <span className="row__line">{operatorLabel(d)}</span>
 
       <div className="row__status">
         <span className={"tag tag--" + m.tone}>{m.chipLabel}</span>

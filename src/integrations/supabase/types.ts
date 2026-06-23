@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       claims: {
         Row: {
+          booking_email: string | null
+          booking_reference: string | null
           consented_at: string | null
           created_at: string
           delay_bucket: string
@@ -25,6 +27,7 @@ export type Database = {
           destination_stop_id: string
           destination_stop_name: string
           error_message: string | null
+          external_reference: string | null
           generated_at: string | null
           id: string
           journey_key: string
@@ -33,6 +36,7 @@ export type Database = {
           origin_stop_name: string
           outcome: string | null
           pdf_path: string | null
+          purchasing_operator: string | null
           signature_path: string | null
           status: string
           submitted_at: string | null
@@ -41,6 +45,8 @@ export type Database = {
           was_cancelled: boolean
         }
         Insert: {
+          booking_email?: string | null
+          booking_reference?: string | null
           consented_at?: string | null
           created_at?: string
           delay_bucket: string
@@ -50,6 +56,7 @@ export type Database = {
           destination_stop_id: string
           destination_stop_name: string
           error_message?: string | null
+          external_reference?: string | null
           generated_at?: string | null
           id?: string
           journey_key: string
@@ -58,6 +65,7 @@ export type Database = {
           origin_stop_name: string
           outcome?: string | null
           pdf_path?: string | null
+          purchasing_operator?: string | null
           signature_path?: string | null
           status?: string
           submitted_at?: string | null
@@ -66,6 +74,8 @@ export type Database = {
           was_cancelled: boolean
         }
         Update: {
+          booking_email?: string | null
+          booking_reference?: string | null
           consented_at?: string | null
           created_at?: string
           delay_bucket?: string
@@ -75,6 +85,7 @@ export type Database = {
           destination_stop_id?: string
           destination_stop_name?: string
           error_message?: string | null
+          external_reference?: string | null
           generated_at?: string | null
           id?: string
           journey_key?: string
@@ -83,6 +94,7 @@ export type Database = {
           origin_stop_name?: string
           outcome?: string | null
           pdf_path?: string | null
+          purchasing_operator?: string | null
           signature_path?: string | null
           status?: string
           submitted_at?: string | null
@@ -540,6 +552,7 @@ export type Database = {
           origin_source: string | null
           origin_stop_id: string | null
           origin_stop_name: string | null
+          route_distance_km: number | null
           service_number: string | null
           transport_mode: string | null
         }
@@ -562,6 +575,7 @@ export type Database = {
           origin_source?: string | null
           origin_stop_id?: string | null
           origin_stop_name?: string | null
+          route_distance_km?: number | null
           service_number?: string | null
           transport_mode?: string | null
         }
@@ -584,6 +598,7 @@ export type Database = {
           origin_source?: string | null
           origin_stop_id?: string | null
           origin_stop_name?: string | null
+          route_distance_km?: number | null
           service_number?: string | null
           transport_mode?: string | null
         }
@@ -609,6 +624,7 @@ export type Database = {
           origin_source: string | null
           origin_stop_id: string | null
           origin_stop_name: string | null
+          route_distance_km: number | null
           service_number: string | null
           transport_mode: string | null
         }
@@ -616,7 +632,21 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      claim_eligibility: {
+        Args: {
+          p_canceled: boolean
+          p_delay_seconds: number
+          p_operator: string
+          p_route_km: number
+        }
+        Returns: {
+          is_claimable: boolean
+          min_delay_seconds: number
+          route_band: string
+          tier_model: string
+          tier_pct: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

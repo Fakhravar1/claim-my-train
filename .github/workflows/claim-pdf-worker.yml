@@ -16,7 +16,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r claim-worker/requirements.txt
+      # Chromium for the SJ web-form path (submit_sj.py). Cheap relative to the daily
+      # cadence; the SJ branch only launches a browser when an SJ claim is present.
+      - run: python -m playwright install --with-deps chromium
       - run: python claim-worker/worker.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Hard off-switch for real SJ submissions. Leave unset/false until the SJ
+          # submit flow is mapped + validated (submit_sj.py); dry-run screenshots only.
+          SJ_SUBMIT_LIVE: ${{ vars.SJ_SUBMIT_LIVE }}

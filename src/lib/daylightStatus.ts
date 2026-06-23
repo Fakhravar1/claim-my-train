@@ -1,17 +1,31 @@
 /**
- * Delay → status tier, ported from the design prototype's data.js `statusOf`
- * (the thresholds are the design's visual buckets, NOT the claim rule — the
- * authoritative eligibility flag is `is_claimable`, computed in fct_journeys
- * from the claim_authorities seed). We deliberately show NO kr amount: the
- * backend has no compensation valuation yet (deferred to dim_compensation_rules,
- * CLAUDE.md §9 v3), so a number here would be invented.
+ * Delay → status tier. These are VISUAL buckets, NOT the binding claim rule
+ * (that's `public.claim_eligibility(...)`, resolved per operator + route at filing).
+ * But the threshold a journey is measured against is DISTANCE-DEPENDENT, so the buckets
+ * are too: a route >= 150 km falls under EU 2021/782 (compensation from 60 min), a
+ * shorter route under the Swedish regional regime (Lag 2015:953, from 20 min). Without
+ * this, a 615 km SJ train would be mislabelled "Berättigad" at 25 min. We deliberately
+ * show NO kr amount (no valuation yet — CLAUDE.md §9 v3), so a number would be invented.
+ *
+ * Note: this is operator-agnostic (distance picks the regime). Skånetrafiken voluntarily
+ * pays from 20 min even on its rare >150 km routes, so the long-haul tier slightly
+ * UNDER-shows for them — the safe direction (never over-promises eligibility).
  */
 export type DelayStatus = "ontime" | "minor" | "near" | "eligible" | "severe";
 
-export function statusOf(delayMin: number): DelayStatus {
-  if (delayMin >= 40) return "severe";
-  if (delayMin >= 20) return "eligible";
-  if (delayMin >= 15) return "near"; // strax under gränsen
+const REGIONAL_TIERS = { near: 15, eligible: 20, severe: 40 }; // < 150 km — Lag 2015:953
+const LONG_HAUL_TIERS = { near: 50, eligible: 60, severe: 120 }; // >= 150 km — EU 2021/782
+
+/** The eligibility thresholds (minutes) for a journey's legal regime, by route distance. */
+export function tiersFor(routeKm?: number | null) {
+  return routeKm != null && routeKm >= 150 ? LONG_HAUL_TIERS : REGIONAL_TIERS;
+}
+
+export function statusOf(delayMin: number, routeKm?: number | null): DelayStatus {
+  const t = tiersFor(routeKm);
+  if (delayMin >= t.severe) return "severe";
+  if (delayMin >= t.eligible) return "eligible";
+  if (delayMin >= t.near) return "near"; // strax under gränsen
   if (delayMin >= 4) return "minor";
   return "ontime";
 }
@@ -48,7 +62,8 @@ const WORDS: Record<DelayStatus, string> = {
  */
 export function statusMeta(
   delayMinutes: number | null | undefined,
-  cancelled = false
+  cancelled = false,
+  routeKm?: number | null
 ): StatusMeta {
   if (cancelled) {
     return {
@@ -64,7 +79,7 @@ export function statusMeta(
     };
   }
   const minutes = Math.max(0, Math.round(delayMinutes ?? 0));
-  const status = statusOf(minutes);
+  const status = statusOf(minutes, routeKm);
   const label = minutes === 0 ? "I tid" : "+" + minutes + " min";
   const eligible = status === "eligible" || status === "severe";
   // The chip leads with the eligibility word only where it's actionable.

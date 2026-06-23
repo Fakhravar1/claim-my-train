@@ -27,6 +27,7 @@ import {
   PURCHASING_OPERATORS,
   purchasingOperatorLabel,
   isSupportedPurchasingOperator,
+  purchasingOperatorClaimUrl,
 } from "@/lib/claimProfileValidation";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import StationCombobox from "@/components/StationCombobox";
@@ -669,7 +670,14 @@ const Settings = () => {
                   {errors.purchasingOperator && (
                     <p className="text-sm text-destructive">{errors.purchasingOperator}</p>
                   )}
-                  {purchasingOperator && !isSupportedPurchasingOperator(purchasingOperator) && (
+                  {purchasingOperator && !isSupportedPurchasingOperator(purchasingOperator) && purchasingOperatorClaimUrl(purchasingOperator) && (
+                    <div className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                      {purchasingOperatorLabel(purchasingOperator)} hanterar förseningsersättning på sin egen sida.
+                      Vi visar dina förseningar, men ansökan görs via {purchasingOperatorLabel(purchasingOperator)}:s
+                      formulär (vi länkar dit från förseningssidorna).
+                    </div>
+                  )}
+                  {purchasingOperator && !isSupportedPurchasingOperator(purchasingOperator) && !purchasingOperatorClaimUrl(purchasingOperator) && (
                     <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                       Obs: ansökningar stöds inte för {purchasingOperatorLabel(purchasingOperator)} ännu,
                       så du kommer inte kunna ansöka från förseningssidorna med detta val.
