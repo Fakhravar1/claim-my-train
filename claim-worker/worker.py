@@ -81,8 +81,10 @@ def handle_sj(sb, claim: dict) -> None:
 
     result = submit_sj(claim, profile, live=live)
 
-    # Stash the form screenshot in the private bucket for human review (selector spike +
-    # the user's pre-authorization look at what we'd submit).
+    # Stash the form screenshot in the private bucket for human review (the user's
+    # pre-authorization look at what we'd submit / the post-submit confirmation). Store
+    # its path in pdf_path so the frontend can show it (same column the PDF path uses).
+    shot_path = None
     if result.get("screenshot"):
         shot_path = f'{claim["user_id"]}/{cid}-sj.png'
         sb.storage.from_(BUCKET).upload(
@@ -94,14 +96,15 @@ def handle_sj(sb, claim: dict) -> None:
     if result.get("already_claimed"):
         # SJ reports a claim already exists for this booking (the /redan-ansokt/ page).
         sb.table("claims").update(
-            {"status": "sj_already_claimed", "error_message": None}
+            {"status": "sj_already_claimed", "error_message": None, "pdf_path": shot_path}
         ).eq("id", cid).execute()
         print(f"  {cid}: sj -> already claimed at SJ")
     elif result.get("error"):
         # SJ rejected the inputs (e.g. no matching journey = wrong booking/email). Record
         # the user-facing message so the UI can prompt them to fix booking_reference/email.
         sb.table("claims").update(
-            {"status": "error", "error_message": result.get("message") or result["error"]}
+            {"status": "error", "error_message": result.get("message") or result["error"],
+             "pdf_path": shot_path}
         ).eq("id", cid).execute()
         print(f"  {cid}: sj -> {result['error']}")
     elif result.get("submitted"):
@@ -111,13 +114,14 @@ def handle_sj(sb, claim: dict) -> None:
                 "external_reference": result.get("external_reference"),
                 "submitted_at": datetime.now(timezone.utc).isoformat(),
                 "error_message": None,
+                "pdf_path": shot_path,
             }
         ).eq("id", cid).execute()
         print(f"  {cid}: sj -> submitted (ref {result.get('external_reference')})")
     else:
         # Dry-run: hold for the user to review the screenshot and authorize a real submit.
         sb.table("claims").update(
-            {"status": "awaiting_sj_authorization", "error_message": None}
+            {"status": "awaiting_sj_authorization", "error_message": None, "pdf_path": shot_path}
         ).eq("id", cid).execute()
         print(f"  {cid}: sj -> dry-run (awaiting authorization)")
 

@@ -57,7 +57,9 @@ const toIsoDate = (value: string | null | undefined) => {
 const CLAIM_STATUS_META: Record<string, { label: string; className: string }> = {
   pending: { label: "Väntar", className: "border-amber-300 bg-amber-50 text-amber-900" },
   generated: { label: "Formulär klart", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
+  awaiting_sj_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   submitted: { label: "Inskickad", className: "border-sky-300 bg-sky-50 text-sky-900" },
+  sj_already_claimed: { label: "Redan ansökt hos SJ", className: "border-sky-300 bg-sky-50 text-sky-900" },
   error: { label: "Fel", className: "border-destructive/40 bg-destructive/10 text-destructive" },
 };
 
@@ -87,6 +89,29 @@ const claimDelayLabel = (bucket: string | null, cancelled: boolean) => {
     default: return "Försening";
   }
 };
+
+/** Short-lived signed-URL preview of a claim artifact in the private `claims` bucket
+ *  (the SJ dry-run / confirmation screenshot stored on claims.pdf_path). */
+function ClaimShot({ path }: { path: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    let active = true;
+    supabase.storage
+      .from("claims")
+      .createSignedUrl(path, 600)
+      .then(({ data }) => { if (active) setUrl(data?.signedUrl ?? null); });
+    return () => { active = false; };
+  }, [path]);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt="Förhandsgranskning av SJ-formuläret"
+      className="w-full rounded-lg border border-border/60"
+    />
+  );
+}
 
 const Settings = () => {
   useDaylightStyles();
@@ -150,6 +175,53 @@ const Settings = () => {
       });
     } finally {
       setOutcomeSavingId(null);
+    }
+  };
+
+  // SJ review→authorize: the worker dry-runs an SJ claim to "Välj resa" and screenshots it
+  // (status awaiting_sj_authorization). Authorizing flips it to sj_authorized; the worker
+  // then really submits (when SJ_SUBMIT_LIVE is on). Both updates are own-row (claims RLS).
+  const [sjBusyId, setSjBusyId] = useState<string | null>(null);
+  const [sjEdit, setSjEdit] = useState<{ id: string; booking: string; email: string } | null>(null);
+
+  const authorizeSj = async (id: string) => {
+    setSjBusyId(id);
+    try {
+      const { error } = await supabase
+        .from("claims")
+        .update({ status: "sj_authorized", error_message: null } as never)
+        .eq("id", id);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["my-claims"] });
+      toast({ title: "Skickas in till SJ", description: "Vi skickar in din ansökan vid nästa körning." });
+    } catch (error) {
+      toast({ title: "Kunde inte skicka in", description: error instanceof Error ? error.message : "Misslyckades", variant: "destructive" });
+    } finally {
+      setSjBusyId(null);
+    }
+  };
+
+  // Retry after SJ rejected the inputs ("ingen matchande resa"): update booking/email and
+  // reset to pending so the worker re-attempts the lookup.
+  const retrySj = async (id: string, booking: string, email: string) => {
+    setSjBusyId(id);
+    try {
+      const { error } = await supabase
+        .from("claims")
+        .update({
+          booking_reference: booking.trim().toUpperCase(),
+          booking_email: email.trim(),
+          status: "pending",
+          error_message: null,
+        } as never)
+        .eq("id", id);
+      if (error) throw error;
+      setSjEdit(null);
+      await queryClient.invalidateQueries({ queryKey: ["my-claims"] });
+    } catch (error) {
+      toast({ title: "Kunde inte spara", description: error instanceof Error ? error.message : "Misslyckades", variant: "destructive" });
+    } finally {
+      setSjBusyId(null);
     }
   };
   const stopOptions = useMemo(
@@ -1102,6 +1174,64 @@ const Settings = () => {
 
                           {claim.status === "error" && claim.error_message && (
                             <p className="text-xs text-destructive">{claim.error_message}</p>
+                          )}
+
+                          {/* SJ: review the dry-run, then authorize the real submission. */}
+                          {claim.status === "awaiting_sj_authorization" && (
+                            <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                              <p className="text-xs text-amber-900">
+                                Så här långt fyller vi i hos SJ. Stämmer resan? Godkänn så skickar vi in ansökan åt dig.
+                              </p>
+                              <ClaimShot path={claim.pdf_path} />
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={sjBusyId === claim.id}
+                                onClick={() => void authorizeSj(claim.id)}
+                              >
+                                {sjBusyId === claim.id ? "Skickar…" : "Godkänn och skicka in till SJ"}
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* SJ: rejected inputs → let the user fix booking/email and retry. */}
+                          {claim.status === "error" && claim.purchasing_operator === "sj" && (
+                            sjEdit?.id === claim.id ? (
+                              <div className="space-y-2 rounded-lg border border-border/60 p-3">
+                                <Input
+                                  value={sjEdit.booking}
+                                  onChange={(e) => setSjEdit({ ...sjEdit, booking: e.target.value })}
+                                  placeholder="Boknings- eller biljettnummer"
+                                />
+                                <Input
+                                  value={sjEdit.email}
+                                  onChange={(e) => setSjEdit({ ...sjEdit, email: e.target.value })}
+                                  placeholder="E-post eller mobilnummer (samma som vid köpet)"
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={sjBusyId === claim.id}
+                                    onClick={() => void retrySj(claim.id, sjEdit.booking, sjEdit.email)}
+                                  >
+                                    {sjBusyId === claim.id ? "Sparar…" : "Spara och försök igen"}
+                                  </Button>
+                                  <Button type="button" size="sm" variant="ghost" onClick={() => setSjEdit(null)}>
+                                    Avbryt
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSjEdit({ id: claim.id, booking: claim.booking_reference ?? "", email: claim.booking_email ?? "" })}
+                              >
+                                Uppdatera uppgifter och försök igen
+                              </Button>
+                            )
                           )}
 
                           {/* Outcome controls */}
