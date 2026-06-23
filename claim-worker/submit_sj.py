@@ -123,17 +123,26 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
             # FINAL submit — files the claim with SJ. Reached only under both gates (§8).
             page.click("button:has-text('Slutför ansökan')", timeout=8000)
             page.wait_for_load_state("networkidle", timeout=30000)
+            # The confirmation renders behind an async "Ett ögonblick…" spinner — wait for it
+            # to clear before screenshotting, or the audit shot catches only the loader.
+            try:
+                page.wait_for_function(
+                    "!/ett \\u00f6gonblick/i.test(document.body.innerText)", timeout=20000
+                )
+            except Exception:
+                pass
+            page.wait_for_timeout(1500)
             confirm_shot = page.screenshot(full_page=True)
 
-            # Best-effort case/reference id from the confirmation page. The exact selector is
-            # UNVERIFIED (no real submission done in dev) — capture text that looks like a
-            # reference; the screenshot is the fallback audit trail. TODO: confirm against a
-            # real confirmation page and tighten this.
+            # Best-effort case/reference id from the confirmation page. Verified on the first
+            # real submission 2026-06-23 that "Slutför ansökan" succeeds; the exact reference
+            # format is still UNCONFIRMED (that run screenshotted mid-load). The screenshot is
+            # the audit fallback regardless of whether the regex matches.
             ref = None
             try:
                 import re as _re
                 body = page.locator("body").inner_text(timeout=5000)
-                m = _re.search(r"(?:ärende|referens|case)[^A-Z0-9]{0,12}([A-Z0-9]{6,})", body, _re.I)
+                m = _re.search(r"(?:ärende|referens|case|nummer)[^A-Z0-9]{0,15}([A-Z0-9]{6,})", body, _re.I)
                 ref = m.group(1) if m else None
             except Exception:
                 pass
