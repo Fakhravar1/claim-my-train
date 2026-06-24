@@ -394,7 +394,12 @@
 @media(max-width:720px){
   .cmt-daylight .board{padding:1rem .9rem .85rem;}
   .cmt-daylight .board__head{gap:.6rem;}
-  .cmt-daylight .search{min-width:0;max-width:100%;width:100%;}
+  /* search drops onto its own full-width line below the title (board__head
+     wraps) so the placeholder isn't squeezed down to "Sö…" */
+  .cmt-daylight .search{min-width:0;max-width:100%;width:100%;flex:1 1 100%;}
+  /* station suggestions wrap instead of ellipsising — long names like
+     "Flemingsberg stn viadukten (Huddinge kn)" stay fully readable */
+  .cmt-daylight .stationfield__opt{white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;}
   /* stack Från / Till / Datum vertically full-width with strong labels */
   .cmt-daylight .board__controls{flex-direction:column;gap:.55rem;align-items:stretch;}
   .cmt-daylight .board__control{flex:1 1 auto;width:100%;}
@@ -499,19 +504,33 @@
   .cmt-daylight .row{grid-template-columns:56px minmax(0,1fr) auto auto auto;}
 }
 
-/* mobile: stack to two compact rows (time spine spans both) */
+/* mobile: fully stacked rows. The old layout shared grid columns between the
+   route and the wide "Ansök om ersättning" button (auto-sized, nowrap), which
+   stole all the width and collapsed station names to a single letter ("K", "B").
+   Here each part gets its own full-width band, so route names are never
+   truncated and the action button can't squeeze them. */
 @media(max-width:720px){
   .cmt-daylight .row{
-    grid-template-columns:44px minmax(0,1fr) auto;
-    grid-template-areas:"time route status" "time line action";
-    gap:.2rem .6rem;
-    padding:.55rem .75rem;
+    grid-template-columns:1fr auto;
+    grid-template-areas:
+      "time   status"
+      "route  route"
+      "line   line"
+      "action action";
+    align-items:center;
+    gap:.45rem .6rem;
+    padding:.7rem .85rem;
   }
   .cmt-daylight .row__time{grid-area:time;}
+  .cmt-daylight .row__status{grid-area:status;justify-self:end;flex-direction:row;align-items:center;gap:.5rem;}
   .cmt-daylight .row__route{grid-area:route;}
   .cmt-daylight .row__line{grid-area:line;}
-  .cmt-daylight .row__status{grid-area:status;justify-self:end;}
-  .cmt-daylight .row__action{grid-area:action;justify-self:end;gap:.4rem;}
-  .cmt-daylight .row__route .st{white-space:nowrap;}
+  .cmt-daylight .row__action{grid-area:action;justify-self:stretch;gap:.5rem;}
+  .cmt-daylight .row__action .btn{flex:1;}
+  /* station names wrap to as many lines as needed — never abbreviated */
+  .cmt-daylight .row__route .st{
+    white-space:normal;overflow:visible;text-overflow:clip;
+    word-break:break-word;max-width:100%;
+  }
 }
 
