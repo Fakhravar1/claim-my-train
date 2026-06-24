@@ -220,6 +220,8 @@ export type Database = {
           id: string
           is_period_ticket: boolean
           last_name: string | null
+          account_number: string | null
+          clearing_number: string | null
           payout_method: string | null
           postal_code: string | null
           preferred_from_stop_id: string | null
@@ -252,6 +254,8 @@ export type Database = {
           id: string
           is_period_ticket?: boolean
           last_name?: string | null
+          account_number?: string | null
+          clearing_number?: string | null
           payout_method?: string | null
           postal_code?: string | null
           preferred_from_stop_id?: string | null
@@ -284,6 +288,8 @@ export type Database = {
           id?: string
           is_period_ticket?: boolean
           last_name?: string | null
+          account_number?: string | null
+          clearing_number?: string | null
           payout_method?: string | null
           postal_code?: string | null
           preferred_from_stop_id?: string | null

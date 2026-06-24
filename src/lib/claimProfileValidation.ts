@@ -78,6 +78,9 @@ export type ClaimProfileInput = {
   claimTicketId: string;
   payoutMethod: string;
   purchasingOperator: string;
+  // Only validated when payoutMethod === 'bank'.
+  clearingNumber?: string;
+  accountNumber?: string;
 };
 
 export type ClaimProfileErrors = Partial<Record<keyof ClaimProfileInput, string>>;
@@ -181,6 +184,28 @@ export const validateRequiredText = (raw: string, label: string): string | null 
   return null;
 };
 
+// Swedish bank clearing number: 4 digits, except Swedbank/Sparbanken which use a
+// 5th digit (often written 8327-9). Account number length varies a lot by bank
+// (7–11 digits in practice), so we keep the floor/ceiling loose and only catch
+// obvious junk — the operator's form does the authoritative bank validation.
+export const validateClearingNumber = (raw: string): string | null => {
+  const digits = raw.trim().replace(/[\s-]/g, "");
+  if (!digits) return "Clearingnummer krävs för utbetalning till bank.";
+  if (!/^\d{4,5}$/.test(digits)) {
+    return "Clearingnummer är 4 siffror (5 för Swedbank/Sparbanken), t.ex. 8327-9.";
+  }
+  return null;
+};
+
+export const validateAccountNumber = (raw: string): string | null => {
+  const digits = raw.trim().replace(/[\s-]/g, "");
+  if (!digits) return "Kontonummer krävs för utbetalning till bank.";
+  if (!/^\d{7,11}$/.test(digits)) {
+    return "Kontonummer ser ut att vara fel — ange 7–11 siffror (utan clearingnummer).";
+  }
+  return null;
+};
+
 export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErrors => {
   const errors: ClaimProfileErrors = {};
 
@@ -215,6 +240,13 @@ export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErro
     errors.payoutMethod = "Välj hur du vill få din ersättning.";
   } else if (!isPayoutMethod(input.payoutMethod)) {
     errors.payoutMethod = "Utbetalningssätt måste vara Bank, SMS eller E-post.";
+  } else if (input.payoutMethod === "bank") {
+    // Bank payout needs an account (e.g. SL's /utbetalning step). Only required
+    // for the bank method — SMS/e-post Värdekod don't use a bank account.
+    const clearing = validateClearingNumber(input.clearingNumber ?? "");
+    if (clearing) errors.clearingNumber = clearing;
+    const account = validateAccountNumber(input.accountNumber ?? "");
+    if (account) errors.accountNumber = account;
   }
 
   // Required to SAVE: the user must declare a vendor. Whether that vendor is

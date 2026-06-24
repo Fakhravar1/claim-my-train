@@ -236,6 +236,8 @@ const Settings = () => {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [payoutMethod, setPayoutMethod] = useState("");
+  const [clearingNumber, setClearingNumber] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [claimEmail, setClaimEmail] = useState("");
   const [claimMobile, setClaimMobile] = useState("");
   const [claimTicketId, setClaimTicketId] = useState("");
@@ -288,6 +290,8 @@ const Settings = () => {
     setFirstName(profile?.first_name ?? "");
     setLastName(profile?.last_name ?? "");
     setPayoutMethod(profile?.payout_method ?? "");
+    setClearingNumber(profile?.clearing_number ?? "");
+    setAccountNumber(profile?.account_number ?? "");
     setClaimEmail(profile?.claim_email ?? profile?.email ?? "");
     setClaimMobile(profile?.claim_mobile ?? "");
     setClaimTicketId(profile?.claim_ticket_id ?? "");
@@ -372,6 +376,8 @@ const Settings = () => {
       claimTicketId,
       payoutMethod,
       purchasingOperator,
+      clearingNumber,
+      accountNumber,
     });
     setErrors(validationErrors);
 
@@ -383,7 +389,7 @@ const Settings = () => {
     if (Object.keys(validationErrors).length > 0 || signatureMissing) {
       // Surface the tab that holds the first problem. Ticket ID lives on the
       // ticket tab; everything else (incl. signature) is on the personal tab.
-      const ticketTabKeys = new Set(["claimTicketId", "payoutMethod", "purchasingOperator"]);
+      const ticketTabKeys = new Set(["claimTicketId", "payoutMethod", "purchasingOperator", "clearingNumber", "accountNumber"]);
       const allOnTicketTab =
         !signatureMissing &&
         Object.keys(validationErrors).length > 0 &&
@@ -432,6 +438,10 @@ const Settings = () => {
           postal_code: postalCode || null,
           city: city || null,
           payout_method: payoutMethod || null,
+          // Bank account only meaningful for the bank method; clear it otherwise
+          // so a stale account can't ride along after switching to SMS/e-post.
+          clearing_number: payoutMethod === "bank" ? clearingNumber.trim() || null : null,
+          account_number: payoutMethod === "bank" ? accountNumber.trim() || null : null,
           claims_done_count: Math.max(0, claimsDoneCount),
           is_period_ticket: isPeriodTicket,
           ticket_valid_until: isPeriodTicket ? ticketValidUntil || null : null,
@@ -804,6 +814,46 @@ const Settings = () => {
                     <p className="text-sm text-destructive">{errors.payoutMethod}</p>
                   )}
                 </div>
+
+                {payoutMethod === "bank" && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr]">
+                    <div className="space-y-2">
+                      <Label htmlFor="clearing-number">
+                        Clearingnummer <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="clearing-number"
+                        inputMode="numeric"
+                        placeholder="8327-9"
+                        value={clearingNumber}
+                        onChange={(e) => setClearingNumber(e.target.value)}
+                        aria-invalid={Boolean(errors.clearingNumber)}
+                      />
+                      {errors.clearingNumber && (
+                        <p className="text-sm text-destructive">{errors.clearingNumber}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="account-number">
+                        Kontonummer <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="account-number"
+                        inputMode="numeric"
+                        placeholder="1234567890"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        aria-invalid={Boolean(errors.accountNumber)}
+                      />
+                      {errors.accountNumber && (
+                        <p className="text-sm text-destructive">{errors.accountNumber}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Anges utan clearingnummer. Används för utbetalning till bank (t.ex. SL:s ersättning).
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/70 p-3">
                   <div>
