@@ -12,6 +12,7 @@ import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
 import { SjClaimModal } from "@/components/daylight/SjClaimModal";
+import { SlShortcutModal } from "@/components/daylight/SlShortcutModal";
 import { RegionalClaimModal } from "@/components/daylight/RegionalClaimModal";
 import { useStationAuthorities } from "@/hooks/useStationAuthorities";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
@@ -329,6 +330,13 @@ export default function DaylightApp() {
         // gets the focused SJ pop-up (booking + purchase email).
         if (user && profile?.purchasing_operator === "sj" && isRealJourney) {
           return <SjClaimModal journey={journey} onClose={() => setClaim(null)} />;
+        }
+
+        // SL files on its own BankID-gated form. On iPhone we hand the journey to the
+        // "Qvitta" iOS Shortcut (deep link → stash → open SL → re-run to autofill); on
+        // other devices the modal just links out to SL's form. No claims row either way.
+        if (user && profile?.purchasing_operator === "sl" && isRealJourney) {
+          return <SlShortcutModal journey={journey} onClose={() => setClaim(null)} />;
         }
 
         // Öresundståg is origin-routed: the claim goes to the länstrafikbolag of the county
