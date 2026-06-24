@@ -41,7 +41,7 @@ export const REGION_AUTHORITIES: Record<RegionAuthorityKey, {
   skanetrafiken:    { label: "Skånetrafiken",          county: "Skåne (och Köpenhamn)", externalClaimUrl: null, inApp: true },
   hallandstrafiken: { label: "Hallandstrafiken",       county: "Halland",          externalClaimUrl: "https://hallandstrafiken.se/reklamation-och-forseningsersattning", inApp: false },
   blekingetrafiken: { label: "Blekingetrafiken",       county: "Blekinge",         externalClaimUrl: "https://www.blekingetrafiken.se/kundservice/forseningsersattning/", inApp: false },
-  kalmar:           { label: "Kalmar länstrafik",      county: "Kalmar län",       externalClaimUrl: "https://kalmarlanstrafik.se/Kundservice/ansok-forseningsersattning-eller-aterbetalningreklamation/", inApp: false },
+  kalmar:           { label: "Kalmar länstrafik",      county: "Kalmar län",       externalClaimUrl: "https://kalmarlanstrafik.se/Kundservice/ansok-om-forseningsersattning/", inApp: false },
   kronoberg:        { label: "Länstrafiken Kronoberg", county: "Kronoberg",        externalClaimUrl: "https://lanstrafikenkron.se/forseningsersattning", inApp: false },
   vasttrafik:       { label: "Västtrafik",             county: "Västra Götaland",  externalClaimUrl: "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning-oresundstagbiljett/", inApp: false },
 };
