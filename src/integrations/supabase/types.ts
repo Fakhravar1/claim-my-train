@@ -470,6 +470,7 @@ export type Database = {
       ref_stations: {
         Row: {
           advertised: boolean | null
+          county_no: number | null
           lat: number | null
           lon: number | null
           match_distance_m: number | null
@@ -482,6 +483,7 @@ export type Database = {
         }
         Insert: {
           advertised?: boolean | null
+          county_no?: number | null
           lat?: number | null
           lon?: number | null
           match_distance_m?: number | null
@@ -494,6 +496,7 @@ export type Database = {
         }
         Update: {
           advertised?: boolean | null
+          county_no?: number | null
           lat?: number | null
           lon?: number | null
           match_distance_m?: number | null
@@ -627,6 +630,14 @@ export type Database = {
           route_distance_km: number | null
           service_number: string | null
           transport_mode: string | null
+        }
+        Relationships: []
+      }
+      v_station_claim_authority: {
+        Row: {
+          county_no: number | null
+          region_authority_key: string | null
+          stop_id: string | null
         }
         Relationships: []
       }

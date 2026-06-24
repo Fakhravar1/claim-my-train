@@ -34,11 +34,17 @@ export function buildClaimPayload(
   // account email in the pop-up; NULL falls back to the profile in the worker.
   bookingEmail?: string | null
 ) {
+  // Öresundståg is origin-routed: a non-Skåne origin is sent to its län's own form BEFORE
+  // any claims row is created, so an Öresundståg claim that actually reaches in-app filing
+  // is always Skåne/Köpenhamn-origin -> the Skånetrafiken PDF. Snapshot it as skanetrafiken
+  // so the worker's existing handler files it correctly.
+  const filingOperator = purchasingOperator === "oresundstag" ? "skanetrafiken" : purchasingOperator;
+
   return {
     user_id: userId,
     consented_at: new Date().toISOString(),
     signature_path: signaturePath ?? null,
-    purchasing_operator: purchasingOperator ?? null,
+    purchasing_operator: filingOperator ?? null,
     booking_reference: bookingReference?.trim() || null,
     booking_email: bookingEmail?.trim() || null,
     journey_key: journey.journey_key ?? "",

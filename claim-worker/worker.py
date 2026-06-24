@@ -128,6 +128,10 @@ def handle_sj(sb, claim: dict) -> None:
 
 HANDLERS = {
     "skanetrafiken": handle_skanetrafiken,
+    # Öresundståg claims that reach the worker are Skåne/Köpenhamn-origin (non-Skåne origins
+    # are routed to their län's own form in the frontend and never create a claims row). The
+    # frontend already snapshots them as 'skanetrafiken'; this is a defensive alias.
+    "oresundstag": handle_skanetrafiken,
     "sj": handle_sj,
 }
 

@@ -12,6 +12,8 @@ import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
 import { SjClaimModal } from "@/components/daylight/SjClaimModal";
+import { RegionalClaimModal } from "@/components/daylight/RegionalClaimModal";
+import { useStationAuthorities } from "@/hooks/useStationAuthorities";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
 import { WatchModal } from "@/components/daylight/WatchModal";
 import { usePendingClaimCompletion } from "@/hooks/usePendingClaimCompletion";
@@ -50,11 +52,17 @@ export default function DaylightApp() {
   const PAGE = 10;
   const [visibleCount, setVisibleCount] = useState(PAGE);
   const [claim, setClaim] = useState<ClaimInitial | null>(null);
+  // Öresundståg: when the user overrides the derived authority to Skånetrafiken (in-app),
+  // hand off from RegionalClaimModal to the standard ClaimModal. Reset whenever the claim
+  // target changes/closes.
+  const [regionalInApp, setRegionalInApp] = useState(false);
+  useEffect(() => { if (!claim) setRegionalInApp(false); }, [claim]);
   const [info, setInfo] = useState<Journey | null>(null);
   const [watch, setWatch] = useState<WatchTarget | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
   const { data: stations = [] } = useStations();
+  const { data: stationAuthorities } = useStationAuthorities();
   const stationOptions = useMemo(
     () =>
       stations
@@ -313,16 +321,37 @@ export default function DaylightApp() {
       </main>
       <Footer />
 
-      {claim && (
+      {claim && (() => {
+        const isRealJourney = !(claim as { blank?: boolean }).blank;
+        const journey = claim as Journey;
+
         // SJ trips aren't standing commutes — a signed-in SJ user claiming a known journey
-        // gets the focused SJ pop-up (booking + purchase email). Blank/login entries and
-        // every other operator use the standard multi-step ClaimModal.
-        user && profile?.purchasing_operator === "sj" && !(claim as { blank?: boolean }).blank ? (
-          <SjClaimModal journey={claim as Journey} onClose={() => setClaim(null)} />
-        ) : (
-          <ClaimModal initial={claim} onClose={() => setClaim(null)} />
-        )
-      )}
+        // gets the focused SJ pop-up (booking + purchase email).
+        if (user && profile?.purchasing_operator === "sj" && isRealJourney) {
+          return <SjClaimModal journey={journey} onClose={() => setClaim(null)} />;
+        }
+
+        // Öresundståg is origin-routed: the claim goes to the länstrafikbolag of the county
+        // where the journey started. Skåne/Köpenhamn-origin (region key skanetrafiken) files
+        // in-app via ClaimModal below; other counties confirm + link out via RegionalClaimModal.
+        if (user && profile?.purchasing_operator === "oresundstag" && isRealJourney && !regionalInApp) {
+          const key = (journey.origin_stop_id && stationAuthorities?.get(journey.origin_stop_id)) || "skanetrafiken";
+          if (key !== "skanetrafiken") {
+            return (
+              <RegionalClaimModal
+                journey={journey}
+                derivedKey={key}
+                onUseInApp={() => setRegionalInApp(true)}
+                onClose={() => setClaim(null)}
+              />
+            );
+          }
+        }
+
+        // Blank/login entries, Skånetrafiken/Pågatåg, and Öresundståg-in-Skåne use the
+        // standard multi-step ClaimModal (Öresundståg files as skanetrafiken — see buildClaimPayload).
+        return <ClaimModal initial={claim} onClose={() => setClaim(null)} />;
+      })()}
       {info && <EligibilityModal dep={info} onClose={() => setInfo(null)} onWatch={watchTrain} />}
       {watch && <WatchModal journey={watch} onClose={() => setWatch(null)} />}
     </div>

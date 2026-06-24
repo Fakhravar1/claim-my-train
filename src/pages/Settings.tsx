@@ -755,6 +755,14 @@ const Settings = () => {
                       så du kommer inte kunna ansöka från förseningssidorna med detta val.
                     </div>
                   )}
+                  {purchasingOperator === "oresundstag" && (
+                    <div className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                      För Öresundståg avgör <span className="font-medium">var resan började</span> vart
+                      ansökan går: vi väljer rätt länstrafikbolag automatiskt när du ansöker. Resor från
+                      Skåne (och Köpenhamn) hanterar vi i appen; för Halland, Blekinge, Kalmar, Kronoberg
+                      och Västra Götaland länkar vi till respektive bolags formulär.
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

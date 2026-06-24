@@ -16,11 +16,39 @@ export const isPayoutMethod = (value: unknown): value is PayoutMethod =>
 // in-app once submit_sj lands; Snälltåget/other inert). Keys per-operator rules (§9 v3).
 export const PURCHASING_OPERATORS = [
   { value: "skanetrafiken", label: "Skånetrafiken (JoJo, app, biljettautomat)", supported: true },
+  // Öresundståg is NOT a single authority: the claim goes to the länstrafikbolag of the
+  // county where the journey STARTED (origin-routed at claim time — see REGION_AUTHORITIES
+  // + v_station_claim_authority). Skåne/Köpenhamn-origin files in-app (Skånetrafiken PDF);
+  // the other counties link out to their own form. `supported` is true so the in-app Skåne
+  // path is allowed — non-Skåne origins are intercepted and sent external before filing.
+  { value: "oresundstag", label: "Öresundståg", supported: true },
   { value: "sl", label: "SL (Stockholm)", supported: false, externalClaimUrl: "https://sl.se/kundservice/forseningsersattning/resan" },
   { value: "sj", label: "SJ", supported: false },
   { value: "snalltaget", label: "Snälltåget", supported: false },
   { value: "other", label: "Annan operatör / vet inte", supported: false },
 ] as const;
+
+// REGIONAL claim authorities for Öresundståg routing. A regional claim goes to the
+// länstrafikbolag of the ORIGIN county (Lag 2015:953, 20-min regime everywhere — only the
+// FORM differs). v_station_claim_authority maps origin_stop_id -> one of these keys; the UI
+// then files in-app (Skånetrafiken) or links out to the bolag's own form. Skåne + all Danish
+// stops resolve to skanetrafiken (Öresundståg's "även för resor från Köpenhamn" rule).
+export type RegionAuthorityKey =
+  | "skanetrafiken" | "hallandstrafiken" | "blekingetrafiken" | "kalmar" | "kronoberg" | "vasttrafik";
+export const REGION_AUTHORITIES: Record<RegionAuthorityKey, {
+  label: string; county: string; externalClaimUrl: string | null; inApp: boolean;
+}> = {
+  skanetrafiken:    { label: "Skånetrafiken",          county: "Skåne (och Köpenhamn)", externalClaimUrl: null, inApp: true },
+  hallandstrafiken: { label: "Hallandstrafiken",       county: "Halland",          externalClaimUrl: "https://hallandstrafiken.se/reklamation-och-forseningsersattning", inApp: false },
+  blekingetrafiken: { label: "Blekingetrafiken",       county: "Blekinge",         externalClaimUrl: "https://www.blekingetrafiken.se/kundservice/forseningsersattning/", inApp: false },
+  kalmar:           { label: "Kalmar länstrafik",      county: "Kalmar län",       externalClaimUrl: "https://kalmarlanstrafik.se/Kundservice/ansok-forseningsersattning-eller-aterbetalningreklamation/", inApp: false },
+  kronoberg:        { label: "Länstrafiken Kronoberg", county: "Kronoberg",        externalClaimUrl: "https://lanstrafikenkron.se/forseningsersattning", inApp: false },
+  vasttrafik:       { label: "Västtrafik",             county: "Västra Götaland",  externalClaimUrl: "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning-oresundstagbiljett/", inApp: false },
+};
+export const isRegionAuthorityKey = (v: unknown): v is RegionAuthorityKey =>
+  typeof v === "string" && Object.prototype.hasOwnProperty.call(REGION_AUTHORITIES, v);
+export const regionAuthority = (v: string | null | undefined) =>
+  (v && isRegionAuthorityKey(v)) ? REGION_AUTHORITIES[v] : null;
 export type PurchasingOperator = (typeof PURCHASING_OPERATORS)[number]["value"];
 /** Operators whose claims the app files IN-APP, derived from the `supported` flag. */
 export const SUPPORTED_PURCHASING_OPERATORS: readonly PurchasingOperator[] =
