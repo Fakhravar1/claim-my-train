@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { useStartClaim } from "@/hooks/useStartClaim";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
@@ -49,6 +50,7 @@ export function SjClaimModal({
   const [touched, setTouched] = useState(false);
   const [phase, setPhase] = useState<"form" | "done">("form");
   const [serverError, setServerError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const meta = useMemo(
     () => statusMeta(journey.destination_delay_minutes, Boolean(journey.canceled), journey.route_distance_km),
@@ -59,7 +61,7 @@ export function SjClaimModal({
     ? "Boknings- eller biljettnumret ska vara 8 eller 12 tecken." : null;
   const contactErr = touched && !isValidContact(contact)
     ? "Ange e-posten eller mobilnumret du använde vid köpet." : null;
-  const canSubmit = isValidBooking(booking) && isValidContact(contact) && !pending;
+  const canSubmit = isValidBooking(booking) && isValidContact(contact) && !pending && !checking;
 
   const dateLong = (iso: string | null | undefined) =>
     iso ? new Date(iso + "T00:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric" }) : "—";
@@ -72,6 +74,31 @@ export function SjClaimModal({
       navigate("/settings");
       return;
     }
+
+    // Validate booking + email against SJ synchronously (sj-lookup edge function) so a wrong
+    // value is caught HERE, before we store a claim. A transient lookup error doesn't block
+    // filing — the async worker re-checks (no_match) as a backstop.
+    setChecking(true);
+    const { data, error } = await supabase.functions.invoke("sj-lookup", {
+      body: { booking: cleanBooking(booking), contact: contact.trim() },
+    });
+    setChecking(false);
+    if (!error && data) {
+      if (data.status === "not_found") {
+        setServerError("SJ hittade ingen resa för det boknings-/biljettnumret och den e-post/mobil du angav. Kontrollera uppgifterna och försök igen.");
+        return;
+      }
+      if (data.status === "already_claimed") {
+        setServerError("Den här bokningen har redan en ansökan hos SJ.");
+        return;
+      }
+      if (data.status === "invalid") {
+        setServerError("Kontrollera boknings- eller biljettnumret (8 eller 12 tecken).");
+        return;
+      }
+      // status "ok" (or a transient "error") → proceed to file.
+    }
+
     const res = await startClaim(
       journey,
       profile?.signature_path ?? null,
@@ -154,7 +181,7 @@ export function SjClaimModal({
           <div className="modal__foot">
             <button className="btn btn--ghost" onClick={onClose}>Avbryt</button>
             <button className="btn btn--accent" disabled={!canSubmit} onClick={() => void submit()}>
-              {pending ? "Skickar…" : "Skicka ansökan"} <CheckIcon width={16} height={16} />
+              {checking ? "Kontrollerar…" : pending ? "Skickar…" : "Skicka ansökan"} <CheckIcon width={16} height={16} />
             </button>
           </div>
         )}
