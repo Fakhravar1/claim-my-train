@@ -70,7 +70,9 @@ export function SlShortcutModal({
       account: bankWillFill ? profile?.account_number ?? "" : "",
       url: SL_FORM_URL,
     };
-    return `shortcuts://run-shortcut?name=Qvitta&input=${encodeURIComponent(JSON.stringify(payload))}`;
+    // Shortcuts URL scheme: `input` selects the SOURCE (text|clipboard); the actual
+    // payload goes in `text`. Passing the JSON directly as `input=` does NOT deliver it.
+    return `shortcuts://run-shortcut?name=Qvitta&input=text&text=${encodeURIComponent(JSON.stringify(payload))}`;
   }, [journey, time, email, bankWillFill, profile]);
 
   const dateLong = (iso: string | null | undefined) =>
