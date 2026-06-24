@@ -12,7 +12,7 @@ import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
 import { SjClaimModal } from "@/components/daylight/SjClaimModal";
-import { SlShortcutModal } from "@/components/daylight/SlShortcutModal";
+import { ShortcutClaimModal } from "@/components/daylight/ShortcutClaimModal";
 import { RegionalClaimModal } from "@/components/daylight/RegionalClaimModal";
 import { useStationAuthorities } from "@/hooks/useStationAuthorities";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
@@ -336,7 +336,20 @@ export default function DaylightApp() {
         // "Qvitta" iOS Shortcut (deep link → stash → open SL → re-run to autofill); on
         // other devices the modal just links out to SL's form. No claims row either way.
         if (user && profile?.purchasing_operator === "sl" && isRealJourney) {
-          return <SlShortcutModal journey={journey} onClose={() => setClaim(null)} />;
+          return <ShortcutClaimModal journey={journey} operator="sl" onClose={() => setClaim(null)} />;
+        }
+
+        // Skånetrafiken's online BankID form — iPhone-only Shortcut autofill, additive to
+        // the in-app PDF flow (ClaimModal) which stays the path on desktop and for anyone
+        // who prefers it. Only intercept the literal 'skanetrafiken' operator (NOT the
+        // Öresundståg-in-Skåne case, which files as skanetrafiken via ClaimModal below).
+        if (
+          user && profile?.purchasing_operator === "skanetrafiken" && isRealJourney &&
+          typeof navigator !== "undefined" &&
+          (/iP(hone|ad|od)/.test(navigator.userAgent) ||
+            (/Macintosh/.test(navigator.userAgent) && "ontouchend" in document))
+        ) {
+          return <ShortcutClaimModal journey={journey} operator="skanetrafiken" onClose={() => setClaim(null)} />;
         }
 
         // Öresundståg is origin-routed: the claim goes to the länstrafikbolag of the county
