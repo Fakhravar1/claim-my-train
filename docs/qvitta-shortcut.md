@@ -1,88 +1,68 @@
-# The "Qvitta" iOS Shortcut (SL autofill)
+# The "Qvitta" iOS Shortcut (operator-agnostic autofill)
 
-How to build the iOS Shortcut that the SL claim flow hands off to. It's a small
-**state machine** with two run-contexts:
+One Shortcut handles every BankID-gated operator (SL, Skånetrafiken, …). It's a
+small **state machine** with two run-contexts:
 
-- **Run 1 — from Qvitta** (deep link `shortcuts://run-shortcut?name=Qvitta&input=<JSON>`):
-  the input is the trip JSON. Save it to a file, open SL in Safari.
-- **Run 2 — from the Safari share sheet** (on the SL form, after BankID): the input
-  is the Safari page. Read the saved JSON, fetch our fill script, run it on the page.
+- **Run 1 — from Qvitta** (deep link `shortcuts://run-shortcut?name=Qvitta&input=text&text=<JSON>`):
+  the input is the trip JSON. Save it, then open the operator's form (the JSON's `url`).
+- **Run 2 — from the Safari share sheet** (on the form, after BankID): read the saved
+  JSON, fetch the operator's fill script (the JSON's `script`), run it on the page.
 
-The shortcut **must be named exactly `Qvitta`** (the deep link targets that name) and
-**must be enabled in the Safari share sheet**.
+**Payload-driven:** the JSON carries `url` (where to open) and `script` (which fill
+script to fetch). So adding an operator needs **no Shortcut change** — just a new edge
+function + a website config row.
 
-## Server endpoint it calls (Run 2)
-
-```
-GET https://jnfwmdirvnqfpfhtipld.supabase.co/functions/v1/sl-fill-script
-```
-
-Returns the autofill JS (versioned server-side, so SL selector fixes never need a
-Shortcut rebuild). It reads `window.__QVITTA__` and fills SL's form. Fill-only — it
-never submits.
+Name it exactly `Qvitta`; enable it in the Safari share sheet.
 
 ## Build steps (Shortcuts app → New Shortcut)
 
-1. **If** — Condition: `Shortcut Input` **contains** `"op":"sl"`
+1. **Get Safari web pages and URLs from Share Sheet** — "If there's no input": **Continue**
+2. **Text** → insert **Shortcut Input** (coerces the input to text)
+3. **If** — `Text` **contains** `"op":"`  ← matches any operator (was `"op":"sl"`)
 
-   **(Run 1 branch — inside the If)**
-   2. **Save File**
-      - File: `Shortcut Input`
-      - Service: iCloud Drive · Ask Where to Save: **OFF**
-      - Destination path: `Shortcuts/qvitta-sl.json`
-      - Overwrite If File Exists: **ON**
-   3. **Open URLs**
-      - URL: `https://sl.se/kundservice/forseningsersattning/resan`
-      - (opens in Safari)
+   **(Run 1 — inside the If)**
+   4. **Save File** — `Shortcut Input` → iCloud Drive, Ask Where to Save **OFF**, path
+      `Shortcuts/qvitta.json`, Overwrite **ON**
+   5. **Get Dictionary from Input** ← input: `Shortcut Input`
+   6. **Get Dictionary Value** — Get **Value** for `url` from the dictionary
+   7. **Open URLs** ← that **Dictionary Value**
 
-   **Otherwise** (Run 2 branch)
-   4. **Get File**
-      - Service: iCloud Drive · Show Document Picker: **OFF**
-      - Path: `Shortcuts/qvitta-sl.json`  → output is the saved JSON text
-      - (rename this magic variable to **SavedTrip** for clarity)
-   5. **Get Contents of URL**
-      - URL: `https://jnfwmdirvnqfpfhtipld.supabase.co/functions/v1/sl-fill-script`
-      - Method: GET
-      - (rename output to **FillScript**)
-   6. **Run JavaScript on Web Page**
-      - (this action automatically takes the Safari page from the share sheet)
-      - Script (insert the two variables where shown):
-        ```js
-        window.__QVITTA__ = SavedTrip;   // ← insert the SavedTrip variable here
-        FillScript                        // ← insert the FillScript variable on its own line
-        completion();
-        ```
-      - i.e. type `window.__QVITTA__ = `, insert **SavedTrip**, type `;` newline,
-        insert **FillScript**, newline, type `completion();`
-   7. **End If**
+   **Otherwise** (Run 2)
+   8. **Get File** — iCloud Drive, Show Document Picker **OFF**, path `Shortcuts/qvitta.json`
+      → rename the output variable **SavedTrip**
+   9. **Get Dictionary from Input** ← input: `SavedTrip`
+   10. **Get Dictionary Value** — Get **Value** for `script` → rename output **ScriptURL**
+   11. **Get Contents of URL** ← `ScriptURL` → rename output **FillScript**
+   12. **Run JavaScript on Web Page** — page input: **Shortcut Input** (the Safari page),
+       script:
+       ```js
+       window.__QVITTA__ = SavedTrip;   // insert SavedTrip
+       FillScript                        // insert FillScript on its own line
+       completion();
+       ```
+   13. **End If**
 
-2. Shortcut settings (the ⓘ / details panel):
-   - **Show in Share Sheet: ON**
-   - Accepted types: **URLs** (and Safari web pages). Turn the rest off if you like.
+14. Shortcut settings: **Show in Share Sheet ON**, accepted types **URLs**.
 
 ## How you use it (per claim)
 
-1. On qvitta.nu (iPhone), open an SL delay → **Ansök** → **Öppna SL via Qvitta**.
-   (First run only: iOS asks permission to run the shortcut / open the URL — allow.)
-2. Log in with **BankID** on SL.
-3. When SL's form shows, open the **Share menu → Qvitta**. Fields fill; a green
-   "Qvitta fyllde i …" banner appears.
-4. If a later wizard step doesn't auto-fill, run **Share → Qvitta** again on that
-   step. (Whether one run covers all steps depends on whether iOS keeps our page
-   script alive across SL's in-page navigation — re-running is the safe fallback.)
-5. **Review every field and submit yourself.** Qvitta never submits for you.
+1. On qvitta.nu (iPhone), open a delay → **Ansök** → **Öppna [operator] via Qvitta**.
+2. Log in with **BankID**.
+3. On the form, **Share menu → Qvitta**. Fields fill; a green banner appears.
+4. If a later step doesn't auto-fill, run **Share → Qvitta** again on that step.
+5. **Review, pick your trip if asked, and submit yourself.** Qvitta never submits.
 
-## What it fills vs. leaves to you
+## Per-operator notes
 
-- **Fills:** journey (from/to via the search field, date, time), reason = Försening,
-  missed-connection = Nej, delay band (from the detected delay), Med SL, and — if you
-  saved bank details in Settings — the payout clearing/account.
-- **You do:** the ticket page (`/biljett` — your SL-app id / card number; we don't
-  have it), the BankID login, and the final submit.
+- **SL** (`sl-fill-script`): 6-step wizard. Fills journey/date/time/reason/delay/Med SL,
+  and bank clearing+account if you saved them in Settings. Ticket page is manual.
+- **Skånetrafiken** (`skanetrafiken-fill-script`): 3 steps. Fills delay + from/to + date +
+  time + ticket type (steg-1), payout choice (steg-2), email + mobil (steg-3). You pick
+  the specific trip ("Sök resa") and tick the attestations. `swedishBank` needs no account
+  (it pays to the account on your personnummer, which BankID prefills).
 
 ## Known fragile bit
 
-The **from/to search field** is a typeahead — the script types the station name and
-clicks the matching suggestion. If origin/destination don't fill on the first device
-test, just type them yourself, and tell the dev: the selector is fixed **server-side**
-in `sl-fill-script` (no Shortcut change needed).
+The from/to **typeahead**: the script types the station name and clicks the matching
+suggestion. If it misses on the device test, type it yourself and tell the dev — the
+selector is fixed **server-side** in the fill script, no Shortcut change needed.
