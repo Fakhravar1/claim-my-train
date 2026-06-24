@@ -49,7 +49,14 @@ with tv as (   -- Swedish stop-events
         -- the conformed station id is TEXT end-to-end (matches REST's native stop__id and
         -- keeps the (event_type, station_id, service_date) index sargable from v_journeys)
         right(r.rest_area_id, 6)::int::text                 as station_id
-        ,coalesce(r.rest_name, r.station_name)              as station_name
+        -- Prefer TV's AdvertisedLocationName (clean, canonical: "Malmö C", "Märsta",
+        -- "Stockholm City") over the REST crosswalk name, which is often verbose
+        -- ("Märsta station (Sigtuna kn)") or a nearest-coord MISMATCH from the auto
+        -- resolver ("T-Centralen Spårv" for Stockholm City, "Tingsvägen" for Sollentuna,
+        -- "Sundbyberg centrum T-bana" for Sundbyberg — the §15 Ramlösa class). station_name
+        -- is NOT NULL, so the rest_name fallback is defensive only. This is also what the
+        -- SL Shortcut typeahead needs — it matches "Märsta", not the parenthetical form.
+        ,coalesce(r.station_name, r.rest_name)              as station_name
         ,t.advertised_train_ident                           as service_number
         ,'train'                                            as transport_mode
         ,t.event_type
