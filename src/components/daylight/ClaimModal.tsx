@@ -15,7 +15,7 @@ import {
   validateClaimProfile,
   validateEmail,
   PURCHASING_OPERATORS,
-  PAYOUT_METHODS,
+  payoutMethodsFor,
   type ClaimProfileInput,
   type ClaimProfileErrors,
 } from "@/lib/claimProfileValidation";
@@ -356,11 +356,13 @@ export function ClaimModal({
                     <div className="summary__row"><span>Datum</span><b>{dateLong(sel.origin_local_date ?? date)}</b></div>
                     <div className="summary__row"><span>Försening</span><b>{sel.canceled ? "Inställt" : selMeta.minutes + " min"}</b></div>
                   </div>
-                  <div className={"verdict verdict--" + selMeta.status}>
-                    {selMeta.eligible ? (
-                      <><b>Enligt våra uppgifter kan du ha rätt till ersättning.</b> {selMeta.minutes} min sen — över 20-minutersgränsen.</>
+                  <div className={"verdict verdict--" + (selMeta.eligible ? "eligible" : "near")}>
+                    {selMeta.cancelled ? (
+                      <><b>Inställd avgång.</b> Inställda tåg ger rätt till ersättning — vi förbereder din ansökan.</>
+                    ) : selMeta.eligible ? (
+                      <><b>Enligt våra uppgifter kan du ha rätt till ersättning.</b> {selMeta.minutes} min sen — över gränsen.</>
                     ) : (
-                      <><b>Precis under gränsen.</b> {selMeta.minutes} min räcker inte riktigt enligt våra uppgifter.</>
+                      <><b>Enligt våra uppgifter var avgången {selMeta.minutes} min sen.</b> Du avgör själv om du vill ansöka — vi förbereder ansökan om du går vidare.</>
                     )}
                   </div>
                   <button className="linkbtn linkbtn--center" onClick={() => setEditing(true)}>Välj en annan avgång</button>
@@ -409,11 +411,13 @@ export function ClaimModal({
                   )}
 
                   {sel && selMeta && (
-                    <div className={"verdict verdict--" + selMeta.status}>
-                      {selMeta.eligible ? (
-                        <><b>Enligt våra uppgifter kan du ha rätt till ersättning.</b> {lineLabel(sel)} var {selMeta.minutes} min sen — över 20-minutersgränsen.</>
+                    <div className={"verdict verdict--" + (selMeta.eligible ? "eligible" : "near")}>
+                      {selMeta.cancelled ? (
+                        <><b>Inställd avgång.</b> {lineLabel(sel)} är inställd — inställda tåg ger rätt till ersättning.</>
+                      ) : selMeta.eligible ? (
+                        <><b>Enligt våra uppgifter kan du ha rätt till ersättning.</b> {lineLabel(sel)} var {selMeta.minutes} min sen — över gränsen.</>
                       ) : (
-                        <><b>Precis under gränsen.</b> {selMeta.minutes} min räcker inte riktigt enligt våra uppgifter — men vi kan bevaka den åt dig.</>
+                        <><b>Enligt våra uppgifter var {lineLabel(sel)} {selMeta.minutes} min sen.</b> Du kan ändå ansöka om du anser att du har rätt — eller låta oss bevaka den åt dig.</>
                       )}
                     </div>
                   )}
@@ -513,7 +517,21 @@ export function ClaimModal({
                 </FormField>
               </div>
               <FormField label="Var köpte du biljetten?" err={detailErrors.purchasingOperator}>
-                <select value={details.purchasingOperator} onChange={(e) => setField("purchasingOperator", e.target.value)}>
+                <select
+                  value={details.purchasingOperator}
+                  onChange={(e) => {
+                    const op = e.target.value;
+                    // SL pays only to bank — drop a now-invalid SMS/e-post choice when switching.
+                    setDetails((d) => ({
+                      ...d,
+                      purchasingOperator: op,
+                      payoutMethod:
+                        d.payoutMethod && !payoutMethodsFor(op).includes(d.payoutMethod as never)
+                          ? "bank"
+                          : d.payoutMethod,
+                    }));
+                  }}
+                >
                   {PURCHASING_OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </FormField>
@@ -534,7 +552,7 @@ export function ClaimModal({
                 <FormField label="Utbetalning" err={detailErrors.payoutMethod}>
                   <select value={details.payoutMethod} onChange={(e) => setField("payoutMethod", e.target.value)}>
                     <option value="">Välj…</option>
-                    {PAYOUT_METHODS.map((m) => <option key={m} value={m}>{PAYOUT_LABELS[m]}</option>)}
+                    {payoutMethodsFor(details.purchasingOperator).map((m) => <option key={m} value={m}>{PAYOUT_LABELS[m]}</option>)}
                   </select>
                 </FormField>
               </div>
@@ -645,7 +663,9 @@ export function ClaimModal({
             ) : (
               <>
                 {phase === "journey" && (
-                  <button className="btn btn--accent" disabled={!sel || !selMeta?.eligible} onClick={() => setPhase("details")}>
+                  // Anyone can file any departure — eligibility is the user's call, not ours;
+                  // our tiers only show what the data suggests. So only require a selection.
+                  <button className="btn btn--accent" disabled={!sel} onClick={() => setPhase("details")}>
                     Nästa <ArrowIcon width={16} height={16} />
                   </button>
                 )}

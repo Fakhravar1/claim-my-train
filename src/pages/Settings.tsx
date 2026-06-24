@@ -28,6 +28,7 @@ import {
   purchasingOperatorLabel,
   isSupportedPurchasingOperator,
   purchasingOperatorClaimUrl,
+  payoutMethodsFor,
 } from "@/lib/claimProfileValidation";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
 import StationCombobox from "@/components/StationCombobox";
@@ -321,6 +322,15 @@ const Settings = () => {
     setRoutesInit(true);
   }, [routesLoaded, commuteRoutes, routesInit]);
 
+  // SL refunds only to a bank account, so an SL ticket can't use the Värdekod
+  // SMS/e-post methods. Narrow the options and drop a now-invalid saved choice.
+  const allowedPayoutMethods = payoutMethodsFor(purchasingOperator);
+  useEffect(() => {
+    setPayoutMethod((cur) =>
+      cur && !payoutMethodsFor(purchasingOperator).includes(cur as never) ? "bank" : cur
+    );
+  }, [purchasingOperator]);
+
   const validityStatus = useMemo(() => {
     if (!isPeriodTicket) return null;
     if (!ticketValidUntil) {
@@ -511,16 +521,6 @@ const Settings = () => {
 
         <Card className="p-5">
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
-            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <p className="font-semibold">Varför dessa uppgifter spelar roll</p>
-              <p className="mt-1">
-                Dina personuppgifter, adress, personnummer och biljett-ID skickas in på
-                Skånetrafiken-reklamationen. Om något obligatoriskt fält saknas eller är fel
-                formaterat kan Skånetrafiken neka ansökan. Fält markerade med{" "}
-                <span className="font-semibold text-destructive">*</span> är obligatoriska.
-              </p>
-            </div>
-
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList className="!grid h-auto w-full !grid-cols-2 gap-1 p-1 sm:!grid-cols-4">
                 <TabsTrigger value="personal" className="w-full">Personuppgifter</TabsTrigger>
@@ -530,6 +530,16 @@ const Settings = () => {
               </TabsList>
 
               <TabsContent value="personal" className="space-y-4">
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="font-semibold">Varför dessa uppgifter spelar roll</p>
+                  <p className="mt-1">
+                    Dina personuppgifter, adress, personnummer och biljett-ID skickas in på
+                    Skånetrafiken-reklamationen. Om något obligatoriskt fält saknas eller är fel
+                    formaterat kan Skånetrafiken neka ansökan. Fält markerade med{" "}
+                    <span className="font-semibold text-destructive">*</span> är obligatoriska.
+                  </p>
+                </div>
+
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="first-name">
@@ -802,13 +812,17 @@ const Settings = () => {
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="bank">Banköverföring</SelectItem>
-                      <SelectItem value="sms">SMS (Värdekod)</SelectItem>
-                      <SelectItem value="email">E-post (Värdekod)</SelectItem>
+                      {allowedPayoutMethods.map((method) => (
+                        <SelectItem key={method} value={method}>
+                          {PAYOUT_LABELS[method] ?? method}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Skånetrafiken betalar ut antingen via banköverföring eller som en Värdekod via SMS eller e-post.
+                    {purchasingOperator === "sl"
+                      ? "SL betalar ut förseningsersättning till bankkonto."
+                      : "Skånetrafiken betalar ut antingen via banköverföring eller som en Värdekod via SMS eller e-post."}
                   </p>
                   {errors.payoutMethod && (
                     <p className="text-sm text-destructive">{errors.payoutMethod}</p>

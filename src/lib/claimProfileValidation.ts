@@ -8,6 +8,13 @@ export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
 export const isPayoutMethod = (value: unknown): value is PayoutMethod =>
   typeof value === "string" && (PAYOUT_METHODS as readonly string[]).includes(value);
 
+// Which payout methods an operator actually offers. SL refunds Resegaranti only to a
+// BANK account — it has no Värdekod-via-SMS/e-post option like Skånetrafiken — so an SL
+// ticket must use the bank method (which is also what SL's autofill needs). Everyone else
+// keeps all three. Keyed on the user's purchasing_operator.
+export const payoutMethodsFor = (operator: string | null | undefined): readonly PayoutMethod[] =>
+  operator === "sl" ? (["bank"] as const) : PAYOUT_METHODS;
+
 // Which operator/vendor the user bought their ticket from. This is a GUARDRAIL:
 // only operators flagged `supported` are filed IN-APP (Skånetrafiken = PDF reklamation).
 // An operator can instead carry `externalClaimUrl`: we don't file for it — the "ansök"
@@ -240,7 +247,11 @@ export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErro
     errors.payoutMethod = "Välj hur du vill få din ersättning.";
   } else if (!isPayoutMethod(input.payoutMethod)) {
     errors.payoutMethod = "Utbetalningssätt måste vara Bank, SMS eller E-post.";
-  } else if (input.payoutMethod === "bank") {
+  } else if (!payoutMethodsFor(input.purchasingOperator).includes(input.payoutMethod)) {
+    // SL only pays to a bank account — guard against a stale SMS/e-post choice.
+    errors.payoutMethod = "SL betalar bara ut till bankkonto. Välj banköverföring.";
+  }
+  if (input.payoutMethod === "bank") {
     // Bank payout needs an account (e.g. SL's /utbetalning step). Only required
     // for the bank method — SMS/e-post Värdekod don't use a bank account.
     const clearing = validateClearingNumber(input.clearingNumber ?? "");
