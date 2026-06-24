@@ -22,6 +22,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   validateClaimProfile,
   type ClaimProfileErrors,
   PURCHASING_OPERATORS,
@@ -530,15 +538,27 @@ const Settings = () => {
               </TabsList>
 
               <TabsContent value="personal" className="space-y-4">
-                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  <p className="font-semibold">Varför dessa uppgifter spelar roll</p>
-                  <p className="mt-1">
-                    Dina personuppgifter, adress, personnummer och biljett-ID skickas in på
-                    Skånetrafiken-reklamationen. Om något obligatoriskt fält saknas eller är fel
-                    formaterat kan Skånetrafiken neka ansökan. Fält markerade med{" "}
-                    <span className="font-semibold text-destructive">*</span> är obligatoriska.
-                  </p>
-                </div>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-primary underline underline-offset-2 hover:no-underline"
+                    >
+                      Varför vi behöver personuppgifter
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Varför dessa uppgifter spelar roll</DialogTitle>
+                      <DialogDescription className="text-left">
+                        Dina personuppgifter, adress, personnummer och biljett-ID skickas in på
+                        Skånetrafiken-reklamationen. Om något obligatoriskt fält saknas eller är fel
+                        formaterat kan Skånetrafiken neka ansökan. Fält markerade med{" "}
+                        <span className="font-semibold text-destructive">*</span> är obligatoriska.
+                      </DialogDescription>
+                    </DialogHeader>
+                  </DialogContent>
+                </Dialog>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">

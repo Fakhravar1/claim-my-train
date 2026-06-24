@@ -11,6 +11,7 @@ import { buildClaimPayload } from "@/hooks/useStartClaim";
 import { useMyClaims } from "@/hooks/useMyClaims";
 import { isSupportedPurchasingOperator, purchasingOperatorLabel, purchasingOperatorClaimUrl } from "@/lib/claimProfileValidation";
 import { Nav, Footer } from "@/components/daylight/shell";
+import { SjClaimModal } from "@/components/daylight/SjClaimModal";
 
 const PAYOUT_LABELS: Record<string, string> = {
   bank: "Bank transfer",
@@ -141,6 +142,10 @@ export default function ClaimReview() {
   // its own site (externalClaimUrl) — we link out instead.
   const operatorSupported = isSupportedPurchasingOperator(profile?.purchasing_operator);
   const externalClaimUrl = purchasingOperatorClaimUrl(profile?.purchasing_operator);
+  // SJ files one booking at a time (each trip has its own booking number) — every
+  // row gets its own "Ansök" that opens the SJ pop-up, instead of the bulk flow.
+  const isSj = profile?.purchasing_operator === "sj";
+  const [sjJourney, setSjJourney] = useState<Journey | null>(null);
 
   const handleFile = async () => {
     if (!user || checked.size === 0 || !operatorSupported) return;
@@ -211,7 +216,7 @@ export default function ClaimReview() {
           </div>
         ) : (
           <>
-            {claimProfile.missing.length > 0 && (
+            {!isSj && claimProfile.missing.length > 0 && (
               <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
                 <p style={{ fontWeight: 600 }}>Din ansökningsprofil är ofullständig</p>
                 <p style={{ margin: "6px 0 12px" }}>
@@ -233,7 +238,7 @@ export default function ClaimReview() {
               </div>
             )}
 
-            {!operatorSupported && !externalClaimUrl && (
+            {!operatorSupported && !externalClaimUrl && !isSj && (
               <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
                 <p style={{ fontWeight: 600 }}>Ansökningar stöds endast för Skånetrafiken-biljetter</p>
                 <p style={{ margin: "6px 0 12px" }}>
@@ -245,11 +250,23 @@ export default function ClaimReview() {
               </div>
             )}
 
+            {isSj && (
+              <div className="board" style={{ marginBottom: 16 }}>
+                <p style={{ fontWeight: 600 }}>SJ-ansökningar görs en resa i taget</p>
+                <p style={{ margin: "6px 0 0" }}>
+                  Varje SJ-bokning har ett eget boknings-/biljettnummer, så du ansöker per resa nedan —
+                  vi fyller i SJ:s formulär åt dig.
+                </p>
+              </div>
+            )}
+
             <div className="board">
-              <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", marginBottom: 4 }}>
-                <input type="checkbox" checked={allChecked} onChange={toggleAll} disabled={claimable.length === 0} />
-                Markera alla ({claimable.length})
-              </label>
+              {!isSj && (
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", marginBottom: 4 }}>
+                  <input type="checkbox" checked={allChecked} onChange={toggleAll} disabled={claimable.length === 0} />
+                  Markera alla ({claimable.length})
+                </label>
+              )}
 
               {groupedByDay.map((group) => (
                 <div key={group.label}>
@@ -265,6 +282,40 @@ export default function ClaimReview() {
                   {group.items.map((j) => {
                     const key = j.journey_key as string;
                     const alreadyClaimed = claimedKeys.has(key);
+                    const rowInner = (
+                      <>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>
+                            {j.origin_stop_name} → {j.destination_stop_name}
+                          </div>
+                          <div style={{ fontSize: 13, opacity: 0.8 }}>
+                            dep {t(j.origin_scheduled)} · arr {t(j.destination_scheduled)} → {t(j.destination_actual)}
+                            {j.operator ? ` · ${j.operator}` : ""}
+                          </div>
+                        </div>
+                        <span className={`tag ${j.canceled ? "tag--cancelled" : "tag--eligible"}`}>
+                          {alreadyClaimed ? "Ansökt" : j.canceled ? "Inställt" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
+                        </span>
+                      </>
+                    );
+                    if (isSj) {
+                      return (
+                        <div
+                          key={key}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
+                            opacity: alreadyClaimed ? 0.55 : 1,
+                          }}
+                        >
+                          {rowInner}
+                          {!alreadyClaimed && (
+                            <button type="button" className="btn btn--accent btn--sm" onClick={() => setSjJourney(j)}>
+                              Ansök
+                            </button>
+                          )}
+                        </div>
+                      );
+                    }
                     return (
                       <label
                         key={key}
@@ -279,18 +330,7 @@ export default function ClaimReview() {
                           disabled={alreadyClaimed}
                           onChange={() => toggleOne(key)}
                         />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600 }}>
-                            {j.origin_stop_name} → {j.destination_stop_name}
-                          </div>
-                          <div style={{ fontSize: 13, opacity: 0.8 }}>
-                            dep {t(j.origin_scheduled)} · arr {t(j.destination_scheduled)} → {t(j.destination_actual)}
-                            {j.operator ? ` · ${j.operator}` : ""}
-                          </div>
-                        </div>
-                        <span className={`tag ${j.canceled ? "tag--cancelled" : "tag--eligible"}`}>
-                          {j.canceled ? "Inställt" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
-                        </span>
+                        {rowInner}
                       </label>
                     );
                   })}
@@ -301,25 +341,31 @@ export default function ClaimReview() {
                 <p className="muted" style={{ marginTop: 12 }}>Dessa resor går inte längre att ansöka om.</p>
               )}
 
-              <div style={{ marginTop: 16 }}>
-                <button
-                  type="button"
-                  className="btn btn--accent"
-                  onClick={() => void handleFile()}
-                  disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
-                >
-                  {submitting ? "Skickar…" : `Ansök om ${checked.size} ersättning${checked.size === 1 ? "" : "ar"}`}
-                </button>
-              </div>
-              <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
-                sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
-                polisanmäls av Skånetrafiken.
-              </p>
+              {!isSj && (
+                <>
+                  <div style={{ marginTop: 16 }}>
+                    <button
+                      type="button"
+                      className="btn btn--accent"
+                      onClick={() => void handleFile()}
+                      disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
+                    >
+                      {submitting ? "Skickar…" : `Ansök om ${checked.size} ersättning${checked.size === 1 ? "" : "ar"}`}
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                    Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
+                    sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
+                    polisanmäls av Skånetrafiken.
+                  </p>
+                </>
+              )}
             </div>
           </>
         )}
       </main>
+
+      {sjJourney && <SjClaimModal journey={sjJourney} onClose={() => setSjJourney(null)} />}
 
       <Footer />
     </div>

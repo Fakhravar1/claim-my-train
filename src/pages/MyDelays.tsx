@@ -13,6 +13,7 @@ import { useCommuteRoutes } from "@/hooks/useCommuteRoutes";
 import { useMyDelays } from "@/hooks/useMyDelays";
 import { isSupportedPurchasingOperator, purchasingOperatorLabel, purchasingOperatorClaimUrl } from "@/lib/claimProfileValidation";
 import { Nav, Footer } from "@/components/daylight/shell";
+import { SjClaimModal } from "@/components/daylight/SjClaimModal";
 
 const PAYOUT_LABELS: Record<string, string> = {
   bank: "Bankkonto",
@@ -110,6 +111,11 @@ export default function MyDelays() {
 
   const operatorSupported = isSupportedPurchasingOperator(profile?.purchasing_operator);
   const externalClaimUrl = purchasingOperatorClaimUrl(profile?.purchasing_operator);
+  // SJ files one booking at a time (each trip has its own booking number), so it
+  // doesn't use the Skånetrafiken bulk/checkbox flow — every row gets its own
+  // "Ansök" that opens the SJ pop-up. SJ IS handled, just not via the bulk path.
+  const isSj = profile?.purchasing_operator === "sj";
+  const [sjJourney, setSjJourney] = useState<Journey | null>(null);
 
   const handleFile = async () => {
     if (!user || checked.size === 0 || !operatorSupported) return;
@@ -194,7 +200,7 @@ export default function MyDelays() {
           </div>
         ) : (
           <>
-            {claimProfile.missing.length > 0 && (
+            {!isSj && claimProfile.missing.length > 0 && (
               <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
                 <p style={{ fontWeight: 600 }}>Din ansökningsprofil är ofullständig</p>
                 <p style={{ margin: "6px 0 12px" }}>
@@ -216,7 +222,7 @@ export default function MyDelays() {
               </div>
             )}
 
-            {!operatorSupported && !externalClaimUrl && (
+            {!operatorSupported && !externalClaimUrl && !isSj && (
               <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
                 <p style={{ fontWeight: 600 }}>Ansökningar stöds endast för Skånetrafiken-biljetter</p>
                 <p style={{ margin: "6px 0 12px" }}>
@@ -228,27 +234,41 @@ export default function MyDelays() {
               </div>
             )}
 
-            <div className="board">
-              <div style={{ marginBottom: 12 }}>
-                <button
-                  type="button"
-                  className="btn btn--accent"
-                  onClick={() => void handleFile()}
-                  disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
-                >
-                  {submitting ? "Skickar…" : `Ansök om ${checked.size} ersättning${checked.size === 1 ? "" : "ar"}`}
-                </button>
-                <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8, marginBottom: 0 }}>
-                  Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
-                  sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
-                  polisanmäls av Skånetrafiken.
+            {isSj && (
+              <div className="board" style={{ marginBottom: 16 }}>
+                <p style={{ fontWeight: 600 }}>SJ-ansökningar görs en resa i taget</p>
+                <p style={{ margin: "6px 0 0" }}>
+                  Varje SJ-bokning har ett eget boknings-/biljettnummer, så du ansöker per resa nedan —
+                  vi fyller i SJ:s formulär åt dig.
                 </p>
               </div>
+            )}
 
-              <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", padding: "12px 0", borderTop: "1px solid var(--board-line)" }}>
-                <input type="checkbox" checked={allChecked} onChange={toggleAll} disabled={claimable.length === 0} />
-                Markera alla ({claimable.length})
-              </label>
+            <div className="board">
+              {!isSj && (
+                <>
+                  <div style={{ marginBottom: 12 }}>
+                    <button
+                      type="button"
+                      className="btn btn--accent"
+                      onClick={() => void handleFile()}
+                      disabled={submitting || checked.size === 0 || claimProfile.missing.length > 0 || !operatorSupported}
+                    >
+                      {submitting ? "Skickar…" : `Ansök om ${checked.size} ersättning${checked.size === 1 ? "" : "ar"}`}
+                    </button>
+                    <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8, marginBottom: 0 }}>
+                      Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
+                      sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
+                      polisanmäls av Skånetrafiken.
+                    </p>
+                  </div>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, cursor: "pointer", padding: "12px 0", borderTop: "1px solid var(--board-line)" }}>
+                    <input type="checkbox" checked={allChecked} onChange={toggleAll} disabled={claimable.length === 0} />
+                    Markera alla ({claimable.length})
+                  </label>
+                </>
+              )}
 
               {groupedByDay.map((group, groupIndex) => {
                 const groupClaimable = group.items.filter(
@@ -281,6 +301,40 @@ export default function MyDelays() {
                   {group.items.map((j) => {
                     const key = j.journey_key as string;
                     const alreadyClaimed = claimedKeys.has(key);
+                    const rowInner = (
+                      <>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>
+                            {j.origin_stop_name} → {j.destination_stop_name}
+                          </div>
+                          <div style={{ fontSize: 13, opacity: 0.8 }}>
+                            avg {t(j.origin_scheduled)} · ank {t(j.destination_scheduled)} → {t(j.destination_actual)}
+                            {j.operator ? ` · ${j.operator}` : ""}
+                          </div>
+                        </div>
+                        <span className={`tag ${j.canceled ? "tag--cancelled" : "tag--eligible"}`}>
+                          {alreadyClaimed ? "Ansökt" : j.canceled ? "Inställt" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
+                        </span>
+                      </>
+                    );
+                    if (isSj) {
+                      return (
+                        <div
+                          key={key}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
+                            opacity: alreadyClaimed ? 0.55 : 1,
+                          }}
+                        >
+                          {rowInner}
+                          {!alreadyClaimed && (
+                            <button type="button" className="btn btn--accent btn--sm" onClick={() => setSjJourney(j)}>
+                              Ansök
+                            </button>
+                          )}
+                        </div>
+                      );
+                    }
                     return (
                       <label
                         key={key}
@@ -295,18 +349,7 @@ export default function MyDelays() {
                           disabled={alreadyClaimed}
                           onChange={() => toggleOne(key)}
                         />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600 }}>
-                            {j.origin_stop_name} → {j.destination_stop_name}
-                          </div>
-                          <div style={{ fontSize: 13, opacity: 0.8 }}>
-                            avg {t(j.origin_scheduled)} · ank {t(j.destination_scheduled)} → {t(j.destination_actual)}
-                            {j.operator ? ` · ${j.operator}` : ""}
-                          </div>
-                        </div>
-                        <span className={`tag ${j.canceled ? "tag--cancelled" : "tag--eligible"}`}>
-                          {alreadyClaimed ? "Ansökt" : j.canceled ? "Inställt" : `+${Math.round(Number(j.destination_delay_minutes ?? 0))} min`}
-                        </span>
+                        {rowInner}
                       </label>
                     );
                   })}
@@ -317,6 +360,8 @@ export default function MyDelays() {
           </>
         )}
       </main>
+
+      {sjJourney && <SjClaimModal journey={sjJourney} onClose={() => setSjJourney(null)} />}
 
       <Footer />
     </div>
