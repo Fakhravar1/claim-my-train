@@ -30,9 +30,10 @@ export const PURCHASING_OPERATORS = [
   // path is allowed — non-Skåne origins are intercepted and sent external before filing.
   { value: "oresundstag", label: "Öresundståg", supported: true },
   { value: "sl", label: "SL (Stockholm)", supported: false, externalClaimUrl: "https://sl.se/kundservice/forseningsersattning/resan" },
-  // Hallandstrafiken's reklamation form has no BankID, so we file it in-app via the headless
-  // claim-worker (submit_hallandstrafiken). A dedicated pop-up collects the ticket bits.
-  { value: "hallandstrafiken", label: "Hallandstrafiken", supported: true },
+  // Hallandstrafiken: EXTERNAL for now. The headless worker (submit_hallandstrafiken) is built
+  // but its form geo-blocks our US/datacenter worker IP — moving the worker to an EU host is
+  // backlogged, so the CTA links out to the form (reached fine from the user's own Swedish IP).
+  { value: "hallandstrafiken", label: "Hallandstrafiken", supported: false, externalClaimUrl: "https://hallandstrafiken.se/kundservice/vanliga-arenden/forseningsersattning-och-reklamation/reklamation" },
   // Kalmar länstrafik — same respons web form as Hallandstrafiken, filed headlessly.
   { value: "kalmar", label: "Kalmar länstrafik", supported: true },
   // Västtrafik (Göteborg) files on its own form with BankID at the end → iOS Shortcut

@@ -333,11 +333,14 @@ export default function DaylightApp() {
           return <SjClaimModal journey={journey} onClose={() => setClaim(null)} />;
         }
 
-        // Hallandstrafiken + Kalmar have no BankID → filed server-side by the headless worker.
-        // The pop-up collects the ticket id and creates the pending claim (any device).
+        // Hallandstrafiken: EXTERNAL for now — its reklamation form geo-blocks our worker's IP
+        // (US/datacenter), so headless filing is backlogged. Link the user out to the form
+        // (reached fine from their own Swedish IP). No claims row.
         if (user && profile?.purchasing_operator === "hallandstrafiken" && isRealJourney) {
-          return <HeadlessClaimModal journey={journey} operator="hallandstrafiken" label="Hallandstrafiken" onClose={() => setClaim(null)} />;
+          return <ShortcutClaimModal journey={journey} operator="hallandstrafiken" onClose={() => setClaim(null)} />;
         }
+        // Kalmar has no BankID and its host doesn't block us → filed server-side by the headless
+        // worker. The pop-up collects the ticket id and creates the pending claim (any device).
         if (user && profile?.purchasing_operator === "kalmar" && isRealJourney) {
           return <HeadlessClaimModal journey={journey} operator="kalmar" label="Kalmar länstrafik" onClose={() => setClaim(null)} />;
         }

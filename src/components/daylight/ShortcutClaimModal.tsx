@@ -19,14 +19,16 @@ import { Scrim, ModalHead } from "./primitives";
  */
 const FN_BASE = "https://jnfwmdirvnqfpfhtipld.supabase.co/functions/v1";
 
-type ShortcutOperator = "sl" | "skanetrafiken" | "vasttrafik";
+type ShortcutOperator = "sl" | "skanetrafiken" | "vasttrafik" | "hallandstrafiken";
 
 type Profile = ReturnType<typeof useAuth>["profile"];
 
 const OPS: Record<ShortcutOperator, {
   label: string;
   formUrl: string;
-  scriptUrl: string;
+  /** Omitted for EXTERNAL-only operators: no Shortcut autofill, just link out to the form
+   *  (e.g. Hallandstrafiken — its form geo-blocks our worker IP, so headless is backlogged). */
+  scriptUrl?: string;
   /** Operator-specific payload fields beyond the common journey + email. */
   extras: (profile: Profile) => Record<string, string>;
   /** SL needs a bank account in the payload; nudge if it's missing. */
@@ -65,6 +67,14 @@ const OPS: Record<ShortcutOperator, {
       payoutMethod: profile?.payout_method ?? "",
       personnummer: profile?.claim_personnummer ?? "",
     }),
+  },
+  // EXTERNAL only (no scriptUrl): Hallandstrafiken's reklamation form geo-blocks our worker's
+  // IP (US/datacenter), so headless filing is backlogged — for now just link the user out to
+  // the form, which they reach fine from their own Swedish IP.
+  hallandstrafiken: {
+    label: "Hallandstrafiken",
+    formUrl: "https://hallandstrafiken.se/kundservice/vanliga-arenden/forseningsersattning-och-reklamation/reklamation",
+    extras: () => ({}),
   },
 };
 
@@ -122,7 +132,9 @@ export function ShortcutClaimModal({
   const dateLong = (iso: string | null | undefined) =>
     iso ? new Date(iso + "T00:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric" }) : "—";
 
-  const ios = isIOS();
+  // External-only operators (no scriptUrl) never use the iOS Shortcut path — just link out.
+  const external = !cfg.scriptUrl;
+  const ios = isIOS() && !external;
 
   return (
     <Scrim onClose={onClose}>
@@ -158,6 +170,11 @@ export function ShortcutClaimModal({
                   </p>
                 )}
               </>
+            ) : external ? (
+              <p className="lead">
+                {cfg.label} hanterar ansökan på sitt eget formulär. Vi öppnar det åt dig — fyll i
+                resan ovan så går det snabbare.
+              </p>
             ) : (
               <p className="lead">
                 {cfg.label} hanterar ansökan på sitt eget formulär (kräver BankID). Den automatiska
