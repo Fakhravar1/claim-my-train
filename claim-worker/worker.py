@@ -24,6 +24,9 @@ BUCKET = "claims"
 # Hard off-switch for any real SJ submission. Default OFF — even an authorized claim only
 # dry-runs unless this is explicitly "true" in the environment (CLAUDE.md §8).
 SJ_SUBMIT_LIVE = os.environ.get("SJ_SUBMIT_LIVE", "").lower() == "true"
+# Same hard off-switch for Hallandstrafiken's web form (no BankID, so it CAN be submitted
+# headlessly — which is exactly why the gate matters). Default OFF → dry-run only.
+HLT_SUBMIT_LIVE = os.environ.get("HLT_SUBMIT_LIVE", "").lower() == "true"
 
 
 def operator_of(claim: dict) -> str:
@@ -126,6 +129,45 @@ def handle_sj(sb, claim: dict) -> None:
         print(f"  {cid}: sj -> dry-run (awaiting authorization)")
 
 
+def handle_hallandstrafiken(sb, claim: dict) -> None:
+    """Hallandstrafiken web-form path (no BankID). Dry-run unless globally enabled AND
+    this claim is user-authorized — same review→authorize gate as SJ (§8)."""
+    from submit_hallandstrafiken import submit_hallandstrafiken  # lazy: PDF path needs no Playwright
+
+    cid = claim["id"]
+    profile = load_profile(sb, claim)
+    live = HLT_SUBMIT_LIVE and claim.get("status") == "hlt_authorized"
+
+    result = submit_hallandstrafiken(claim, profile, live=live)
+
+    shot_path = None
+    if result.get("screenshot"):
+        shot_path = f'{claim["user_id"]}/{cid}-hlt.png'
+        sb.storage.from_(BUCKET).upload(
+            shot_path, result["screenshot"], {"content-type": "image/png", "upsert": "true"}
+        )
+
+    if result.get("error"):
+        sb.table("claims").update(
+            {"status": "error", "error_message": result.get("message") or result["error"],
+             "pdf_path": shot_path}
+        ).eq("id", cid).execute()
+        print(f"  {cid}: hallandstrafiken -> {result['error']}")
+    elif result.get("submitted"):
+        sb.table("claims").update(
+            {"status": "submitted", "external_reference": result.get("external_reference"),
+             "submitted_at": datetime.now(timezone.utc).isoformat(),
+             "error_message": None, "pdf_path": shot_path}
+        ).eq("id", cid).execute()
+        print(f"  {cid}: hallandstrafiken -> submitted (ref {result.get('external_reference')})")
+    else:
+        # Dry-run: hold for the user to review the screenshot and authorize a real submit.
+        sb.table("claims").update(
+            {"status": "awaiting_hlt_authorization", "error_message": None, "pdf_path": shot_path}
+        ).eq("id", cid).execute()
+        print(f"  {cid}: hallandstrafiken -> dry-run (awaiting authorization)")
+
+
 HANDLERS = {
     "skanetrafiken": handle_skanetrafiken,
     # Öresundståg claims that reach the worker are Skåne/Köpenhamn-origin (non-Skåne origins
@@ -133,6 +175,7 @@ HANDLERS = {
     # frontend already snapshots them as 'skanetrafiken'; this is a defensive alias.
     "oresundstag": handle_skanetrafiken,
     "sj": handle_sj,
+    "hallandstrafiken": handle_hallandstrafiken,
 }
 
 
@@ -142,7 +185,7 @@ def main() -> int:
     pending = (
         sb.table("claims")
         .select("*")
-        .in_("status", ["pending", "sj_authorized"])
+        .in_("status", ["pending", "sj_authorized", "hlt_authorized"])
         .execute()
         .data
     )
