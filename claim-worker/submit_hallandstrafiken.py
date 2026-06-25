@@ -127,8 +127,9 @@ def submit_hallandstrafiken(claim: dict, profile: dict, *, live: bool) -> dict:
             fill("#PlannedTripToStop", claim.get("destination_stop_name"))
             fill("#Description", _description(claim, origin_dt))
 
-            # --- Ticket (gap: best-effort app id from the generic ticket field) ---
-            fill("#TravelWithAppID", profile.get("claim_ticket_id"))
+            # --- Ticket: app-id/number the user entered in the filing pop-up
+            # (claims.booking_reference), falling back to the generic profile ticket id. ---
+            fill("#TravelWithAppID", claim.get("booking_reference") or profile.get("claim_ticket_id"))
 
             # --- Payout (Kontant = Swedish bank: clearing + account + personnummer) ---
             if profile.get("payout_method") == "bank":

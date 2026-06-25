@@ -12,6 +12,7 @@ import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
 import { SjClaimModal } from "@/components/daylight/SjClaimModal";
+import { HallandstrafikenClaimModal } from "@/components/daylight/HallandstrafikenClaimModal";
 import { ShortcutClaimModal } from "@/components/daylight/ShortcutClaimModal";
 import { RegionalClaimModal } from "@/components/daylight/RegionalClaimModal";
 import { useStationAuthorities } from "@/hooks/useStationAuthorities";
@@ -330,6 +331,12 @@ export default function DaylightApp() {
         // gets the focused SJ pop-up (booking + purchase email).
         if (user && profile?.purchasing_operator === "sj" && isRealJourney) {
           return <SjClaimModal journey={journey} onClose={() => setClaim(null)} />;
+        }
+
+        // Hallandstrafiken has no BankID → filed server-side by the headless worker. The
+        // pop-up collects the ticket id and creates the pending claim (any device).
+        if (user && profile?.purchasing_operator === "hallandstrafiken" && isRealJourney) {
+          return <HallandstrafikenClaimModal journey={journey} onClose={() => setClaim(null)} />;
         }
 
         // SL files on its own BankID-gated form. On iPhone we hand the journey to the

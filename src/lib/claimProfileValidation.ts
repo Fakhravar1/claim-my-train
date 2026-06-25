@@ -30,6 +30,9 @@ export const PURCHASING_OPERATORS = [
   // path is allowed — non-Skåne origins are intercepted and sent external before filing.
   { value: "oresundstag", label: "Öresundståg", supported: true },
   { value: "sl", label: "SL (Stockholm)", supported: false, externalClaimUrl: "https://sl.se/kundservice/forseningsersattning/resan" },
+  // Hallandstrafiken's reklamation form has no BankID, so we file it in-app via the headless
+  // claim-worker (submit_hallandstrafiken). A dedicated pop-up collects the ticket bits.
+  { value: "hallandstrafiken", label: "Hallandstrafiken", supported: true },
   { value: "sj", label: "SJ", supported: false },
   { value: "snalltaget", label: "Snälltåget", supported: false },
   { value: "other", label: "Annan operatör / vet inte", supported: false },
