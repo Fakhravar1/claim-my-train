@@ -111,6 +111,11 @@ const SCRIPT = `
       if (setPlannedDate(P.date)) n++;
       n += setPlannedTime(P.time);
     }
+    // Section ③ "Kontaktuppgifter" — a single personnummer field. Fill it when it appears
+    // (after Nästa steg); the user then just does BankID. Only set when empty.
+    var pnr = byId("contact-information-personal-identity-number") ||
+              document.querySelector('[id*="personal-identity-number"]');
+    if (pnr && !pnr.value && P.personnummer) { nativeSet(pnr, P.personnummer); n++; }
     note("Qvitta fyllde i resan - tryck Sök resa, välj din avgång, komplettera 'Så här blev det', gör BankID och skicka in sjalv.");
     return n;
   }

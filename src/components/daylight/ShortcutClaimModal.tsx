@@ -47,15 +47,24 @@ const OPS: Record<ShortcutOperator, {
     formUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/#/logga-in",
     scriptUrl: `${FN_BASE}/skanetrafiken-fill-script`,
     // swedishBank pays to the account registered to the BankID personnummer — no
-    // account entry. We pass mobile + payout method (voucher delivery / bank choice).
-    extras: (profile) => ({ mobile: profile?.claim_mobile ?? "", payoutMethod: profile?.payout_method ?? "" }),
+    // account entry. We pass mobile + payout method + personnummer (its socialSecurityNumber
+    // field is BankID-prefilled, so the fill only acts as a fallback when empty).
+    extras: (profile) => ({
+      mobile: profile?.claim_mobile ?? "",
+      payoutMethod: profile?.payout_method ?? "",
+      personnummer: profile?.claim_personnummer ?? "",
+    }),
   },
   vasttrafik: {
     label: "Västtrafik",
     formUrl: "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning/",
     scriptUrl: `${FN_BASE}/vasttrafik-fill-script`,
-    // BankID is at the END of Västtrafik's form, so the user authenticates + submits last.
-    extras: (profile) => ({ mobile: profile?.claim_mobile ?? "", payoutMethod: profile?.payout_method ?? "" }),
+    // BankID is at the END; section ③ "Kontaktuppgifter" is only a personnummer field.
+    extras: (profile) => ({
+      mobile: profile?.claim_mobile ?? "",
+      payoutMethod: profile?.payout_method ?? "",
+      personnummer: profile?.claim_personnummer ?? "",
+    }),
   },
 };
 

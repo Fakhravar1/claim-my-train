@@ -110,8 +110,12 @@ const SCRIPT = `
     if (ct === "voucher") {
       if (P.payoutMethod === "email") { if (clickRadio("voucherTypeEmail")) n++; }
       else { if (clickRadio("voucherTypeMobile")) n++; }
+    } else {
+      // swedishBank: socialSecurityNumber is normally BankID-prefilled — fill as a fallback
+      // only when it's empty, so we never clobber the authenticated value.
+      var ssn = byId("socialSecurityNumber");
+      if (ssn && !ssn.value && P.personnummer && setInput(ssn, P.personnummer)) n++;
     }
-    // swedishBank: socialSecurityNumber is BankID-prefilled — nothing to fill.
     return n;
   }
   function step3() {
