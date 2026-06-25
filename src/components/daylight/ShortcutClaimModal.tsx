@@ -19,7 +19,7 @@ import { Scrim, ModalHead } from "./primitives";
  */
 const FN_BASE = "https://jnfwmdirvnqfpfhtipld.supabase.co/functions/v1";
 
-type ShortcutOperator = "sl" | "skanetrafiken";
+type ShortcutOperator = "sl" | "skanetrafiken" | "vasttrafik";
 
 type Profile = ReturnType<typeof useAuth>["profile"];
 
@@ -48,6 +48,13 @@ const OPS: Record<ShortcutOperator, {
     scriptUrl: `${FN_BASE}/skanetrafiken-fill-script`,
     // swedishBank pays to the account registered to the BankID personnummer — no
     // account entry. We pass mobile + payout method (voucher delivery / bank choice).
+    extras: (profile) => ({ mobile: profile?.claim_mobile ?? "", payoutMethod: profile?.payout_method ?? "" }),
+  },
+  vasttrafik: {
+    label: "Västtrafik",
+    formUrl: "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning/",
+    scriptUrl: `${FN_BASE}/vasttrafik-fill-script`,
+    // BankID is at the END of Västtrafik's form, so the user authenticates + submits last.
     extras: (profile) => ({ mobile: profile?.claim_mobile ?? "", payoutMethod: profile?.payout_method ?? "" }),
   },
 };

@@ -346,6 +346,12 @@ export default function DaylightApp() {
           return <ShortcutClaimModal journey={journey} operator="sl" onClose={() => setClaim(null)} />;
         }
 
+        // Västtrafik (Göteborg) — BankID at the END of its form, so the Shortcut fills
+        // client-side and the user authenticates + submits last. Same modal as SL.
+        if (user && profile?.purchasing_operator === "vasttrafik" && isRealJourney) {
+          return <ShortcutClaimModal journey={journey} operator="vasttrafik" onClose={() => setClaim(null)} />;
+        }
+
         // Skånetrafiken's online BankID form — iPhone-only Shortcut autofill, additive to
         // the in-app PDF flow (ClaimModal) which stays the path on desktop and for anyone
         // who prefers it. Only intercept the literal 'skanetrafiken' operator (NOT the
