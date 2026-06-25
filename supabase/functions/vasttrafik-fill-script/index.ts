@@ -53,35 +53,43 @@ const SCRIPT = `
     }, 130);
   }
 
-  // Best-effort: the FIRST <select> whose label starts "Dag" = planned departure date.
-  // Its options are Swedish long dates ("Onsdag 24 juni 2026"); match by our journey date.
-  function setPlannedDate(dateIso) {
-    if (!dateIso) return false;
-    var want;
-    try {
-      want = new Date(dateIso + "T00:00:00").toLocaleDateString("sv-SE",
-        { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-    } catch (e) { return false; }
-    var sels = [].slice.call(document.querySelectorAll("select"));
-    for (var i = 0; i < sels.length; i++) {
-      var lab = (sels[i].getAttribute("aria-label") || "").toLowerCase();
-      if (lab.indexOf("dag") !== 0 && lab.indexOf("dag") < 0) continue;
-      for (var j = 0; j < sels[i].options.length; j++) {
-        if (sels[i].options[j].text.trim().toLowerCase() === want.toLowerCase()) {
-          sels[i].selectedIndex = j; fire(sels[i]); return true;
-        }
-      }
+  // The date/time selects have NO aria-label and DYNAMIC numeric-suffix ids (validated
+  // 2026-06-25), so target by the label-via-structure (label[for] or the closest
+  // form-group's label/legend text).
+  function selLabel(el) {
+    var t = "";
+    if (el.id) { var l = document.querySelector('label[for="' + el.id + '"]'); if (l) t = l.innerText; }
+    if (!t) { var fg = el.closest('[class*="form-group"], [class*="field"], fieldset');
+              if (fg) { var l2 = fg.querySelector("label, legend"); if (l2) t = l2.innerText; } }
+    return (t || "").replace(/\\s+/g, " ").trim().toLowerCase();
+  }
+  function findSelect(kw) {
+    var ss = document.querySelectorAll("select");
+    for (var i = 0; i < ss.length; i++) {
+      if ((ss[i].offsetWidth || ss[i].offsetHeight) && selLabel(ss[i]).indexOf(kw) === 0) return ss[i];
+    }
+    return null;
+  }
+  function pickOption(sel, matches) {
+    if (!sel) return false;
+    for (var i = 0; i < sel.options.length; i++) {
+      var o = sel.options[i];
+      if (matches(o.value, o.text.trim())) { sel.selectedIndex = i; fire(sel); return true; }
     }
     return false;
   }
 
-  // Best-effort: the first time input = planned departure time.
+  // Planned departure: "Dag" select carries a yyyy-mm-dd VALUE (cleanest match); "Timme"/
+  // "Minut" options are 2-digit text ("08","00") with unpadded values ("8","0").
+  function setPlannedDate(dateIso) {
+    return pickOption(findSelect("dag"), function (v) { return v === dateIso; });
+  }
   function setPlannedTime(hhmm) {
-    if (!hhmm) return false;
-    var t = document.querySelector('input[type="time"]');
-    if (!t) return false;
-    var s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-    s.call(t, hhmm); fire(t); return true;
+    if (!hhmm) return 0;
+    var hh = hhmm.slice(0, 2), mm = hhmm.slice(3, 5), n = 0;
+    if (pickOption(findSelect("timme"), function (v, t) { return t === hh || v === String(parseInt(hh, 10)); })) n++;
+    if (pickOption(findSelect("minut"), function (v, t) { return t === mm || v === String(parseInt(mm, 10)); })) n++;
+    return n;
   }
 
   var banner;
@@ -94,8 +102,8 @@ const SCRIPT = `
     driveTypeahead("delay-compensation-trip-leg-selector-from-to-selector-from", P.origin);
     driveTypeahead("delay-compensation-trip-leg-selector-from-to-selector-to", P.destination);
     if (setPlannedDate(P.date)) n++;
-    if (setPlannedTime(P.time)) n++;
-    note("Qvitta fyllde i resan - komplettera ankomsttid och uppgifter, gör BankID och skicka in sjalv.");
+    n += setPlannedTime(P.time);
+    note("Qvitta fyllde i resan - tryck Sök resa, välj din avgång, komplettera 'Så här blev det', gör BankID och skicka in sjalv.");
     return n;
   }
 
