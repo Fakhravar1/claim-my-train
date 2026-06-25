@@ -101,8 +101,16 @@ const SCRIPT = `
     var n = 0;
     driveTypeahead("delay-compensation-trip-leg-selector-from-to-selector-from", P.origin);
     driveTypeahead("delay-compensation-trip-leg-selector-from-to-selector-to", P.destination);
-    if (setPlannedDate(P.date)) n++;
-    n += setPlannedTime(P.time);
+    // Only touch the date/time while section ① ("Så här var det tänkt…") is active. Section
+    // ② ("Så här blev det") reuses the SAME Dag/Timme/Minut labels for the ACTUAL arrival, so
+    // once the user has picked a departure (section ① collapses, the from field disappears) we
+    // must NOT keep filling — that would overwrite the actual-arrival time with the planned one.
+    var fromEl = byId("delay-compensation-trip-leg-selector-from-to-selector-from");
+    var section1Active = fromEl && (fromEl.offsetWidth || fromEl.offsetHeight);
+    if (section1Active) {
+      if (setPlannedDate(P.date)) n++;
+      n += setPlannedTime(P.time);
+    }
     note("Qvitta fyllde i resan - tryck Sök resa, välj din avgång, komplettera 'Så här blev det', gör BankID och skicka in sjalv.");
     return n;
   }
