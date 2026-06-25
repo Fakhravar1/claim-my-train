@@ -1,0 +1,26 @@
+name: Diag HLT block
+
+# One-off: capture what the GitHub runner sees when hitting respons.hlt.se (which times out
+# from CI but loads from a Swedish IP). Screenshots the error/block state + Kalmar as a control.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r claim-worker/requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python diag_hlt.py
+        working-directory: claim-worker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diag-hlt-screenshots
+          path: claim-worker/spike_out/diag-*.png
+          if-no-files-found: warn
