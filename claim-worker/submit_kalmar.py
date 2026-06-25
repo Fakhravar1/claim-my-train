@@ -69,7 +69,10 @@ def submit_kalmar(claim: dict, profile: dict, *, live: bool) -> dict:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(locale="sv-SE")
         try:
-            page.goto(KLT_FORM_URL, wait_until="networkidle", timeout=60000)
+            # domcontentloaded (not networkidle): the respons pages keep connections open,
+            # so networkidle can time out on the initial load (it did for HLT on CI).
+            page.goto(KLT_FORM_URL, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(1500)
 
             for sel in ("button:has-text('Acceptera alla')", "button:has-text('Godkänn')",
                         "#onetrust-accept-btn-handler"):
@@ -95,6 +98,7 @@ def submit_kalmar(claim: dict, profile: dict, *, live: bool) -> dict:
 
             # --- AutoPostBack selects (KLT has no selComplaintWhere) ---
             choose("#selCardType", "Biljett i app")   # best-effort default (ticket gap)
+            choose("#Comp_Check", "Biljettens pris")  # "Jag vill ha ersättning för" (required)
             choose("#PayMethod", pay_label)
 
             # --- Personal ---
@@ -119,8 +123,11 @@ def submit_kalmar(claim: dict, profile: dict, *, live: bool) -> dict:
             # --- Actual times (KLT-specific; we have the realised arrival) ---
             fill("#txtRealToTime", dest_actual_dt.strftime("%H:%M") if dest_actual_dt else "")
 
-            # --- Ticket (gap): app-id from the filing pop-up / profile ---
-            fill("#TravelWithAppID", claim.get("booking_reference") or profile.get("claim_ticket_id"))
+            # --- Ticket (gap): the visible "Biljett ID" field varies by card type, so fill all
+            # ticket inputs with the app-id/number — `fill` skips the hidden ones. ---
+            _ticket = claim.get("booking_reference") or profile.get("claim_ticket_id")
+            for _t in ("#TravelWithAppID", "#TravelWithControlNumber", "#TravelWithCardTravelPassNumber"):
+                fill(_t, _ticket)
 
             # --- Payout (Kontant = Swedish bank) ---
             if profile.get("payout_method") == "bank":

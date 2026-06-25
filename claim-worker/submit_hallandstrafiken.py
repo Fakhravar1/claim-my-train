@@ -79,7 +79,10 @@ def submit_hallandstrafiken(claim: dict, profile: dict, *, live: bool) -> dict:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(locale="sv-SE")
         try:
-            page.goto(HLT_FORM_URL, wait_until="networkidle", timeout=60000)
+            # domcontentloaded (not networkidle): respons.hlt.se keeps connections open, so
+            # networkidle times out on the initial load (validated on CI 2026-06-25).
+            page.goto(HLT_FORM_URL, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(1500)
 
             # Cookie consent if the embedded page shows one (harmless if absent).
             for sel in ("button:has-text('Acceptera alla')", "button:has-text('Godkänn')",
