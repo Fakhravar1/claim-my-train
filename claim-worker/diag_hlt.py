@@ -23,16 +23,24 @@ def main():
             page = b.new_page(locale="sv-SE")
             print(f"== {name}: {url} ==")
             try:
-                resp = page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                resp = page.goto(url, wait_until="domcontentloaded", timeout=20000)
                 print(f"   status={resp.status if resp else None} final_url={page.url}")
             except Exception as e:
                 print(f"   goto error: {type(e).__name__}: {str(e)[:120]}")
-            page.wait_for_timeout(1000)
-            shot = page.screenshot(full_page=True)
+            # Halt any hung navigation so the screenshot doesn't also time out — a blocked host
+            # leaves the page loading forever (full_page waits for stability and would hang).
+            try:
+                page.evaluate("window.stop()")
+            except Exception:
+                pass
             path = os.path.join(OUT, f"diag-{name}.png")
-            with open(path, "wb") as f:
-                f.write(shot)
-            print(f"   screenshot -> {path} ({len(shot)} bytes) title={page.title()!r}")
+            try:
+                shot = page.screenshot(full_page=False, animations="disabled", timeout=12000)
+                with open(path, "wb") as f:
+                    f.write(shot)
+                print(f"   screenshot -> {path} ({len(shot)} bytes)")
+            except Exception as e:
+                print(f"   screenshot failed: {type(e).__name__}: {str(e)[:80]}")
             page.close()
         b.close()
 
