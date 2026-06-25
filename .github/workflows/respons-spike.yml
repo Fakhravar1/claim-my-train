@@ -1,0 +1,27 @@
+name: Respons dry-run spike
+
+# Manual validation of the respons web-form workers (Hallandstrafiken + Kalmar). Fills the
+# LIVE forms with mock data in DRY-RUN (never ticks consent, never submits — §19) and uploads
+# the filled-form screenshots as artifacts to eyeball the selectors. No secrets, no DB.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  spike:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r claim-worker/requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python spike_respons.py
+        working-directory: claim-worker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: respons-spike-screenshots
+          path: claim-worker/spike_out/*.png
+          if-no-files-found: warn
