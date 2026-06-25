@@ -11,20 +11,22 @@ import { Scrim, ModalHead, Field } from "./primitives";
 import { CheckIcon } from "./icons";
 
 /**
- * Hallandstrafiken claim pop-up. Hallandstrafiken's reklamation form has no BankID, so we
- * file it server-side via the headless worker (submit_hallandstrafiken) — no signature, no
- * PDF. The form needs ticket proof we don't store, so we collect the app-id / ticket number
- * here (stored on claims.booking_reference, same column SJ reuses) plus a contact email.
- *
- * The worker DRY-RUNs first (screenshot in "Mina ärenden") and only submits after the user
- * authorizes — so this pop-up just creates the pending claim; it never files anything itself.
+ * Filing pop-up for operators we file HEADLESSLY (no BankID web forms — Hallandstrafiken,
+ * Kalmar). Their `respons` form needs ticket proof we don't store, so we collect the
+ * app-id / ticket number here (claims.booking_reference) + a contact email, then create a
+ * pending claim. The worker dry-runs + screenshots for review; the user authorizes the real
+ * submit in "Mina ärenden". This pop-up never files anything itself (no signature, no PDF).
  */
-export function HallandstrafikenClaimModal({
+export function HeadlessClaimModal({
   journey,
+  operator,
+  label,
   onClose,
   onFiled,
 }: {
   journey: Journey;
+  operator: string;
+  label: string;
   onClose: () => void;
   onFiled?: () => void;
 }) {
@@ -44,7 +46,7 @@ export function HallandstrafikenClaimModal({
     [journey]
   );
 
-  const ticketErr = touched && !ticket.trim() ? "Ange ditt app-id eller biljettnummer från Hallandstrafiken." : null;
+  const ticketErr = touched && !ticket.trim() ? `Ange ditt app-id eller biljettnummer från ${label}.` : null;
   const contactErr = touched && Boolean(validateEmail(contact)) ? "Ange en giltig e-postadress." : null;
   const canSubmit = ticket.trim() && !validateEmail(contact) && !pending;
 
@@ -59,7 +61,7 @@ export function HallandstrafikenClaimModal({
       navigate("/settings");
       return;
     }
-    const res = await startClaim(journey, null, "hallandstrafiken", ticket.trim(), contact.trim());
+    const res = await startClaim(journey, null, operator, ticket.trim(), contact.trim());
     if (res.ok) {
       void queryClient.invalidateQueries({ queryKey: ["my-claims"] });
       onFiled?.();
@@ -74,13 +76,13 @@ export function HallandstrafikenClaimModal({
   return (
     <Scrim onClose={onClose}>
       <div className="modal modal--sm">
-        <ModalHead title="Ansök om ersättning · Hallandstrafiken" onClose={onClose} />
+        <ModalHead title={`Ansök om ersättning · ${label}`} onClose={onClose} />
         <div className="modal__body">
           {phase === "done" ? (
             <div className="step">
               <div className="verdict verdict--eligible">
-                <b>Tack! Vi förbereder din ansökan till Hallandstrafiken.</b> Vi fyller i formuläret med
-                dina uppgifter och visar dig en förhandsgranskning innan något skickas in.
+                <b>Tack! Vi förbereder din ansökan till {label}.</b> Vi fyller i formuläret med dina
+                uppgifter och visar dig en förhandsgranskning innan något skickas in.
               </div>
               <p className="muted">Granska och godkänn under <b>Mina ärenden</b> i inställningarna.</p>
               <div className="acct__btns">
@@ -99,14 +101,14 @@ export function HallandstrafikenClaimModal({
                 <div className="summary__row"><span>Försening</span><b>{journey.canceled ? "Inställt" : meta.minutes + " min"}</b></div>
               </div>
               <p className="lead">
-                Ange biljetten du reste med, så förbereder vi din ansökan hos Hallandstrafiken.
+                Ange biljetten du reste med, så förbereder vi din ansökan hos {label}.
               </p>
               <Field label="App-id eller biljettnummer">
                 <input
                   value={ticket}
                   onChange={(e) => setTicket(e.target.value)}
                   onBlur={() => setTouched(true)}
-                  placeholder="t.ex. app-id från Hallandstrafiken-appen"
+                  placeholder={`t.ex. app-id från ${label}-appen`}
                   autoComplete="off"
                   aria-invalid={Boolean(ticketErr)}
                 />

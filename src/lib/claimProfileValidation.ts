@@ -33,6 +33,8 @@ export const PURCHASING_OPERATORS = [
   // Hallandstrafiken's reklamation form has no BankID, so we file it in-app via the headless
   // claim-worker (submit_hallandstrafiken). A dedicated pop-up collects the ticket bits.
   { value: "hallandstrafiken", label: "Hallandstrafiken", supported: true },
+  // Kalmar länstrafik — same respons web form as Hallandstrafiken, filed headlessly.
+  { value: "kalmar", label: "Kalmar länstrafik", supported: true },
   // Västtrafik (Göteborg) files on its own form with BankID at the end → iOS Shortcut
   // autofill (handled by the DaylightApp branch, not the in-app flag).
   { value: "vasttrafik", label: "Västtrafik (Göteborg)", supported: false },
