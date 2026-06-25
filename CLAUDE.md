@@ -632,3 +632,69 @@ A **private, internal** decision-support tool — completely separate from the c
 - `dbt/models/marts/agg_corridor_delays.sql` — VIEW, the ranking. Rolls the daily table up across all retained days, resolves signatures → station names via `ref_stations` (Danish `Dk.*` stay as codes), and ranks worst-first by `n_late_20`. Read it: `select * from dbt_dev.agg_corridor_delays order by n_late_20 desc limit 20;`
 
 No public wrapper, no anon grant, no pg_cron (refreshes with the scheduled `dbt build`).
+
+---
+
+## 19. Operator coverage & filing architectures (multi-operator expansion, 2026-06-24/25)
+
+The app now files for **seven** purchasing operators via **three** filing architectures. The
+architecture is dictated by **where (if at all) the operator's form gates on BankID**:
+
+| Operator | `purchasing_operator` | Filing path | Status |
+|---|---|---|---|
+| Skånetrafiken | `skanetrafiken` | in-app **PDF** (`claim-worker` `fill_template`) on all devices; **iPhone Shortcut** to the online BankID form as an alternative | live |
+| Öresundståg | `oresundstag` | origin-county routed (§1); Skåne/DK-origin → Skånetrafiken PDF; other counties → that bolag's form | live |
+| SL | `sl` | **iOS Shortcut** (BankID at form START) | live |
+| Västtrafik | `vasttrafik` | **iOS Shortcut** (BankID at form END) | live (section-③ personnummer autofilled; trip-pick + "Så här blev det" are the user's) |
+| Hallandstrafiken | `hallandstrafiken` | **headless worker** (`submit_hallandstrafiken`, no BankID) | wired; needs a CI dry-run spike + `HLT_SUBMIT_LIVE` flip |
+| Kalmar länstrafik | `kalmar` | **headless worker** (`submit_kalmar`, same `respons` vendor) | wired; needs a CI dry-run spike + `KLT_SUBMIT_LIVE` flip |
+| SJ | `sj` | **headless worker** (`submit_sj`, no-login form) | dry-run gated (`SJ_SUBMIT_LIVE`) |
+
+(`snalltaget`/`other` are selectable but inert — no filing path.) All are in the
+`profiles.purchasing_operator` CHECK (migrations `20260624…`/`20260625…`) + `PURCHASING_OPERATORS`.
+
+### Architecture A — in-app PDF (Skånetrafiken). The original path (§3/§6), unchanged.
+
+### Architecture B — the iOS "Qvitta" Shortcut (BankID-gated web forms: SL, Skånetrafiken-online, Västtrafik)
+BankID can't be driven server-side, so these are filled **client-side** on the user's iPhone and
+the user does BankID + submit themselves (fill-only, never auto-submit — §8). Mechanics:
+- **One payload-driven Shortcut** named `Qvitta` (recipe: `docs/qvitta-shortcut.md`). Run 1 (deep
+  link `shortcuts://run-shortcut?name=Qvitta&input=text&text=<JSON>`) saves the trip JSON + opens
+  the operator form (the payload's `url`); Run 2 (Safari share sheet) fetches the operator's fill
+  script (the payload's `script`) and runs it. Adding an operator = **one new fill-script + a
+  config row, zero Shortcut change**. NOTE: the deep link MUST use `input=text&text=…`, not
+  `input=…` (the bare form doesn't deliver the payload).
+- **Per-operator fill scripts** are `verify_jwt=false` edge functions serving secret-free JS that
+  reads `window.__QVITTA__` and fills via native setters (React-safe): `sl-fill-script`,
+  `skanetrafiken-fill-script`, `vasttrafik-fill-script` (repo copies under `supabase/functions/`).
+  Selector fixes are server-side (one redeploy, no Shortcut rebuild) — the whole point.
+- **Frontend:** the generic `src/components/daylight/ShortcutClaimModal.tsx` (operator config map:
+  `formUrl`, `scriptUrl`, payload `extras`). `DaylightApp` routes `sl`/`vasttrafik` to it on any
+  device (desktop shows the external form link); `skanetrafiken` only on iPhone (desktop keeps the
+  PDF). No `claims` row is created for the Shortcut path. Per-operator form quirks learned from live
+  recon: Skånetrafiken = 3-step hash-routed wizard, controlled-`select` revert (set value+
+  selectedIndex+change), trip-pick + attestations left to the user; Västtrafik = date/time selects
+  have NO aria-label + dynamic ids (target by label-via-structure; `Dag` select takes a `yyyy-mm-dd`
+  value) and §② reuses §①'s `Dag/Timme/Minut` for the ACTUAL arrival (only fill while §① is active).
+  Personnummer is autofilled where the form has a field (Västtrafik §③; Skånetrafiken swedishBank
+  fallback) — passed in the payload from `profiles.claim_personnummer`.
+
+### Architecture C — headless worker (no BankID: SJ, Hallandstrafiken, Kalmar)
+No BankID ⇒ fill **and** submit server-side with Playwright (zero user friction). `claim-worker/`
+`HANDLERS` dispatches on `purchasing_operator`. **All gated identically (§8): DRY-RUN by default**
+(fill → screenshot to the `claims` bucket → `awaiting_<op>_authorization`); the user reviews the
+screenshot in **Settings → Mina ärenden** and authorizes (`<op>_authorized`); only then does the
+worker LIVE-submit, and ONLY when the per-operator env flag is set (`SJ_/HLT_/KLT_SUBMIT_LIVE`).
+The worker poll filter includes every `*_authorized` status. Filing pop-up for the respons
+operators = the generic `HeadlessClaimModal(operator, label)` (collects the ticket app-id →
+`claims.booking_reference`, creates the pending claim, no signature). Hallandstrafiken + Kalmar are
+the **same `respons` ASP.NET vendor** (AutoPostBack selects re-render server-side — drive with
+`select_option` + wait); Kalmar differs (no `selComplaintWhere`, single "Värdekod", required
+`PlannedTripWithLine` we don't snapshot — a gap; captures actual times we DO have).
+
+### Standing rule — NEVER submit a fabricated claim to a live operator system
+Test submissions use a **real** journey/booking, never mock data. Submitting fabricated data to a
+public transit authority's resegaranti/reklamation system is a false claim (§8: "polisanmäld") and
+harms a third party. Precedent: the SJ spike stopped BEFORE the final submit; the one real
+submission used a genuine booking. Validate headless workers by driving the live form to the submit
+button (no click) + the dry-run screenshot; capture the real confirmation only from a genuine claim.
