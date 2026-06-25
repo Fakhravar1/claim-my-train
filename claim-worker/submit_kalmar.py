@@ -123,11 +123,19 @@ def submit_kalmar(claim: dict, profile: dict, *, live: bool) -> dict:
             # --- Actual times (KLT-specific; we have the realised arrival) ---
             fill("#txtRealToTime", dest_actual_dt.strftime("%H:%M") if dest_actual_dt else "")
 
-            # --- Ticket (gap): the visible "Biljett ID" field varies by card type, so fill all
-            # ticket inputs with the app-id/number — `fill` skips the hidden ones. ---
-            _ticket = claim.get("booking_reference") or profile.get("claim_ticket_id")
-            for _t in ("#TravelWithAppID", "#TravelWithControlNumber", "#TravelWithCardTravelPassNumber"):
-                fill(_t, _ticket)
+            # --- Ticket: the visible "Biljett ID" field's id varies by card type and only
+            # renders after the selCardType postback, so fill it by its visible LABEL (robust
+            # to the id), with the TravelWith* ids as a fallback. ---
+            _ticket = (claim.get("booking_reference") or profile.get("claim_ticket_id") or "").strip()
+            if _ticket:
+                try:
+                    lbl = page.get_by_label("Biljett ID", exact=False)
+                    if lbl.count() and lbl.first.is_visible():
+                        lbl.first.fill(_ticket, timeout=5000)
+                except Exception:
+                    pass
+                for _t in ("#TravelWithAppID", "#TravelWithControlNumber", "#TravelWithCardTravelPassNumber"):
+                    fill(_t, _ticket)
 
             # --- Payout (Kontant = Swedish bank) ---
             if profile.get("payout_method") == "bank":
