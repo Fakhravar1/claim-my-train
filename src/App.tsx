@@ -39,7 +39,6 @@ const App = () => (
               <Route path="/" element={<DaylightApp />} />
               <Route path="/claim-review" element={<ClaimReview />} />
               <Route path="/my-delays" element={<MyDelays />} />
-              <Route path="/genvag" element={<ShortcutGuide />} />
               <Route path="/admin" element={<Admin />} />
               {/* Retired region pages → forward old bookmarks/emails. */}
               <Route path="/regions/skanetrafiken/claim-review" element={<ClaimReviewRedirect />} />
