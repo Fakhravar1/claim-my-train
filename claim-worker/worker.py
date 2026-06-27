@@ -29,6 +29,8 @@ SJ_SUBMIT_LIVE = os.environ.get("SJ_SUBMIT_LIVE", "").lower() == "true"
 HLT_SUBMIT_LIVE = os.environ.get("HLT_SUBMIT_LIVE", "").lower() == "true"
 # Kalmar länstrafik — same respons web form, same hard off-switch. Default OFF → dry-run.
 KLT_SUBMIT_LIVE = os.environ.get("KLT_SUBMIT_LIVE", "").lower() == "true"
+# Vy (Vy Tåg) — own Azure reimbursement form (no BankID). Same hard off-switch. Default OFF.
+VY_SUBMIT_LIVE = os.environ.get("VY_SUBMIT_LIVE", "").lower() == "true"
 
 
 def operator_of(claim: dict) -> str:
@@ -207,6 +209,43 @@ def handle_kalmar(sb, claim: dict) -> None:
         print(f"  {cid}: kalmar -> dry-run (awaiting authorization)")
 
 
+def handle_vy(sb, claim: dict) -> None:
+    """Vy (Vy Tåg) web-form path (no BankID). Same review→authorize gate as HLT/Kalmar/SJ."""
+    from submit_vy import submit_vy  # lazy: PDF path needs no Playwright
+
+    cid = claim["id"]
+    profile = load_profile(sb, claim)
+    live = VY_SUBMIT_LIVE and claim.get("status") == "vy_authorized"
+
+    result = submit_vy(claim, profile, live=live)
+
+    shot_path = None
+    if result.get("screenshot"):
+        shot_path = f'{claim["user_id"]}/{cid}-vy.png'
+        sb.storage.from_(BUCKET).upload(
+            shot_path, result["screenshot"], {"content-type": "image/png", "upsert": "true"}
+        )
+
+    if result.get("error"):
+        sb.table("claims").update(
+            {"status": "error", "error_message": result.get("message") or result["error"],
+             "pdf_path": shot_path}
+        ).eq("id", cid).execute()
+        print(f"  {cid}: vy -> {result['error']}")
+    elif result.get("submitted"):
+        sb.table("claims").update(
+            {"status": "submitted", "external_reference": result.get("external_reference"),
+             "submitted_at": datetime.now(timezone.utc).isoformat(),
+             "error_message": None, "pdf_path": shot_path}
+        ).eq("id", cid).execute()
+        print(f"  {cid}: vy -> submitted (ref {result.get('external_reference')})")
+    else:
+        sb.table("claims").update(
+            {"status": "awaiting_vy_authorization", "error_message": None, "pdf_path": shot_path}
+        ).eq("id", cid).execute()
+        print(f"  {cid}: vy -> dry-run (awaiting authorization)")
+
+
 HANDLERS = {
     "skanetrafiken": handle_skanetrafiken,
     # Öresundståg claims that reach the worker are Skåne/Köpenhamn-origin (non-Skåne origins
@@ -216,6 +255,7 @@ HANDLERS = {
     "sj": handle_sj,
     "hallandstrafiken": handle_hallandstrafiken,
     "kalmar": handle_kalmar,
+    "vy": handle_vy,
 }
 
 
@@ -225,7 +265,7 @@ def main() -> int:
     pending = (
         sb.table("claims")
         .select("*")
-        .in_("status", ["pending", "sj_authorized", "hlt_authorized", "kalmar_authorized"])
+        .in_("status", ["pending", "sj_authorized", "hlt_authorized", "kalmar_authorized", "vy_authorized"])
         .execute()
         .data
     )

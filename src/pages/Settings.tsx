@@ -69,6 +69,7 @@ const CLAIM_STATUS_META: Record<string, { label: string; className: string }> = 
   awaiting_sj_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   awaiting_hlt_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   awaiting_kalmar_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
+  awaiting_vy_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   submitted: { label: "Inskickad", className: "border-sky-300 bg-sky-50 text-sky-900" },
   sj_already_claimed: { label: "Redan ansökt hos SJ", className: "border-sky-300 bg-sky-50 text-sky-900" },
   error: { label: "Fel", className: "border-destructive/40 bg-destructive/10 text-destructive" },
@@ -243,6 +244,24 @@ const Settings = () => {
       if (error) throw error;
       await queryClient.invalidateQueries({ queryKey: ["my-claims"] });
       toast({ title: "Skickas in till Kalmar länstrafik", description: "Vi skickar in din ansökan vid nästa körning." });
+    } catch (error) {
+      toast({ title: "Kunde inte skicka in", description: error instanceof Error ? error.message : "Misslyckades", variant: "destructive" });
+    } finally {
+      setSjBusyId(null);
+    }
+  };
+
+  // Vy review→authorize (same headless dry-run gate as Kalmar/Hallandstrafiken).
+  const authorizeVy = async (id: string) => {
+    setSjBusyId(id);
+    try {
+      const { error } = await supabase
+        .from("claims")
+        .update({ status: "vy_authorized", error_message: null } as never)
+        .eq("id", id);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["my-claims"] });
+      toast({ title: "Skickas in till Vy", description: "Vi skickar in din ansökan vid nästa körning." });
     } catch (error) {
       toast({ title: "Kunde inte skicka in", description: error instanceof Error ? error.message : "Misslyckades", variant: "destructive" });
     } finally {
@@ -1358,6 +1377,24 @@ const Settings = () => {
                                 onClick={() => void authorizeKalmar(claim.id)}
                               >
                                 {sjBusyId === claim.id ? "Skickar…" : "Godkänn och skicka in till Kalmar länstrafik"}
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* Vy: review the dry-run, then authorize the real submission. */}
+                          {claim.status === "awaiting_vy_authorization" && (
+                            <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                              <p className="text-xs text-amber-900">
+                                Så här långt fyller vi i hos Vy. Stämmer resan? Godkänn så skickar vi in ansökan åt dig.
+                              </p>
+                              <ClaimShot path={claim.pdf_path} />
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={sjBusyId === claim.id}
+                                onClick={() => void authorizeVy(claim.id)}
+                              >
+                                {sjBusyId === claim.id ? "Skickar…" : "Godkänn och skicka in till Vy"}
                               </Button>
                             </div>
                           )}

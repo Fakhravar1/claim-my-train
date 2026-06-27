@@ -58,6 +58,9 @@ export function buildClaimPayload(
     destination_stop_name: journey.destination_stop_name ?? "",
     destination_scheduled: journey.destination_scheduled ?? "",
     destination_actual: journey.destination_actual ?? null,
+    // Train number for operators whose form requires it (Vy's "Tågnummer"). Snapshotted
+    // so the worker has it independent of any later fct_journeys rebuild.
+    service_number: journey.service_number ?? null,
     destination_delay_seconds:
       journey.destination_delay_minutes != null
         ? Math.round(Number(journey.destination_delay_minutes) * 60)

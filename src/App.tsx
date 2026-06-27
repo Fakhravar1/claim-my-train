@@ -15,6 +15,7 @@ const DaylightApp = lazy(() => import("./pages/DaylightApp"));
 const ClaimReview = lazy(() => import("./pages/ClaimReview"));
 const MyDelays = lazy(() => import("./pages/MyDelays"));
 const Admin = lazy(() => import("./pages/Admin"));
+const ShortcutGuide = lazy(() => import("./pages/ShortcutGuide"));
 
 // The region pages (/regions/skanetrafiken/*) were retired — their function
 // moved onto `/` and `/claim-review`. This preserves links in digest emails
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/" element={<DaylightApp />} />
               <Route path="/claim-review" element={<ClaimReview />} />
               <Route path="/my-delays" element={<MyDelays />} />
+              <Route path="/genvag" element={<ShortcutGuide />} />
               <Route path="/admin" element={<Admin />} />
               {/* Retired region pages → forward old bookmarks/emails. */}
               <Route path="/regions/skanetrafiken/claim-review" element={<ClaimReviewRedirect />} />

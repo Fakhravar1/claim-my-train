@@ -39,6 +39,18 @@ export const PURCHASING_OPERATORS = [
   // Västtrafik (Göteborg) files on its own form with BankID at the end → iOS Shortcut
   // autofill (handled by the DaylightApp branch, not the in-app flag).
   { value: "vasttrafik", label: "Västtrafik (Göteborg)", supported: false },
+  // Vy (Vy Tåg) files on its own Azure reimbursement portal (no BankID) → filed HEADLESSLY
+  // by the claim-worker (submit_vy.py), same review→authorize gate as Kalmar/SJ.
+  { value: "vy", label: "Vy (Vy Tåg)", supported: true },
+  // Regional länstrafik operators — EXTERNAL redirect for now: the claim CTA links out to each
+  // operator's own förseningsersättning form (ShortcutClaimModal with no fill script, like
+  // Hallandstrafiken), no claims row is stored. Headless filing is a follow-up, reconned per form.
+  // UL has NO journey label (its trains run as Mälardalstrafik AB / X-trafik) → manual-select only.
+  { value: "varmlandstrafik", label: "Värmlandstrafik (Värmland)", supported: false, externalClaimUrl: "https://www.varmlandstrafik.se/varmlandstrafik/kundservice/forseningsersattning" },
+  { value: "ostgotatrafiken", label: "Östgötatrafiken (Östergötland)", supported: false, externalClaimUrl: "https://www.ostgotatrafiken.se/kundservice/vanliga-arenden/forseningsersattning/" },
+  { value: "jlt", label: "Jönköpings Länstrafik (JLT)", supported: false, externalClaimUrl: "https://www.jlt.se/kundservice/forseningsersattning/" },
+  { value: "ul", label: "UL (Uppsala län)", supported: false, externalClaimUrl: "https://www.ul.se/kundservice/forseningsersattning/" },
+  { value: "malartag", label: "Mälartåg (Mälardalen)", supported: false, externalClaimUrl: "https://www.malardalstrafik.se/kundservice/ersaettning-vid-foersening/" },
   { value: "sj", label: "SJ", supported: false },
   { value: "snalltaget", label: "Snälltåget", supported: false },
   { value: "other", label: "Annan operatör / vet inte", supported: false },
@@ -81,6 +93,20 @@ export const purchasingOperatorClaimUrl = (value: string | null | undefined): st
     ?.externalClaimUrl ?? null;
 export const purchasingOperatorLabel = (value: string | null | undefined): string =>
   PURCHASING_OPERATORS.find((o) => o.value === value)?.label ?? (value ?? "");
+
+// "Match by means of transport": map a journey's observed operator label (TV information_owner)
+// to a purchasing_operator, so the board can route the claim CTA to the right operator's form
+// from the JOURNEY itself, regardless of the user's saved ticket operator (§1 lets us hint from
+// the observed owner; the user can still override in Settings). UL is absent on purpose — its
+// trains carry no "UL" label (Mälardalstrafik AB / X-trafik), so a UL claim is manual-select only.
+const OPERATOR_OWNER_HINT: Record<string, PurchasingOperator> = {
+  "Värmlandstrafik": "varmlandstrafik",
+  "ÖstgötaTrafiken": "ostgotatrafiken",
+  "Jönköpings Länstrafik": "jlt",
+  "Mälardalstrafik AB": "malartag",
+};
+export const purchasingOperatorFromOwner = (owner: string | null | undefined): PurchasingOperator | null =>
+  (owner && OPERATOR_OWNER_HINT[owner.trim()]) || null;
 
 export type ClaimProfileInput = {
   firstName: string;

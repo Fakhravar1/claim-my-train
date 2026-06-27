@@ -8,6 +8,7 @@ import { useJourneys, type Journey } from "@/hooks/useJourneys";
 import type { WatchTarget } from "@/components/daylight/WatchModal";
 import { useStations } from "@/hooks/useStations";
 import { statusMeta } from "@/lib/daylightStatus";
+import { purchasingOperatorFromOwner } from "@/lib/claimProfileValidation";
 import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
@@ -343,6 +344,37 @@ export default function DaylightApp() {
         // worker. The pop-up collects the ticket id and creates the pending claim (any device).
         if (user && profile?.purchasing_operator === "kalmar" && isRealJourney) {
           return <HeadlessClaimModal journey={journey} operator="kalmar" label="Kalmar länstrafik" onClose={() => setClaim(null)} />;
+        }
+        // Vy (Vy Tåg) files on its own Azure reimbursement form (no BankID) → headless worker,
+        // same as Kalmar. The pop-up collects the Vy booking number (claims.booking_reference).
+        if (user && profile?.purchasing_operator === "vy" && isRealJourney) {
+          return (
+            <HeadlessClaimModal
+              journey={journey}
+              operator="vy"
+              label="Vy"
+              ticketLabel="Bokningsnummer"
+              ticketPlaceholder="ditt Vy-bokningsnummer"
+              onClose={() => setClaim(null)}
+            />
+          );
+        }
+
+        // Regional länstrafik operators file on their OWN förseningsersättning forms — routed by
+        // the JOURNEY's operator label ("match by means of transport"), so they work regardless of
+        // the user's saved ticket operator. EXTERNAL redirect for now (no claims row); headless is
+        // a follow-up. Placed before the profile-based branches so a regional journey never falls
+        // through to the Skånetrafiken PDF.
+        if (user && isRealJourney) {
+          const hinted = purchasingOperatorFromOwner(journey.operator);
+          if (hinted === "varmlandstrafik" || hinted === "ostgotatrafiken" || hinted === "jlt" || hinted === "malartag") {
+            return <ShortcutClaimModal journey={journey} operator={hinted} onClose={() => setClaim(null)} />;
+          }
+        }
+        // UL (Uppsala län) carries no journey label (Mälardalstrafik AB / X-trafik), so it routes
+        // only via the user's saved ticket operator.
+        if (user && profile?.purchasing_operator === "ul" && isRealJourney) {
+          return <ShortcutClaimModal journey={journey} operator="ul" onClose={() => setClaim(null)} />;
         }
 
         // SL files on its own BankID-gated form. On iPhone we hand the journey to the

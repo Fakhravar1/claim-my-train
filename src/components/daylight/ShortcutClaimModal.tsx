@@ -19,7 +19,9 @@ import { Scrim, ModalHead } from "./primitives";
  */
 const FN_BASE = "https://jnfwmdirvnqfpfhtipld.supabase.co/functions/v1";
 
-type ShortcutOperator = "sl" | "skanetrafiken" | "vasttrafik" | "hallandstrafiken";
+type ShortcutOperator =
+  | "sl" | "skanetrafiken" | "vasttrafik" | "hallandstrafiken"
+  | "varmlandstrafik" | "ostgotatrafiken" | "jlt" | "ul" | "malartag";
 
 type Profile = ReturnType<typeof useAuth>["profile"];
 
@@ -74,6 +76,33 @@ const OPS: Record<ShortcutOperator, {
   hallandstrafiken: {
     label: "Hallandstrafiken",
     formUrl: "https://hallandstrafiken.se/kundservice/vanliga-arenden/forseningsersattning-och-reklamation/reklamation",
+    extras: () => ({}),
+  },
+  // Regional länstrafik — EXTERNAL redirect for now (no fill script): link out to each operator's
+  // own förseningsersättning form. Headless filing is a follow-up, reconned per form.
+  varmlandstrafik: {
+    label: "Värmlandstrafik",
+    formUrl: "https://www.varmlandstrafik.se/varmlandstrafik/kundservice/forseningsersattning",
+    extras: () => ({}),
+  },
+  ostgotatrafiken: {
+    label: "Östgötatrafiken",
+    formUrl: "https://www.ostgotatrafiken.se/kundservice/vanliga-arenden/forseningsersattning/",
+    extras: () => ({}),
+  },
+  jlt: {
+    label: "Jönköpings Länstrafik",
+    formUrl: "https://www.jlt.se/kundservice/forseningsersattning/",
+    extras: () => ({}),
+  },
+  ul: {
+    label: "UL",
+    formUrl: "https://www.ul.se/kundservice/forseningsersattning/",
+    extras: () => ({}),
+  },
+  malartag: {
+    label: "Mälartåg",
+    formUrl: "https://www.malardalstrafik.se/kundservice/ersaettning-vid-foersening/",
     extras: () => ({}),
   },
 };
@@ -162,6 +191,10 @@ export function ShortcutClaimModal({
                   <li>När formuläret visas: öppna <b>Dela-menyn</b> och kör <b>Qvitta</b>-genvägen igen — fälten fylls i.</li>
                   <li><b>Granska, välj din resa om det behövs, och skicka in själv.</b> Qvitta skickar aldrig in åt dig.</li>
                 </ol>
+                <p className="muted">
+                  Har du inte genvägen än?{" "}
+                  <button className="linklike" onClick={() => { onClose(); navigate("/genvag"); }}>Installera Qvitta-genvägen</button>
+                </p>
                 {bankMissing && (
                   <p className="muted">
                     Tips: lägg till bankuppgifter under{" "}

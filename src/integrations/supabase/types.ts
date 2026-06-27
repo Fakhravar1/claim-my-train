@@ -37,6 +37,7 @@ export type Database = {
           outcome: string | null
           pdf_path: string | null
           purchasing_operator: string | null
+          service_number: string | null
           signature_path: string | null
           status: string
           submitted_at: string | null
@@ -66,6 +67,7 @@ export type Database = {
           outcome?: string | null
           pdf_path?: string | null
           purchasing_operator?: string | null
+          service_number?: string | null
           signature_path?: string | null
           status?: string
           submitted_at?: string | null
@@ -95,6 +97,7 @@ export type Database = {
           outcome?: string | null
           pdf_path?: string | null
           purchasing_operator?: string | null
+          service_number?: string | null
           signature_path?: string | null
           status?: string
           submitted_at?: string | null

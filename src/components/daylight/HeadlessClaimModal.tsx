@@ -21,12 +21,17 @@ export function HeadlessClaimModal({
   journey,
   operator,
   label,
+  ticketLabel = "App-id eller biljettnummer",
+  ticketPlaceholder,
   onClose,
   onFiled,
 }: {
   journey: Journey;
   operator: string;
   label: string;
+  /** What proof the operator's form needs (default: app-id/ticket no.). Vy wants a booking no. */
+  ticketLabel?: string;
+  ticketPlaceholder?: string;
   onClose: () => void;
   onFiled?: () => void;
 }) {
@@ -46,7 +51,7 @@ export function HeadlessClaimModal({
     [journey]
   );
 
-  const ticketErr = touched && !ticket.trim() ? `Ange ditt app-id eller biljettnummer från ${label}.` : null;
+  const ticketErr = touched && !ticket.trim() ? `Ange ${ticketLabel.toLowerCase()} från ${label}.` : null;
   const contactErr = touched && Boolean(validateEmail(contact)) ? "Ange en giltig e-postadress." : null;
   const canSubmit = ticket.trim() && !validateEmail(contact) && !pending;
 
@@ -103,12 +108,12 @@ export function HeadlessClaimModal({
               <p className="lead">
                 Ange biljetten du reste med, så förbereder vi din ansökan hos {label}.
               </p>
-              <Field label="App-id eller biljettnummer">
+              <Field label={ticketLabel}>
                 <input
                   value={ticket}
                   onChange={(e) => setTicket(e.target.value)}
                   onBlur={() => setTouched(true)}
-                  placeholder={`t.ex. app-id från ${label}-appen`}
+                  placeholder={ticketPlaceholder ?? `t.ex. app-id från ${label}-appen`}
                   autoComplete="off"
                   aria-invalid={Boolean(ticketErr)}
                 />
