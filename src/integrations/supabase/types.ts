@@ -202,6 +202,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_number: string | null
           avatar_url: string | null
           city: string | null
           claim_email: string | null
@@ -209,6 +210,7 @@ export type Database = {
           claim_personnummer: string | null
           claim_ticket_id: string | null
           claims_done_count: number
+          clearing_number: string | null
           commuter_from_stop_id: string | null
           commuter_outbound_end_time: string | null
           commuter_outbound_start_time: string | null
@@ -223,8 +225,6 @@ export type Database = {
           id: string
           is_period_ticket: boolean
           last_name: string | null
-          account_number: string | null
-          clearing_number: string | null
           payout_method: string | null
           postal_code: string | null
           preferred_from_stop_id: string | null
@@ -236,6 +236,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          account_number?: string | null
           avatar_url?: string | null
           city?: string | null
           claim_email?: string | null
@@ -243,6 +244,7 @@ export type Database = {
           claim_personnummer?: string | null
           claim_ticket_id?: string | null
           claims_done_count?: number
+          clearing_number?: string | null
           commuter_from_stop_id?: string | null
           commuter_outbound_end_time?: string | null
           commuter_outbound_start_time?: string | null
@@ -257,8 +259,6 @@ export type Database = {
           id: string
           is_period_ticket?: boolean
           last_name?: string | null
-          account_number?: string | null
-          clearing_number?: string | null
           payout_method?: string | null
           postal_code?: string | null
           preferred_from_stop_id?: string | null
@@ -270,6 +270,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          account_number?: string | null
           avatar_url?: string | null
           city?: string | null
           claim_email?: string | null
@@ -277,6 +278,7 @@ export type Database = {
           claim_personnummer?: string | null
           claim_ticket_id?: string | null
           claims_done_count?: number
+          clearing_number?: string | null
           commuter_from_stop_id?: string | null
           commuter_outbound_end_time?: string | null
           commuter_outbound_start_time?: string | null
@@ -291,8 +293,6 @@ export type Database = {
           id?: string
           is_period_ticket?: boolean
           last_name?: string | null
-          account_number?: string | null
-          clearing_number?: string | null
           payout_method?: string | null
           postal_code?: string | null
           preferred_from_stop_id?: string | null
@@ -639,14 +639,6 @@ export type Database = {
           route_distance_km: number | null
           service_number: string | null
           transport_mode: string | null
-        }
-        Relationships: []
-      }
-      v_station_claim_authority: {
-        Row: {
-          county_no: number | null
-          region_authority_key: string | null
-          stop_id: string | null
         }
         Relationships: []
       }
