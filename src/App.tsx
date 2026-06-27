@@ -15,7 +15,6 @@ const DaylightApp = lazy(() => import("./pages/DaylightApp"));
 const ClaimReview = lazy(() => import("./pages/ClaimReview"));
 const MyDelays = lazy(() => import("./pages/MyDelays"));
 const Admin = lazy(() => import("./pages/Admin"));
-const ShortcutGuide = lazy(() => import("./pages/ShortcutGuide"));
 
 // The region pages (/regions/skanetrafiken/*) were retired — their function
 // moved onto `/` and `/claim-review`. This preserves links in digest emails
