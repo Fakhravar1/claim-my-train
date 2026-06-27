@@ -71,10 +71,15 @@ export function ClaimModal({
   initial,
   onClose,
   onClaimed,
+  forcedOperator,
 }: {
   initial: ClaimInitial;
   onClose: () => void;
   onClaimed?: () => void;
+  /** Overrides which operator this modal renders for (the operator-choice pop-up's pick),
+   *  instead of silently reading the user's saved `profile.purchasing_operator` — that read
+   *  is what made every claim show whatever operator the profile happened to have saved. */
+  forcedOperator?: string | null;
 }) {
   const navigate = useNavigate();
   const { user, profile, signInWithGoogle } = useAuth();
@@ -155,7 +160,7 @@ export function ClaimModal({
     [profile]
   );
   const missing = claimFields.filter(([, v]) => !v.trim()).map(([k]) => k);
-  const operatorSupported = isSupportedPurchasingOperator(profile?.purchasing_operator);
+  const operatorSupported = isSupportedPurchasingOperator(forcedOperator ?? profile?.purchasing_operator);
   const canFile = user && missing.length === 0 && operatorSupported;
 
   // Signature preview (short-lived signed URL) once a logged-in user reaches the
@@ -184,7 +189,7 @@ export function ClaimModal({
   const detailsOperatorSupported = isSupportedPurchasingOperator(details.purchasingOperator);
   // Which operator/ticket this claim files under: a signed-in user's saved choice,
   // else the inline (logged-out) selection. SJ keys its web form on the booking number.
-  const activeOperator = user ? profile?.purchasing_operator ?? null : details.purchasingOperator;
+  const activeOperator = forcedOperator ?? (user ? profile?.purchasing_operator ?? null : details.purchasingOperator);
   const needsBookingRef = activeOperator === "sj";
   // Operators that file on their own site (SL): we don't store a claim — the CTA links out.
   const externalClaimUrl = purchasingOperatorClaimUrl(activeOperator);

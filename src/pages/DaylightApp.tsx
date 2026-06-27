@@ -8,7 +8,7 @@ import { useJourneys, type Journey } from "@/hooks/useJourneys";
 import type { WatchTarget } from "@/components/daylight/WatchModal";
 import { useStations } from "@/hooks/useStations";
 import { statusMeta } from "@/lib/daylightStatus";
-import { purchasingOperatorFromOwner } from "@/lib/claimProfileValidation";
+import type { PurchasingOperator } from "@/lib/claimProfileValidation";
 import { Nav, Hero, ValueProps, Footer } from "@/components/daylight/shell";
 import { Board } from "@/components/daylight/Board";
 import { ClaimModal, type ClaimInitial } from "@/components/daylight/ClaimModal";
@@ -16,6 +16,7 @@ import { SjClaimModal } from "@/components/daylight/SjClaimModal";
 import { HeadlessClaimModal } from "@/components/daylight/HeadlessClaimModal";
 import { ShortcutClaimModal } from "@/components/daylight/ShortcutClaimModal";
 import { RegionalClaimModal } from "@/components/daylight/RegionalClaimModal";
+import { OperatorChoiceModal } from "@/components/daylight/OperatorChoiceModal";
 import { useStationAuthorities } from "@/hooks/useStationAuthorities";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
 import { WatchModal } from "@/components/daylight/WatchModal";
@@ -60,6 +61,12 @@ export default function DaylightApp() {
   // target changes/closes.
   const [regionalInApp, setRegionalInApp] = useState(false);
   useEffect(() => { if (!claim) setRegionalInApp(false); }, [claim]);
+  // The user picks which operator to file/redirect through for EACH claim — never
+  // inferred from the saved profile (that silently routed every claim to the user's
+  // stored ticket operator, e.g. always "SL" regardless of the actual journey/operator).
+  // Reset whenever the claim target changes/closes so the picker reappears each time.
+  const [chosenOperator, setChosenOperator] = useState<PurchasingOperator | null>(null);
+  useEffect(() => { if (!claim) setChosenOperator(null); }, [claim]);
   const [info, setInfo] = useState<Journey | null>(null);
   const [watch, setWatch] = useState<WatchTarget | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -328,26 +335,44 @@ export default function DaylightApp() {
         const isRealJourney = !(claim as { blank?: boolean }).blank;
         const journey = claim as Journey;
 
-        // SJ trips aren't standing commutes — a signed-in SJ user claiming a known journey
-        // gets the focused SJ pop-up (booking + purchase email).
-        if (user && profile?.purchasing_operator === "sj" && isRealJourney) {
+        // Blank/login entries skip the operator picker — there's no journey to file yet.
+        if (!isRealJourney) {
+          return <ClaimModal initial={claim} onClose={() => setClaim(null)} />;
+        }
+
+        // First step for every real journey: ask which operator to file/redirect through,
+        // for every operator including Skånetrafiken — never inferred from the saved profile.
+        if (user && !chosenOperator) {
+          return (
+            <OperatorChoiceModal
+              journey={journey}
+              onChoose={(op) => setChosenOperator(op)}
+              onClose={() => setClaim(null)}
+            />
+          );
+        }
+
+        const op = chosenOperator;
+
+        // SJ — focused pop-up (booking + purchase email).
+        if (op === "sj") {
           return <SjClaimModal journey={journey} onClose={() => setClaim(null)} />;
         }
 
         // Hallandstrafiken: EXTERNAL for now — its reklamation form geo-blocks our worker's IP
         // (US/datacenter), so headless filing is backlogged. Link the user out to the form
         // (reached fine from their own Swedish IP). No claims row.
-        if (user && profile?.purchasing_operator === "hallandstrafiken" && isRealJourney) {
+        if (op === "hallandstrafiken") {
           return <ShortcutClaimModal journey={journey} operator="hallandstrafiken" onClose={() => setClaim(null)} />;
         }
         // Kalmar has no BankID and its host doesn't block us → filed server-side by the headless
         // worker. The pop-up collects the ticket id and creates the pending claim (any device).
-        if (user && profile?.purchasing_operator === "kalmar" && isRealJourney) {
+        if (op === "kalmar") {
           return <HeadlessClaimModal journey={journey} operator="kalmar" label="Kalmar länstrafik" onClose={() => setClaim(null)} />;
         }
         // Vy (Vy Tåg) files on its own Azure reimbursement form (no BankID) → headless worker,
         // same as Kalmar. The pop-up collects the Vy booking number (claims.booking_reference).
-        if (user && profile?.purchasing_operator === "vy" && isRealJourney) {
+        if (op === "vy") {
           return (
             <HeadlessClaimModal
               journey={journey}
@@ -360,42 +385,30 @@ export default function DaylightApp() {
           );
         }
 
-        // Regional länstrafik operators file on their OWN förseningsersättning forms — routed by
-        // the JOURNEY's operator label ("match by means of transport"), so they work regardless of
-        // the user's saved ticket operator. EXTERNAL redirect for now (no claims row); headless is
-        // a follow-up. Placed before the profile-based branches so a regional journey never falls
-        // through to the Skånetrafiken PDF.
-        if (user && isRealJourney) {
-          const hinted = purchasingOperatorFromOwner(journey.operator);
-          if (hinted === "varmlandstrafik" || hinted === "ostgotatrafiken" || hinted === "jlt" || hinted === "malartag") {
-            return <ShortcutClaimModal journey={journey} operator={hinted} onClose={() => setClaim(null)} />;
-          }
-        }
-        // UL (Uppsala län) carries no journey label (Mälardalstrafik AB / X-trafik), so it routes
-        // only via the user's saved ticket operator.
-        if (user && profile?.purchasing_operator === "ul" && isRealJourney) {
-          return <ShortcutClaimModal journey={journey} operator="ul" onClose={() => setClaim(null)} />;
+        // Regional länstrafik operators (and UL) file on their OWN förseningsersättning forms —
+        // EXTERNAL redirect for now (no claims row); headless is a follow-up.
+        if (op === "varmlandstrafik" || op === "ostgotatrafiken" || op === "jlt" || op === "malartag" || op === "ul") {
+          return <ShortcutClaimModal journey={journey} operator={op} onClose={() => setClaim(null)} />;
         }
 
         // SL files on its own BankID-gated form. On iPhone we hand the journey to the
         // "Qvitta" iOS Shortcut (deep link → stash → open SL → re-run to autofill); on
         // other devices the modal just links out to SL's form. No claims row either way.
-        if (user && profile?.purchasing_operator === "sl" && isRealJourney) {
+        if (op === "sl") {
           return <ShortcutClaimModal journey={journey} operator="sl" onClose={() => setClaim(null)} />;
         }
 
         // Västtrafik (Göteborg) — BankID at the END of its form, so the Shortcut fills
         // client-side and the user authenticates + submits last. Same modal as SL.
-        if (user && profile?.purchasing_operator === "vasttrafik" && isRealJourney) {
+        if (op === "vasttrafik") {
           return <ShortcutClaimModal journey={journey} operator="vasttrafik" onClose={() => setClaim(null)} />;
         }
 
         // Skånetrafiken's online BankID form — iPhone-only Shortcut autofill, additive to
         // the in-app PDF flow (ClaimModal) which stays the path on desktop and for anyone
-        // who prefers it. Only intercept the literal 'skanetrafiken' operator (NOT the
-        // Öresundståg-in-Skåne case, which files as skanetrafiken via ClaimModal below).
+        // who prefers it.
         if (
-          user && profile?.purchasing_operator === "skanetrafiken" && isRealJourney &&
+          op === "skanetrafiken" &&
           typeof navigator !== "undefined" &&
           (/iP(hone|ad|od)/.test(navigator.userAgent) ||
             (/Macintosh/.test(navigator.userAgent) && "ontouchend" in document))
@@ -406,7 +419,7 @@ export default function DaylightApp() {
         // Öresundståg is origin-routed: the claim goes to the länstrafikbolag of the county
         // where the journey started. Skåne/Köpenhamn-origin (region key skanetrafiken) files
         // in-app via ClaimModal below; other counties confirm + link out via RegionalClaimModal.
-        if (user && profile?.purchasing_operator === "oresundstag" && isRealJourney && !regionalInApp) {
+        if (op === "oresundstag" && !regionalInApp) {
           const key = (journey.origin_stop_id && stationAuthorities?.get(journey.origin_stop_id)) || "skanetrafiken";
           if (key !== "skanetrafiken") {
             return (
@@ -420,9 +433,17 @@ export default function DaylightApp() {
           }
         }
 
-        // Blank/login entries, Skånetrafiken/Pågatåg, and Öresundståg-in-Skåne use the
-        // standard multi-step ClaimModal (Öresundståg files as skanetrafiken — see buildClaimPayload).
-        return <ClaimModal initial={claim} onClose={() => setClaim(null)} />;
+        // Skånetrafiken (desktop/Android), Pågatåg, and Öresundståg-in-Skåne use the standard
+        // multi-step in-app ClaimModal (PDF reklamation). Signed-in users are forced to the
+        // operator they just picked, so it never silently falls back to the saved profile;
+        // signed-out users still pick inline via the modal's own operator dropdown.
+        return (
+          <ClaimModal
+            initial={claim}
+            forcedOperator={user ? op ?? "skanetrafiken" : undefined}
+            onClose={() => setClaim(null)}
+          />
+        );
       })()}
       {info && <EligibilityModal dep={info} onClose={() => setInfo(null)} onWatch={watchTrain} />}
       {watch && <WatchModal journey={watch} onClose={() => setWatch(null)} />}

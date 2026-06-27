@@ -218,6 +218,14 @@
 .cmt-daylight-scrim .how li{padding-left:.2rem;}
 .cmt-daylight-scrim .linklike{background:none;border:none;padding:0;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;}
 .cmt-daylight-scrim .step .lead{margin-bottom:.2rem;color:var(--card-muted);}
+.cmt-daylight-scrim .coverage{display:flex;flex-direction:column;gap:.5rem;margin-top:.9rem;}
+.cmt-daylight-scrim .coverage__row{display:grid;grid-template-columns:minmax(140px,1fr) 2fr auto;gap:.7rem;align-items:center;padding:.55rem .2rem;border-top:var(--bw) solid var(--line-2);}
+.cmt-daylight-scrim .coverage__row:first-child{border-top:none;}
+.cmt-daylight-scrim .coverage__op{display:flex;flex-direction:column;gap:.1rem;}
+.cmt-daylight-scrim .coverage__op b{font-size:.95rem;color:var(--card-text);}
+.cmt-daylight-scrim .coverage__op .muted{font-size:.78rem;}
+.cmt-daylight-scrim .coverage__how{font-size:.88rem;color:var(--card-muted);line-height:1.45;}
+@media (max-width:560px){.cmt-daylight-scrim .coverage__row{grid-template-columns:1fr auto;}.cmt-daylight-scrim .coverage__how{grid-column:1 / -1;}}
 .cmt-daylight-scrim .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;}
 .cmt-daylight-scrim .field{display:flex;flex-direction:column;gap:.4rem;}
 .cmt-daylight-scrim .field__label{font-size:.78rem;font-weight:600;color:var(--card-text);letter-spacing:.01em;}
@@ -268,6 +276,9 @@
 .cmt-daylight-scrim .acct__h{font-family:var(--font-display);font-size:1.3rem;font-weight:var(--h-weight);letter-spacing:-.02em;color:var(--card-text);}
 .cmt-daylight-scrim .acct__p{color:var(--card-muted);font-size:.96rem;line-height:1.55;max-width:44ch;}
 .cmt-daylight-scrim .acct__btns{display:flex;flex-direction:column;gap:.55rem;width:100%;max-width:340px;margin-top:.5rem;}
+.cmt-daylight-scrim .operator-pick{display:flex;flex-direction:column;gap:.45rem;margin-top:.6rem;max-height:340px;overflow-y:auto;}
+.cmt-daylight-scrim .operator-pick .btn{justify-content:flex-start;text-align:left;}
+.cmt-daylight-scrim .operator-pick .btn:disabled{opacity:.45;cursor:not-allowed;}
 .cmt-daylight-scrim .acct .field{width:100%;max-width:340px;text-align:left;}
 .cmt-daylight-scrim .acct__tabs{display:flex;gap:.4rem;width:100%;max-width:340px;background:var(--surface-2);padding:.25rem;border-radius:10px;}
 .cmt-daylight-scrim .acct__tab{flex:1;border:0;background:transparent;padding:.45rem;border-radius:7px;font:inherit;font-size:.9rem;font-weight:500;color:var(--card-muted);cursor:pointer;}
