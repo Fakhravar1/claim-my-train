@@ -24,13 +24,13 @@ export function useJourneys({ fromStopId, toStopId, date, onlyClaimable = false 
       // only reaches back as far as raw retention (~10 d), but a claim stays
       // filable for 60–90 days. Live departures read v_journeys.
       const table = onlyClaimable ? "v_claimable_journeys" : "v_journeys";
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from(table)
         .select("*")
         .eq("origin_stop_id", fromStopId!)
         .eq("destination_stop_id", toStopId!)
         .eq("origin_local_date", date)
-        .order("origin_scheduled", { ascending: true }) // earliest first — matches the operators' own boards
+        .order("origin_scheduled", { ascending: true })
         .limit(500);
       if (error) throw error;
       return (data ?? []) as Journey[];
