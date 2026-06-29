@@ -43,7 +43,7 @@ export function useStationBoard(stationIds: string[], date: string, enabled = tr
     enabled: enabled && stationIds.length > 0,
     queryFn: async () => {
       const list = "(" + stationIds.join(",") + ")";
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("v_journeys")
         .select("*")
         .eq("origin_local_date", date)
