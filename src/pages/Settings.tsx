@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -562,6 +563,14 @@ const Settings = () => {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F2F5F3" }}>
+      <Helmet>
+        <title>Inställningar — Qvitta</title>
+        <meta name="description" content="Hantera din Qvitta-profil: pendlarvanor, aviseringar, underskrift och utbetalningsuppgifter för tågersättning." />
+        <link rel="canonical" href="https://qvitta.nu/settings" />
+        <meta property="og:url" content="https://qvitta.nu/settings" />
+        <meta property="og:title" content="Inställningar — Qvitta" />
+        <meta name="robots" content="noindex" />
+      </Helmet>
       {/* Daylight nav/footer live in their own scoped wrapper; the shadcn form
           below stays OUTSIDE .cmt-daylight so the theme's `* { padding:0 }`
           reset can't clobber the form's spacing. */}
