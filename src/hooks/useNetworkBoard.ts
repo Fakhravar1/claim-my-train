@@ -79,7 +79,7 @@ export function useNetworkBoard(date: string, enabled = true) {
           // Over-fetch, then randomly down-sample to `n` so the visible mix
           // varies between loads instead of always surfacing the same rows.
           const { data, error } = await apply(
-            supabase.from("v_journeys").select("*").eq("origin_local_date", date)
+            (supabase as any).from("v_journeys").select("*").eq("origin_local_date", date)
           ).limit(Math.max(n * 6, 8));
           if (error) throw error;
           return shuffle((data ?? []) as Journey[]).slice(0, n);
