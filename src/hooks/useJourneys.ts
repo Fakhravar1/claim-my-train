@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
-export type Journey = Tables<"v_journeys">;
+// v_journeys is column-compatible with v_claimable_journeys but isn't in the
+// generated Supabase types (the wrapper view exists in `public` but the type
+// regeneration hasn't picked it up). Reuse the claimable type for the shape.
+export type Journey = Tables<"v_claimable_journeys">;
 
 type Params = {
   fromStopId: string | null;
