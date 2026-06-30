@@ -16,6 +16,7 @@ const ClaimReview = lazy(() => import("./pages/ClaimReview"));
 const MyDelays = lazy(() => import("./pages/MyDelays"));
 const Admin = lazy(() => import("./pages/Admin"));
 const ShortcutGuide = lazy(() => import("./pages/ShortcutGuide"));
+const FAQ = lazy(() => import("./pages/FAQ"));
 
 // The region pages (/regions/skanetrafiken/*) were retired — their function
 // moved onto `/` and `/claim-review`. This preserves links in digest emails
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="/regions/skanetrafiken/claim-review" element={<ClaimReviewRedirect />} />
               <Route path="/regions/skanetrafiken/delay-alerts" element={<Navigate to="/" replace />} />
               <Route path="/regions/skanetrafiken" element={<Navigate to="/" replace />} />
+              <Route path="/faq" element={<FAQ />} />
               <Route path="/settings" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
