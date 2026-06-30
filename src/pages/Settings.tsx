@@ -67,7 +67,6 @@ const toIsoDate = (value: string | null | undefined) => {
 const CLAIM_STATUS_META: Record<string, { label: string; className: string }> = {
   pending: { label: "Väntar", className: "border-amber-300 bg-amber-50 text-amber-900" },
   generated: { label: "Formulär klart", className: "border-emerald-300 bg-emerald-50 text-emerald-900" },
-  awaiting_sj_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   awaiting_hlt_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   awaiting_kalmar_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   awaiting_vy_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
@@ -191,28 +190,12 @@ const Settings = () => {
     }
   };
 
-  // SJ review→authorize: the worker dry-runs an SJ claim to "Välj resa" and screenshots it
-  // (status awaiting_sj_authorization). Authorizing flips it to sj_authorized; the worker
-  // then really submits (when SJ_SUBMIT_LIVE is on). Both updates are own-row (claims RLS).
+  // Shared busy/edit state for the headless-operator cards below. SJ no longer has a
+  // review→authorize step (it submits directly once filed — SJ_SUBMIT_LIVE, 2026-06-30), but
+  // sjBusyId is reused by the HLT/Kalmar/Vy authorize buttons and sjEdit drives the SJ
+  // "fix booking & retry" editor shown on an SJ error.
   const [sjBusyId, setSjBusyId] = useState<string | null>(null);
   const [sjEdit, setSjEdit] = useState<{ id: string; booking: string; email: string } | null>(null);
-
-  const authorizeSj = async (id: string) => {
-    setSjBusyId(id);
-    try {
-      const { error } = await supabase
-        .from("claims")
-        .update({ status: "sj_authorized", error_message: null } as never)
-        .eq("id", id);
-      if (error) throw error;
-      await queryClient.invalidateQueries({ queryKey: ["my-claims"] });
-      toast({ title: "Skickas in till SJ", description: "Vi skickar in din ansökan vid nästa körning." });
-    } catch (error) {
-      toast({ title: "Kunde inte skicka in", description: error instanceof Error ? error.message : "Misslyckades", variant: "destructive" });
-    } finally {
-      setSjBusyId(null);
-    }
-  };
 
   // Hallandstrafiken review→authorize: the worker dry-runs the web form and screenshots it
   // (status awaiting_hlt_authorization). Authorizing flips it to hlt_authorized; the worker
@@ -1287,24 +1270,6 @@ const Settings = () => {
                             <p className="rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-900">
                               <span className="font-medium">Meddelande från SJ:</span> {claim.provider_message}
                             </p>
-                          )}
-
-                          {/* SJ: review the dry-run, then authorize the real submission. */}
-                          {claim.status === "awaiting_sj_authorization" && (
-                            <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                              <p className="text-xs text-amber-900">
-                                Så här långt fyller vi i hos SJ. Stämmer resan? Godkänn så skickar vi in ansökan åt dig.
-                              </p>
-                              <ClaimShot path={claim.pdf_path} />
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={sjBusyId === claim.id}
-                                onClick={() => void authorizeSj(claim.id)}
-                              >
-                                {sjBusyId === claim.id ? "Skickar…" : "Godkänn och skicka in till SJ"}
-                              </Button>
-                            </div>
                           )}
 
                           {/* Hallandstrafiken: review the dry-run, then authorize the real submission. */}
