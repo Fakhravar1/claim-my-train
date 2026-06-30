@@ -2,7 +2,10 @@ name: Claim PDF worker
 
 on:
   schedule:
-    - cron: "0 6 * * *"      # daily 06:00 UTC (GH jitter is fine here)
+    # Every 15 min so a filed claim is submitted within ~one cron cycle instead of next day.
+    # NB: GitHub free-tier scheduled actions are best-effort — real cadence is often 15 min–1 h
+    # of jitter (same as dbt-run.yml). The worker no-ops fast when there are no pending claims.
+    - cron: "*/15 * * * *"
   workflow_dispatch: {}        # manual "Run workflow" button
 
 jobs:

@@ -105,8 +105,39 @@ export function useStartClaim() {
 
       const { error } = await supabase.from("claims").insert(payload);
       if (error) {
-        // 23505 = unique violation: claim already exists for this user+journey+date
-        if (error.code === "23505") return { ok: false, error: "You've already started a claim for this journey." };
+        // 23505 = unique violation: a claim already exists for this user+journey+date.
+        if (error.code === "23505") {
+          // A FAILED prior attempt must never lock the departure — e.g. the user filed an SJ
+          // claim with the wrong booking/email and it came back 'error'. In that case replace
+          // the old row with the new payload (fresh consent + corrected booking) and re-queue
+          // it as 'pending'. Only 'error' rows are reopened; a 'pending'/'generated'/'submitted'/
+          // 'sj_already_claimed'/'awaiting_*' claim is genuinely in-flight or done, so it still
+          // blocks (re-filing those would double-submit). RLS scopes the lookup to own rows.
+          const { data: existing } = await supabase
+            .from("claims")
+            .select("id,status")
+            .eq("journey_key", payload.journey_key)
+            .eq("trip_start_date", payload.trip_start_date)
+            .maybeSingle();
+          if (existing && existing.status === "error") {
+            const { error: updErr } = await supabase
+              .from("claims")
+              .update({
+                ...payload,
+                status: "pending",
+                error_message: null,
+                provider_message: null,
+                pdf_path: null,
+                generated_at: null,
+                submitted_at: null,
+                external_reference: null,
+              })
+              .eq("id", existing.id);
+            if (updErr) return { ok: false, error: updErr.message };
+            return { ok: true };
+          }
+          return { ok: false, error: "You've already started a claim for this journey." };
+        }
         return { ok: false, error: error.message };
       }
       return { ok: true };
