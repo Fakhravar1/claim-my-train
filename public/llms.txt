@@ -7,6 +7,7 @@ Qvitta är en webbtjänst för pendlare och resenärer i Skåne som vill få til
 ## Pages
 
 - [/](/): Startsida med live nätverkstavla, så funkar det, sök din resa och anspråksflöde — visar avgångar för hela Skånes järnvägsnät och vilka förseningar som kan ge ersättning.
+- [/faq](/faq): Vanliga frågor och svar om ersättning för försenade och inställda tåg.
 
 ## Optional
 
