@@ -43,7 +43,17 @@ authority as (
         min(min_delay_seconds)         as min_delay_seconds,
         bool_or(includes_cancellations) as includes_cancellations
     from {{ ref('dim_compensation_rules') }}
-)
+),
+
+-- Pair each origin departure to its destination arrival. A service_number is reused by
+-- different physical runs, and the (service_number, 12h window) join carries no run identity,
+-- so an origin can match MORE THAN ONE same-numbered arrival at the same destination station
+-- (two runs of train 24 sharing a Stockholm arrival -> two dest rows -> ONE journey_key, since
+-- the key ignores dest.scheduled). That duplicates the grain. Dedup below keeps the EARLIEST
+-- arrival per grain (the true run), which preserves the real delay and drops zero legitimate
+-- journeys. Partition on the SAME business keys that build journey_key (can't reference the
+-- journey_key alias in a window in the same select).
+paired as (
 
 select
     {{ dbt_utils.generate_surrogate_key([
@@ -119,7 +129,13 @@ select
 
     -- watermark for incremental consumers (fct_claimable_journeys): the freshest
     -- ingestion touching either leg. Excluded from the public wrapper (plumbing).
-    greatest(origin.ingested_at, dest.ingested_at) as ingested_at
+    greatest(origin.ingested_at, dest.ingested_at) as ingested_at,
+
+    -- dedup rank: earliest destination arrival per grain wins (see paired CTE comment)
+    row_number() over (
+        partition by origin.service_number, origin.service_date, origin.station_id, dest.station_id
+        order by dest.scheduled asc
+    ) as _rn
 
 from departures as origin
 join arrivals as dest
@@ -130,3 +146,31 @@ join arrivals as dest
 cross join authority as auth                                        -- single-row claim FLOOR (min across dim_compensation_rules)
 left join {{ ref('dim_station_coords') }} oc on oc.stop__id = origin.station_id   -- origin coords for route_distance_km
 left join {{ ref('dim_station_coords') }} dc on dc.stop__id = dest.station_id     -- destination coords
+)
+
+select
+    journey_key,
+    service_number,
+    origin_local_date,
+    origin_stop_id,
+    destination_stop_id,
+    transport_mode,
+    origin_stop_name,
+    destination_stop_name,
+    line_name,
+    line_terminus,
+    operator,
+    origin_source,
+    destination_source,
+    origin_scheduled,
+    origin_actual,
+    destination_scheduled,
+    destination_actual,
+    destination_delay_seconds,
+    destination_delay_minutes,
+    route_distance_km,
+    is_claimable,
+    canceled,
+    ingested_at
+from paired
+where _rn = 1   -- keep only the earliest arrival per grain; removes the same-number-run duplicates
