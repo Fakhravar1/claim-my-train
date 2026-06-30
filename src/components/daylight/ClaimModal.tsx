@@ -82,7 +82,7 @@ export function ClaimModal({
   forcedOperator?: string | null;
 }) {
   const navigate = useNavigate();
-  const { user, profile, signInWithGoogle } = useAuth();
+  const { user, profile, signInWithGoogle, refreshProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { startClaim, pending: submitting } = useStartClaim();
@@ -107,9 +107,28 @@ export function ClaimModal({
   // booking ref, not a standing profile field). Only collected for SJ tickets.
   const [bookingReference, setBookingReference] = useState("");
 
+  // Ticket-ID + payout method are now collected here in the claim pop-up (they were
+  // removed from the Settings "Biljett" page). For a signed-in user they pre-fill from
+  // the profile and are written back to it on submit (the worker reads them from there).
+  const [ticketId, setTicketId] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState("");
+  const [clearing, setClearing] = useState("");
+  const [account, setAccount] = useState("");
+  useEffect(() => {
+    setTicketId(profile?.claim_ticket_id ?? "");
+    setPayoutMethod(profile?.payout_method ?? "");
+    setClearing(profile?.clearing_number ?? "");
+    setAccount(profile?.account_number ?? "");
+  }, [profile]);
+
   // Logged-out inline claim details (typed by the user; nothing is persisted
   // until the account is created on the final step).
   const [details, setDetails] = useState<ClaimProfileInput>(EMPTY_DETAILS);
+  // The operator is picked up-front (OperatorChoiceModal), so force it into the
+  // logged-out details and hide the now-redundant operator dropdown.
+  useEffect(() => {
+    if (forcedOperator) setDetails((d) => ({ ...d, purchasingOperator: forcedOperator }));
+  }, [forcedOperator]);
   const [detailErrors, setDetailErrors] = useState<ClaimProfileErrors>({});
   const [sigError, setSigError] = useState<string | null>(null);
   const [hasInk, setHasInk] = useState(false);
@@ -153,15 +172,16 @@ export function ClaimModal({
       ],
       ["Mobil", profile?.claim_mobile ?? ""],
       ["E-post", profile?.claim_email ?? ""],
-      ["Biljett-ID", profile?.claim_ticket_id ?? ""],
-      ["Utbetalning", profile?.payout_method ? PAYOUT_LABELS[profile.payout_method] ?? profile.payout_method : ""],
       ["Signatur", profile?.signature_path ? "Sparad" : ""],
     ],
     [profile]
   );
   const missing = claimFields.filter(([, v]) => !v.trim()).map(([k]) => k);
   const operatorSupported = isSupportedPurchasingOperator(forcedOperator ?? profile?.purchasing_operator);
-  const canFile = user && missing.length === 0 && operatorSupported;
+  // Ticket-ID + payout are now collected in this pop-up. Bank payout also needs an account.
+  const bankOk = payoutMethod !== "bank" || (clearing.trim() !== "" && account.trim() !== "");
+  const ticketPayoutOk = ticketId.trim() !== "" && payoutMethod !== "" && bankOk;
+  const canFile = Boolean(user) && missing.length === 0 && operatorSupported && ticketPayoutOk;
 
   // Signature preview (short-lived signed URL) once a logged-in user reaches the
   // confirm steps.
@@ -221,6 +241,25 @@ export function ClaimModal({
   const submit = async () => {
     if (!sel) return;
     setStatus("Skickar…");
+    // Persist the ticket-ID + payout collected in this pop-up to the profile, so the
+    // worker (which reads them from profiles when generating the PDF) has them.
+    if (user) {
+      const { error: pErr } = await supabase
+        .from("profiles")
+        .update({
+          claim_ticket_id: ticketId.trim() || null,
+          payout_method: payoutMethod || null,
+          clearing_number: payoutMethod === "bank" ? clearing.trim() || null : null,
+          account_number: payoutMethod === "bank" ? account.trim() || null : null,
+        } as never)
+        .eq("id", user.id);
+      if (pErr) {
+        setStatus(pErr.message);
+        toast({ title: "Kunde inte spara biljettuppgifter", description: pErr.message, variant: "destructive" });
+        return;
+      }
+      void refreshProfile();
+    }
     const result = await startClaim(
       sel,
       profile?.signature_path ?? null,
@@ -481,6 +520,39 @@ export function ClaimModal({
                   />
                 </FormField>
               )}
+              {operatorSupported && !needsBookingRef && (
+                <>
+                  <FormField label="Biljett-ID / referens">
+                    <input
+                      value={ticketId}
+                      onChange={(e) => setTicketId(e.target.value)}
+                      placeholder="2Y3CE88"
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField label="Önskat utbetalningssätt">
+                    <select
+                      value={payoutMethod}
+                      onChange={(e) => setPayoutMethod(e.target.value)}
+                    >
+                      <option value="">Välj…</option>
+                      {payoutMethodsFor(activeOperator).map((m) => (
+                        <option key={m} value={m}>{PAYOUT_LABELS[m]}</option>
+                      ))}
+                    </select>
+                  </FormField>
+                  {payoutMethod === "bank" && (
+                    <div className="grid2">
+                      <FormField label="Clearingnummer">
+                        <input value={clearing} onChange={(e) => setClearing(e.target.value)} placeholder="8327-9" inputMode="numeric" />
+                      </FormField>
+                      <FormField label="Kontonummer">
+                        <input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="1234567890" inputMode="numeric" />
+                      </FormField>
+                    </div>
+                  )}
+                </>
+              )}
               <PayoutNote />
             </div>
           )}
@@ -521,25 +593,27 @@ export function ClaimModal({
                   <input type="email" value={details.claimEmail} onChange={(e) => setField("claimEmail", e.target.value)} autoComplete="email" />
                 </FormField>
               </div>
-              <FormField label="Var köpte du biljetten?" err={detailErrors.purchasingOperator}>
-                <select
-                  value={details.purchasingOperator}
-                  onChange={(e) => {
-                    const op = e.target.value;
-                    // SL pays only to bank — drop a now-invalid SMS/e-post choice when switching.
-                    setDetails((d) => ({
-                      ...d,
-                      purchasingOperator: op,
-                      payoutMethod:
-                        d.payoutMethod && !payoutMethodsFor(op).includes(d.payoutMethod as never)
-                          ? "bank"
-                          : d.payoutMethod,
-                    }));
-                  }}
-                >
-                  {PURCHASING_OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </FormField>
+              {!forcedOperator && (
+                <FormField label="Operatör" err={detailErrors.purchasingOperator}>
+                  <select
+                    value={details.purchasingOperator}
+                    onChange={(e) => {
+                      const op = e.target.value;
+                      // SL pays only to bank — drop a now-invalid SMS/e-post choice when switching.
+                      setDetails((d) => ({
+                        ...d,
+                        purchasingOperator: op,
+                        payoutMethod:
+                          d.payoutMethod && !payoutMethodsFor(op).includes(d.payoutMethod as never)
+                            ? "bank"
+                            : d.payoutMethod,
+                      }));
+                    }}
+                  >
+                    {PURCHASING_OPERATORS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </FormField>
+              )}
               {needsBookingRef && (
                 <FormField label="SJ bokningsnummer eller biljettnummer">
                   <input
@@ -591,7 +665,7 @@ export function ClaimModal({
                 <div className="summary__row"><span>Datum</span><b>{dateLong(sel.origin_local_date ?? date)}</b></div>
                 <div className="summary__row"><span>Försening</span><b>{sel.canceled ? "Inställt" : selMeta.minutes + " min"}</b></div>
                 <div className="summary__row"><span>Mottagare</span><b>{[profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "—"}</b></div>
-                <div className="summary__row"><span>Utbetalning</span><b>{profile?.payout_method ? PAYOUT_LABELS[profile.payout_method] ?? profile.payout_method : "—"}</b></div>
+                <div className="summary__row"><span>Utbetalning</span><b>{payoutMethod ? PAYOUT_LABELS[payoutMethod] ?? payoutMethod : "—"}</b></div>
               </div>
               <PayoutNote />
             </div>

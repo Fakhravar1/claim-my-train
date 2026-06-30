@@ -22,7 +22,10 @@ export const payoutMethodsFor = (operator: string | null | undefined): readonly 
 // claims row is ever stored. The rest are valid to SAVE but have no path yet (SJ becomes
 // in-app once submit_sj lands; Snälltåget/other inert). Keys per-operator rules (§9 v3).
 export const PURCHASING_OPERATORS = [
-  { value: "skanetrafiken", label: "Skånetrafiken (JoJo, app, biljettautomat)", supported: true },
+  // Skånetrafiken: the in-app PDF reklamation flow (claim-worker) is ON ICE. For now we
+  // redirect to Skånetrafiken's own claim website like the other external operators — no
+  // claims row is stored, no PDF data is collected.
+  { value: "skanetrafiken", label: "Skånetrafiken (JoJo, app, biljettautomat)", supported: false, externalClaimUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/" },
   // Öresundståg is NOT a single authority: the claim goes to the länstrafikbolag of the
   // county where the journey STARTED (origin-routed at claim time — see REGION_AUTHORITIES
   // + v_station_claim_authority). Skåne/Köpenhamn-origin files in-app (Skånetrafiken PDF);
@@ -52,8 +55,6 @@ export const PURCHASING_OPERATORS = [
   { value: "ul", label: "UL (Uppsala län)", supported: false, externalClaimUrl: "https://www.ul.se/kundservice/forseningsersattning/formular-forseningsersattning/" },
   { value: "malartag", label: "Mälartåg (Mälardalen)", supported: false, externalClaimUrl: "https://www.malardalstrafik.se/kundservice/ansoek-om-ersaettning-vid-foersening/" },
   { value: "sj", label: "SJ", supported: false },
-  { value: "snalltaget", label: "Snälltåget", supported: false },
-  { value: "other", label: "Annan operatör / vet inte", supported: false },
 ] as const;
 
 // REGIONAL claim authorities for Öresundståg routing. A regional claim goes to the
@@ -248,7 +249,10 @@ export const validateAccountNumber = (raw: string): string | null => {
   return null;
 };
 
-export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErrors => {
+export const validateClaimProfile = (
+  input: ClaimProfileInput,
+  opts: { skipTicket?: boolean } = {}
+): ClaimProfileErrors => {
   const errors: ClaimProfileErrors = {};
 
   const firstName = validateRequiredText(input.firstName, "Förnamn");
@@ -274,6 +278,11 @@ export const validateClaimProfile = (input: ClaimProfileInput): ClaimProfileErro
 
   const city = validateRequiredText(input.city, "Ort");
   if (city) errors.city = city;
+
+  // Ticket-ID, payout method and purchasing operator are no longer collected on the
+  // Settings page — they're gathered in the claim pop-up at filing time. Settings passes
+  // { skipTicket: true } so saving a personal profile doesn't require them.
+  if (opts.skipTicket) return errors;
 
   const ticket = validateRequiredText(input.claimTicketId, "Biljett-ID");
   if (ticket) errors.claimTicketId = ticket;

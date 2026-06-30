@@ -11,8 +11,6 @@ import { Scrim, ModalHead } from "./primitives";
  * every operator including Skånetrafiken — the parent then dispatches to the right
  * per-operator modal once the user has chosen.
  */
-const INERT: readonly string[] = ["snalltaget", "other"];
-
 export function OperatorChoiceModal({
   journey,
   onChoose,
@@ -36,20 +34,15 @@ export function OperatorChoiceModal({
             </div>
             <p className="lead">Vilken operatör vill du ansöka hos? Vi tar dig till rätt formulär eller flöde.</p>
             <div className="operator-pick">
-              {PURCHASING_OPERATORS.map((o) => {
-                const inert = INERT.includes(o.value);
-                return (
-                  <button
-                    key={o.value}
-                    className="btn btn--ghost btn--block"
-                    disabled={inert}
-                    title={inert ? "Inte tillgängligt än" : undefined}
-                    onClick={() => onChoose(o.value)}
-                  >
-                    {o.label}
-                  </button>
-                );
-              })}
+              {PURCHASING_OPERATORS.map((o) => (
+                <button
+                  key={o.value}
+                  className="btn btn--ghost btn--block"
+                  onClick={() => onChoose(o.value)}
+                >
+                  {o.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>

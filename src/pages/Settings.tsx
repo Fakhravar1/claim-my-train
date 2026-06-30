@@ -442,6 +442,7 @@ const Settings = () => {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
+    // Ticket-ID, payout method and operator moved to the claim pop-up — skip them here.
     const validationErrors = validateClaimProfile({
       firstName,
       lastName,
@@ -456,7 +457,7 @@ const Settings = () => {
       purchasingOperator,
       clearingNumber,
       accountNumber,
-    });
+    }, { skipTicket: true });
     setErrors(validationErrors);
 
     // Signature lives outside validateClaimProfile (it's a canvas, not a text
@@ -465,14 +466,8 @@ const Settings = () => {
     setSigError(signatureMissing ? "En signatur krävs för ansökningsformuläret." : null);
 
     if (Object.keys(validationErrors).length > 0 || signatureMissing) {
-      // Surface the tab that holds the first problem. Ticket ID lives on the
-      // ticket tab; everything else (incl. signature) is on the personal tab.
-      const ticketTabKeys = new Set(["claimTicketId", "payoutMethod", "purchasingOperator", "clearingNumber", "accountNumber"]);
-      const allOnTicketTab =
-        !signatureMissing &&
-        Object.keys(validationErrors).length > 0 &&
-        Object.keys(validationErrors).every((key) => ticketTabKeys.has(key));
-      setActiveTab(allOnTicketTab ? "ticket" : "personal");
+      // All remaining validated fields (incl. signature) live on the personal tab.
+      setActiveTab("personal");
       toast({
         title: "Åtgärda de markerade fälten",
         description:
@@ -598,10 +593,9 @@ const Settings = () => {
         <Card className="p-5">
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <TabsList className="!grid h-auto w-full !grid-cols-2 gap-1 p-1 sm:!grid-cols-4">
+              <TabsList className="!grid h-auto w-full !grid-cols-3 gap-1 p-1">
                 <TabsTrigger value="personal" className="w-full">Personuppgifter</TabsTrigger>
-                <TabsTrigger value="ticket" className="w-full">Biljett</TabsTrigger>
-                <TabsTrigger value="commuter" className="w-full">Pendlarvanor</TabsTrigger>
+                <TabsTrigger value="commuter" className="w-full">Bevakningar</TabsTrigger>
                 <TabsTrigger value="claims" className="w-full">Mina ansökningar</TabsTrigger>
               </TabsList>
 
@@ -823,10 +817,11 @@ const Settings = () => {
                 </div>
               </TabsContent>
 
+              {false && (
               <TabsContent value="ticket" className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="purchasing-operator">
-                    Var köpte du din biljett? <span className="text-destructive">*</span>
+                    Operatör <span className="text-destructive">*</span>
                   </Label>
                   <Select value={purchasingOperator} onValueChange={setPurchasingOperator}>
                     <SelectTrigger id="purchasing-operator" aria-invalid={Boolean(errors.purchasingOperator)}>
@@ -1017,61 +1012,9 @@ const Settings = () => {
                   </div>
                 </div>
               </TabsContent>
+              )}
 
               <TabsContent value="commuter" className="space-y-4">
-                <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
-                  <div>
-                    <p className="text-sm font-semibold">Vanlig resväg</p>
-                    <p className="text-xs text-muted-foreground">
-                      Ange stationerna du brukar resa mellan så att potentiella ansökningar kan bevakas för din sträcka.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="preferred-from">Från</Label>
-                      <Select value={preferredFromStopId} onValueChange={setPreferredFromStopId}>
-                        <SelectTrigger id="preferred-from">
-                          <SelectValue placeholder="Laddar stationer…">
-                            {stopOptions.find((s) => s.id === preferredFromStopId)?.name ?? "Laddar stationer…"}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {stopOptions.length === 0 ? (
-                            <SelectItem value="__loading__" disabled>Laddar stationer…</SelectItem>
-                          ) : (
-                            stopOptions.map((stop) => (
-                              <SelectItem key={stop.id} value={stop.id}>
-                                {stop.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="preferred-to">Till</Label>
-                      <Select value={preferredToStopId} onValueChange={setPreferredToStopId}>
-                        <SelectTrigger id="preferred-to">
-                          <SelectValue placeholder="Laddar stationer…">
-                            {stopOptions.find((s) => s.id === preferredToStopId)?.name ?? "Laddar stationer…"}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {stopOptions.length === 0 ? (
-                            <SelectItem value="__loading__" disabled>Laddar stationer…</SelectItem>
-                          ) : (
-                            stopOptions.map((stop) => (
-                              <SelectItem key={stop.id} value={stop.id}>
-                                {stop.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>

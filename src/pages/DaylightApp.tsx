@@ -324,7 +324,7 @@ export default function DaylightApp() {
           onWatchCommuter={watchCommuter}
         />
         <ValueProps
-          onUnknown={() => setClaim({ blank: true })}
+          onUnknown={focusSearch}
           onSearch={focusSearch}
           onHabits={() => (user ? navigate("/settings") : setClaim({ blank: true, loginOnly: true }))}
         />
@@ -342,7 +342,8 @@ export default function DaylightApp() {
 
         // First step for every real journey: ask which operator to file/redirect through,
         // for every operator including Skånetrafiken — never inferred from the saved profile.
-        if (user && !chosenOperator) {
+        // Shown to signed-out users too, so the claim UX matches the signed-in flow.
+        if (!chosenOperator) {
           return (
             <OperatorChoiceModal
               journey={journey}
@@ -404,24 +405,19 @@ export default function DaylightApp() {
           return <ShortcutClaimModal journey={journey} operator="vasttrafik" onClose={() => setClaim(null)} />;
         }
 
-        // Skånetrafiken's online BankID form — iPhone-only Shortcut autofill, additive to
-        // the in-app PDF flow (ClaimModal) which stays the path on desktop and for anyone
-        // who prefers it.
-        if (
-          op === "skanetrafiken" &&
-          typeof navigator !== "undefined" &&
-          (/iP(hone|ad|od)/.test(navigator.userAgent) ||
-            (/Macintosh/.test(navigator.userAgent) && "ontouchend" in document))
-        ) {
+        // Skånetrafiken: the in-app PDF reklamation flow (claim-worker) is ON ICE. We now
+        // redirect to Skånetrafiken's own claim website like the other external operators —
+        // no claims row, no PDF data collected.
+        if (op === "skanetrafiken") {
           return <ShortcutClaimModal journey={journey} operator="skanetrafiken" onClose={() => setClaim(null)} />;
         }
 
-        // Öresundståg is origin-routed: the claim goes to the länstrafikbolag of the county
-        // where the journey started. Skåne/Köpenhamn-origin (region key skanetrafiken) files
-        // in-app via ClaimModal below; other counties confirm + link out via RegionalClaimModal.
-        if (op === "oresundstag" && !regionalInApp) {
+        // Öresundståg is origin-routed: non-Skåne counties confirm + link out via
+        // RegionalClaimModal; Skåne/Köpenhamn-origin now also redirects to Skånetrafiken's
+        // site (the in-app PDF that used to cover Öresundståg-in-Skåne is on ice too).
+        if (op === "oresundstag") {
           const key = (journey.origin_stop_id && stationAuthorities?.get(journey.origin_stop_id)) || "skanetrafiken";
-          if (key !== "skanetrafiken") {
+          if (key !== "skanetrafiken" && !regionalInApp) {
             return (
               <RegionalClaimModal
                 journey={journey}
@@ -431,19 +427,11 @@ export default function DaylightApp() {
               />
             );
           }
+          return <ShortcutClaimModal journey={journey} operator="skanetrafiken" onClose={() => setClaim(null)} />;
         }
 
-        // Skånetrafiken (desktop/Android), Pågatåg, and Öresundståg-in-Skåne use the standard
-        // multi-step in-app ClaimModal (PDF reklamation). Signed-in users are forced to the
-        // operator they just picked, so it never silently falls back to the saved profile;
-        // signed-out users still pick inline via the modal's own operator dropdown.
-        return (
-          <ClaimModal
-            initial={claim}
-            forcedOperator={user ? op ?? "skanetrafiken" : undefined}
-            onClose={() => setClaim(null)}
-          />
-        );
+        // Fallback (no in-app PDF filer anymore): redirect to Skånetrafiken's site.
+        return <ShortcutClaimModal journey={journey} operator="skanetrafiken" onClose={() => setClaim(null)} />;
       })()}
       {info && <EligibilityModal dep={info} onClose={() => setInfo(null)} onWatch={watchTrain} />}
       {watch && <WatchModal journey={watch} onClose={() => setWatch(null)} />}

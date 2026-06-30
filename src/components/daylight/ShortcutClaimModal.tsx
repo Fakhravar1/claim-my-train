@@ -46,18 +46,12 @@ const OPS: Record<ShortcutOperator, {
       return { clearing: ok ? profile?.clearing_number ?? "" : "", account: ok ? profile?.account_number ?? "" : "" };
     },
   },
+  // Skånetrafiken: in-app PDF flow + Shortcut autofill are ON ICE — EXTERNAL only for now
+  // (no scriptUrl), so we just link out to Skånetrafiken's own claim form like the others.
   skanetrafiken: {
     label: "Skånetrafiken",
-    formUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/#/logga-in",
-    scriptUrl: `${FN_BASE}/skanetrafiken-fill-script`,
-    // swedishBank pays to the account registered to the BankID personnummer — no
-    // account entry. We pass mobile + payout method + personnummer (its socialSecurityNumber
-    // field is BankID-prefilled, so the fill only acts as a fallback when empty).
-    extras: (profile) => ({
-      mobile: profile?.claim_mobile ?? "",
-      payoutMethod: profile?.payout_method ?? "",
-      personnummer: profile?.claim_personnummer ?? "",
-    }),
+    formUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/",
+    extras: () => ({}),
   },
   vasttrafik: {
     label: "Västtrafik",
