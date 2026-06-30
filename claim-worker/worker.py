@@ -10,8 +10,10 @@ the user attested at filing time (claims.purchasing_operator):
 
 Designed to run on a schedule (GitHub Actions). Uses the service-role key, so it bypasses RLS.
 """
+import json
 import os
 import sys
+import urllib.request
 from datetime import datetime, timezone
 
 from supabase import create_client
@@ -21,6 +23,26 @@ from fill_template import fill
 URL = os.environ["SUPABASE_URL"]
 KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 BUCKET = "claims"
+
+# Statuses that represent a user-meaningful OUTCOME of a claim (vs an intermediate review
+# state like awaiting_*_authorization). When a claim lands on one of these, we email the owner.
+NOTIFY_STATUSES = {"generated", "submitted", "sj_already_claimed", "error"}
+
+
+def notify_outcome(claim_id: str) -> None:
+    """Email the claim owner about the outcome via the send-claim-outcome edge function.
+
+    The function has the Resend key + resolves the user's email itself, so the worker doesn't
+    need RESEND_API_KEY. It's backend-only: it authorizes on the service-role bearer we send."""
+    req = urllib.request.Request(
+        f"{URL}/functions/v1/send-claim-outcome",
+        data=json.dumps({"claim_id": claim_id}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {KEY}", "apikey": KEY},
+    )
+    with urllib.request.urlopen(req, timeout=25) as r:
+        r.read()
 # Hard off-switch for any real SJ submission. Default OFF — even an authorized claim only
 # dry-runs unless this is explicitly "true" in the environment (CLAUDE.md §8).
 SJ_SUBMIT_LIVE = os.environ.get("SJ_SUBMIT_LIVE", "").lower() == "true"
@@ -288,6 +310,7 @@ def main() -> int:
     failures = 0
     for claim in pending:
         cid = claim["id"]
+        prev_status = claim.get("status")
         operator = operator_of(claim)
         handler = HANDLERS.get(operator)
         try:
@@ -302,6 +325,16 @@ def main() -> int:
             sb.table("claims").update(
                 {"status": "error", "error_message": str(e)[:500]}
             ).eq("id", cid).execute()
+
+        # Email the owner if this run moved the claim to a real outcome (not an intermediate
+        # review state). Best-effort: a failed email must never wedge or fail the batch.
+        try:
+            cur = sb.table("claims").select("status").eq("id", cid).single().execute().data
+            if cur and cur.get("status") != prev_status and cur.get("status") in NOTIFY_STATUSES:
+                notify_outcome(cid)
+                print(f"  {cid}: outcome email sent ({cur['status']})")
+        except Exception as ne:
+            print(f"  {cid}: outcome email skipped ({ne})", file=sys.stderr)
 
     return 1 if failures else 0
 

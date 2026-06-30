@@ -180,18 +180,32 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
             # real submission 2026-06-23 that "Slutför ansökan" succeeds; the exact reference
             # format is still UNCONFIRMED (that run screenshotted mid-load). The screenshot is
             # the audit fallback regardless of whether the regex matches.
+            # SJ confirmation. Capture two things off the page:
+            #  (a) external_reference = SJ's ärendenummer/case id. SJ shows "Ärendenummer:
+            #      1-102194544357" (the serviceRequestId shape, confirmed via the public API
+            #      2026-06-30). Prefer text after "Ärendenummer", else the 1-XXXXXXXX shape.
+            #  (b) partial = "Din ansökan är delvis registrerad!" — the delay claim went through
+            #      but receipts/merkostnader didn't ("Ett eller flera kvitton gick inte att
+            #      registrera"). We surface that so the user isn't told a flat "done".
             ref = None
+            partial = False
             try:
                 import re as _re
                 body = page.locator("body").inner_text(timeout=5000)
-                m = _re.search(r"(?:ärende|referens|case|nummer)[^A-Z0-9]{0,15}([A-Z0-9]{6,})", body, _re.I)
+                partial = "delvis registrerad" in body.lower()
+                m = _re.search(r"ärendenummer\s*[:\-]?\s*([0-9][0-9\-]{5,})", body, _re.I)
+                if not m:
+                    m = _re.search(r"\b(\d-\d{8,})\b", body)  # SJ serviceRequestId shape
                 ref = m.group(1) if m else None
             except Exception:
                 pass
-            # Capture SJ's confirmation wording ("Tack, din ansökan är inskickad …") so the
-            # user sees SJ's own done-message, not just our "Inskickad" badge.
+            # Capture SJ's confirmation wording ("Din ansökan är registrerad!" / "… delvis …")
+            # so the user sees SJ's own done-message, not just our "Inskickad" badge.
+            msg = _page_message(page) or (
+                "Din ansökan är delvis registrerad hos SJ — kontrollera eventuella merkostnader."
+                if partial else "Ansökan är inskickad till SJ.")
             return {"submitted": True, "already_claimed": False, "error": None,
-                    "message": _page_message(page) or "Ansökan är inskickad till SJ.",
+                    "partial": partial, "message": msg,
                     "screenshot": confirm_shot, "external_reference": ref}
         finally:
             browser.close()
