@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ADMIN_USER_ID } from "@/lib/admin";
 import { ArrowIcon, SearchIcon } from "./icons";
+import { CoverageButton } from "./CoverageModal";
 
 /**
  * Static shell pieces for the merged Daylight page (`/`): Nav, Hero, ValueProps,
@@ -166,7 +167,9 @@ export function Footer(): ReactNode {
       <div className="wrap footer__in">
         <span>© 2026 Qvitta</span>
         <div className="footer__links">
+          <CoverageButton className="linklike footer__cov" />
           <a href="#">Integritet</a>
+          <Link to="/genvag">Installera genvägen</Link>
           <a href="#">Kontakt</a>
         </div>
       </div>
