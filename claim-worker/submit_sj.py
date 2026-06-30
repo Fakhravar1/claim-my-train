@@ -98,9 +98,12 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
 
             # Branch on the page SJ routed us to.
             if "/redan-ansokt/" in url:
-                # Booking already has a claim — nothing to file. Surface SJ's own wording.
+                # Booking already has a claim — nothing to file. Surface SJ's own wording
+                # ("Vi har redan fått din ansökan…"); fall back to it if the scrape misses.
                 return {"submitted": False, "already_claimed": True, "error": None,
-                        "message": _page_message(page) or "SJ: den här bokningen har redan en ansökan.",
+                        "message": _page_message(page)
+                        or "Vi har redan fått din ansökan. Du har redan ansökt om ersättning "
+                           "för den här resan. Vi har skickat en bekräftelse via e-post.",
                         "screenshot": screenshot, "external_reference": None}
             if "/valj-resa/" not in url:
                 # Still on page 1 -> SJ rejected the inputs. SJ's copy has varied — the

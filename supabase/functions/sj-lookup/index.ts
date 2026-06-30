@@ -103,8 +103,10 @@ Deno.serve(async (req) => {
   try { data = await r.json(); } catch { /* ignore */ }
   const existing = data?.["existingServiceRequests"];
   if (Array.isArray(existing) && existing.length > 0) {
+    // SJ's own "redan ansökt" copy, verbatim (201 + existingServiceRequests; on sj.se this
+    // is the "Vi har redan fått din ansökan" page).
     return json({ status: "already_claimed",
-      message: "Den här bokningen har redan en ansökan hos SJ." });
+      message: "Vi har redan fått din ansökan. Du har redan ansökt om ersättning för den här resan. Vi har skickat en bekräftelse på din ansökan via e-post." });
   }
 
   // Found + claimable. Surface a tiny journey summary for the pop-up to confirm against.
