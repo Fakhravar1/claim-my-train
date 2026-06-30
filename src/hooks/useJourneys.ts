@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
-export type Journey = Tables<"v_journeys">;
+// v_journeys is column-compatible with v_claimable_journeys but isn't in the
+// generated Supabase types (the wrapper view exists in `public` but the type
+// regeneration hasn't picked it up). Reuse the claimable type for the shape.
+export type Journey = Tables<"v_claimable_journeys">;
 
 type Params = {
   fromStopId: string | null;
@@ -21,13 +24,13 @@ export function useJourneys({ fromStopId, toStopId, date, onlyClaimable = false 
       // only reaches back as far as raw retention (~10 d), but a claim stays
       // filable for 60–90 days. Live departures read v_journeys.
       const table = onlyClaimable ? "v_claimable_journeys" : "v_journeys";
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from(table)
         .select("*")
         .eq("origin_stop_id", fromStopId!)
         .eq("destination_stop_id", toStopId!)
         .eq("origin_local_date", date)
-        .order("origin_scheduled", { ascending: true }) // earliest first — matches the operators' own boards
+        .order("origin_scheduled", { ascending: true })
         .limit(500);
       if (error) throw error;
       return (data ?? []) as Journey[];
