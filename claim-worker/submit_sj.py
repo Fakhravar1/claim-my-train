@@ -24,6 +24,35 @@ half-submit a form we don't fully understand. Finish mapping pages 4+ before rel
 SJ_FORM_URL = "https://www.sj.se/ersattning-vid-forsening/"
 
 
+def _page_message(page, *, limit: int = 600) -> str | None:
+    """Pull the visible heading/body text SJ shows on the current step so the exact words
+    SJ presents (confirmation, "redan ansökt", a rejection) reach the user. Best-effort:
+    prefer the first heading + a following paragraph, fall back to trimmed body text."""
+    try:
+        parts: list[str] = []
+        for sel in ("h1", "h2"):
+            loc = page.locator(sel)
+            if loc.count() and loc.first.is_visible():
+                t = loc.first.inner_text(timeout=2000).strip()
+                if t:
+                    parts.append(t)
+                    break
+        # First non-empty paragraph after the heading (the explanatory sentence).
+        paras = page.locator("main p, [role=main] p, p")
+        for i in range(min(paras.count(), 6)):
+            t = paras.nth(i).inner_text(timeout=1500).strip()
+            if t and t not in parts and len(t) > 10:
+                parts.append(t)
+                break
+        msg = " — ".join(parts).strip()
+        if not msg:
+            msg = page.locator("body").inner_text(timeout=2000).strip()
+        msg = " ".join(msg.split())  # collapse whitespace
+        return msg[:limit] or None
+    except Exception:
+        return None
+
+
 def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
     """Drive SJ's web form for one claim.
 
@@ -69,24 +98,34 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
 
             # Branch on the page SJ routed us to.
             if "/redan-ansokt/" in url:
-                # Booking already has a claim — nothing to file. Surfaced to the user.
+                # Booking already has a claim — nothing to file. Surface SJ's own wording.
                 return {"submitted": False, "already_claimed": True, "error": None,
-                        "message": None, "screenshot": screenshot, "external_reference": None}
+                        "message": _page_message(page) or "SJ: den här bokningen har redan en ansökan.",
+                        "screenshot": screenshot, "external_reference": None}
             if "/valj-resa/" not in url:
-                # Still on page 1 -> SJ rejected the inputs. The validated case (spike
-                # 2026-06-23) is "Vi hittade ingen matchande resa" = wrong booking/email.
+                # Still on page 1 -> SJ rejected the inputs. SJ's copy has varied — the
+                # 2026-06-23 spike saw "Vi hittade ingen matchande resa"; SJ now shows
+                # "Vi hittar inte din bokning. Det kan bero på att din resa ännu inte är
+                # genomförd eller att du rest med ett annat tågbolag." Match either, and
+                # ALWAYS return SJ's own visible text (never our paraphrase).
                 body = ""
                 try:
                     body = page.locator("body").inner_text()
                 except Exception:
                     pass
-                if "ingen matchande resa" in body.lower():
+                low = body.lower()
+                if ("hittar inte din bokning" in low or "ingen matchande resa" in low
+                        or "hittade ingen" in low):
                     return {"submitted": False, "already_claimed": False, "error": "no_match",
-                            "message": "SJ hittade ingen resa för det boknings-/biljettnumret och "
-                                       "den e-post/telefon du angav. Kontrollera uppgifterna och försök igen.",
+                            "message": _page_message(page)
+                            or "SJ hittar inte bokningen för de uppgifter du angav.",
                             "screenshot": screenshot, "external_reference": None}
-                # Some other interstitial — surface loudly with the URL for diagnosis.
-                raise RuntimeError(f"unexpected page after SJ lookup: {url}")
+                # Some other interstitial SJ showed (e.g. "ej berättigad till ersättning").
+                # Don't guess — return SJ's own visible text so it reaches the user verbatim.
+                return {"submitted": False, "already_claimed": False, "error": "sj_rejected",
+                        "message": _page_message(page)
+                        or f"SJ kunde inte behandla ansökan ({url}).",
+                        "screenshot": screenshot, "external_reference": None}
 
             # Page 2 "Välj resa": dry-run stops here with the screenshot for review.
             if not live:
@@ -146,7 +185,10 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
                 ref = m.group(1) if m else None
             except Exception:
                 pass
+            # Capture SJ's confirmation wording ("Tack, din ansökan är inskickad …") so the
+            # user sees SJ's own done-message, not just our "Inskickad" badge.
             return {"submitted": True, "already_claimed": False, "error": None,
-                    "message": None, "screenshot": confirm_shot, "external_reference": ref}
+                    "message": _page_message(page) or "Ansökan är inskickad till SJ.",
+                    "screenshot": confirm_shot, "external_reference": ref}
         finally:
             browser.close()

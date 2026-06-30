@@ -100,18 +100,21 @@ def handle_sj(sb, claim: dict) -> None:
             {"content-type": "image/png", "upsert": "true"},
         )
 
+    # SJ's own page wording (confirmation / already-claimed / rejection), surfaced verbatim.
+    msg = result.get("message")
     if result.get("already_claimed"):
         # SJ reports a claim already exists for this booking (the /redan-ansokt/ page).
         sb.table("claims").update(
-            {"status": "sj_already_claimed", "error_message": None, "pdf_path": shot_path}
+            {"status": "sj_already_claimed", "error_message": None,
+             "provider_message": msg, "pdf_path": shot_path}
         ).eq("id", cid).execute()
         print(f"  {cid}: sj -> already claimed at SJ")
     elif result.get("error"):
-        # SJ rejected the inputs (e.g. no matching journey = wrong booking/email). Record
-        # the user-facing message so the UI can prompt them to fix booking_reference/email.
+        # SJ rejected the inputs (wrong booking/email) or the order (not eligible). Record
+        # SJ's user-facing message so the UI shows exactly what SJ said.
         sb.table("claims").update(
-            {"status": "error", "error_message": result.get("message") or result["error"],
-             "pdf_path": shot_path}
+            {"status": "error", "error_message": msg or result["error"],
+             "provider_message": msg, "pdf_path": shot_path}
         ).eq("id", cid).execute()
         print(f"  {cid}: sj -> {result['error']}")
     elif result.get("submitted"):
@@ -121,6 +124,7 @@ def handle_sj(sb, claim: dict) -> None:
                 "external_reference": result.get("external_reference"),
                 "submitted_at": datetime.now(timezone.utc).isoformat(),
                 "error_message": None,
+                "provider_message": msg,
                 "pdf_path": shot_path,
             }
         ).eq("id", cid).execute()

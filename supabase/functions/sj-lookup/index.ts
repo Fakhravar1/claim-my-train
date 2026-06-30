@@ -6,9 +6,15 @@
 // waiting for the async claim-worker. It's a read-only LOOKUP — it never files a claim.
 //
 //   POST prod-api.adp.sj.se/.../delaycompensationtokens  {orderSecurity, orderOrTicketNumber}
-//     400 ORDER_NOT_FOUND                         -> {status:"not_found"}
+//     400 ORDER_NOT_FOUND / ORDER_IS_NOT_VALID_FOR_RTG  -> SJ's "Vi hittar inte din bokning" notice
+//     400 other code                              -> {status:"rejected", code} (surface SJ's code)
 //     201 + existingServiceRequests non-empty     -> {status:"already_claimed"}
 //     201 + existingServiceRequests empty         -> {status:"ok", journey:{from,to,date,time}}
+//
+// EVERY response carries a `message` = SJ's OWN form copy, verbatim, so the pop-up shows exactly
+// what SJ says instead of a guess. The whole point of this layer is that SJ's information reaches
+// the user word-for-word, never silently relabelled (a wrong booking and a not-yet-eligible
+// booking BOTH render as SJ's "Vi hittar inte din bokning…" notice — so we use that text).
 //
 // verify_jwt=true: only signed-in users (the pop-up requires auth), so it can't be abused as
 // an open SJ-booking brute-force proxy.
@@ -72,8 +78,24 @@ Deno.serve(async (req) => {
   if (r.status === 400) {
     let code = "";
     try { code = (await r.json())?.errors?.[0]?.code ?? ""; } catch { /* ignore */ }
-    // ORDER_NOT_FOUND covers a wrong booking OR a non-matching email/phone.
-    return json({ status: code === "ORDER_NOT_FOUND" ? "not_found" : "invalid", code });
+    // SJ's OWN form copy, verbatim. It shows this exact notice both when the booking/email
+    // don't match (ORDER_NOT_FOUND) and when the order isn't (yet) valid for compensation —
+    // ORDER_IS_NOT_VALID_FOR_RTG, e.g. the trip isn't completed yet or it was another operator.
+    // We mirror SJ's words instead of guessing "wrong booking number" / "not eligible".
+    const SJ_NOT_FOUND =
+      "Vi hittar inte din bokning. Det kan bero på att din resa ännu inte är genomförd eller att du rest med ett annat tågbolag.";
+    switch (code) {
+      case "ORDER_NOT_FOUND":
+        return json({ status: "not_found", code, message: SJ_NOT_FOUND });
+      // Order resolves but SJ won't take it yet. SJ presents this as the same "can't find
+      // your booking" notice — so we surface the same wording (status kept distinct for logs).
+      case "ORDER_IS_NOT_VALID_FOR_RTG":
+        return json({ status: "ineligible", code, message: SJ_NOT_FOUND });
+      // Any other code: surface SJ's code honestly rather than invent a reason.
+      default:
+        return json({ status: "rejected", code,
+          message: `SJ kunde inte behandla bokningen${code ? ` (${code})` : ""}. Försök igen senare.` });
+    }
   }
   if (!r.ok) return json({ status: "error", reason: "sj_http_" + r.status }, 502);
 
@@ -81,7 +103,8 @@ Deno.serve(async (req) => {
   try { data = await r.json(); } catch { /* ignore */ }
   const existing = data?.["existingServiceRequests"];
   if (Array.isArray(existing) && existing.length > 0) {
-    return json({ status: "already_claimed" });
+    return json({ status: "already_claimed",
+      message: "Den här bokningen har redan en ansökan hos SJ." });
   }
 
   // Found + claimable. Surface a tiny journey summary for the pop-up to confirm against.
@@ -92,5 +115,6 @@ Deno.serve(async (req) => {
     date: item.departureDate?.date ?? null,
     time: item.departureTime?.time ?? null,
   } : null;
-  return json({ status: "ok", journey });
+  return json({ status: "ok", journey,
+    message: "SJ hittade din resa och den ser ut att vara berättigad till ersättning." });
 });

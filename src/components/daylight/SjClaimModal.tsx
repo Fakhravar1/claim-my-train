@@ -84,16 +84,13 @@ export function SjClaimModal({
     });
     setChecking(false);
     if (!error && data) {
-      if (data.status === "not_found") {
-        setServerError("SJ hittade ingen resa för det boknings-/biljettnumret och den e-post/mobil du angav. Kontrollera uppgifterna och försök igen.");
-        return;
-      }
-      if (data.status === "already_claimed") {
-        setServerError("Den här bokningen har redan en ansökan hos SJ.");
-        return;
-      }
-      if (data.status === "invalid") {
-        setServerError("Kontrollera boknings- eller biljettnumret (8 eller 12 tecken).");
+      // SJ's own verdict for this booking. Every blocking status carries a Swedish `message`
+      // straight from the lookup (which mirrors SJ's API), so we show exactly what SJ says —
+      // including "not eligible" (ineligible) and any other code SJ rejects with (rejected) —
+      // instead of collapsing them into a misleading "check your booking number".
+      const BLOCKING = new Set(["not_found", "already_claimed", "invalid", "ineligible", "rejected"]);
+      if (BLOCKING.has(data.status)) {
+        setServerError(data.message ?? "SJ kunde inte behandla bokningen. Kontrollera uppgifterna.");
         return;
       }
       // status "ok" (or a transient "error") → proceed to file.

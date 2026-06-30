@@ -36,6 +36,7 @@ export type Database = {
           origin_stop_name: string
           outcome: string | null
           pdf_path: string | null
+          provider_message: string | null
           purchasing_operator: string | null
           service_number: string | null
           signature_path: string | null
@@ -66,6 +67,7 @@ export type Database = {
           origin_stop_name: string
           outcome?: string | null
           pdf_path?: string | null
+          provider_message?: string | null
           purchasing_operator?: string | null
           service_number?: string | null
           signature_path?: string | null
@@ -96,6 +98,7 @@ export type Database = {
           origin_stop_name?: string
           outcome?: string | null
           pdf_path?: string | null
+          provider_message?: string | null
           purchasing_operator?: string | null
           service_number?: string | null
           signature_path?: string | null

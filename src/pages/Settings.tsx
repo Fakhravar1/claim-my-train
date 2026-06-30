@@ -1279,6 +1279,16 @@ const Settings = () => {
                             <p className="text-xs text-destructive">{claim.error_message}</p>
                           )}
 
+                          {/* The operator's own message (SJ confirmation / "redan ansökt" /
+                              eligibility verdict) for non-error statuses — what SJ told us,
+                              shown verbatim so the user sees the real outcome. */}
+                          {claim.provider_message &&
+                            (claim.status === "submitted" || claim.status === "sj_already_claimed") && (
+                            <p className="rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-900">
+                              <span className="font-medium">Meddelande från SJ:</span> {claim.provider_message}
+                            </p>
+                          )}
+
                           {/* SJ: review the dry-run, then authorize the real submission. */}
                           {claim.status === "awaiting_sj_authorization" && (
                             <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
