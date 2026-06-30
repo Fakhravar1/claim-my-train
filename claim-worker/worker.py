@@ -79,12 +79,22 @@ def handle_skanetrafiken(sb, claim: dict) -> None:
 
 
 def handle_sj(sb, claim: dict) -> None:
-    """SJ web-form path. Dry-run unless globally enabled AND this claim is user-authorized."""
+    """SJ web-form path. Submits live whenever SJ_SUBMIT_LIVE is set.
+
+    The per-claim screenshot-authorization gate was removed (decision 2026-06-30): the
+    SjClaimModal IS the human-in-the-loop — the user picks the journey and types their own
+    real booking/email, and sj-lookup validates it (not_found / already_claimed / ineligible)
+    BEFORE a claims row is created. So a 'pending' SJ claim is already user-intended with a
+    genuine booking; we don't make them review a screenshot too. (CLAUDE.md §8: the rule is
+    "no fabricated claims + a human in the loop", which the modal satisfies — not specifically
+    "two worker gates".) The global SJ_SUBMIT_LIVE flag stays as the hard off-switch."""
     from submit_sj import submit_sj  # lazy: the PDF path never needs Playwright
 
     cid = claim["id"]
     profile = load_profile(sb, claim)
-    live = SJ_SUBMIT_LIVE and claim.get("status") == "sj_authorized"
+    # Live as soon as the global switch is on — no separate sj_authorized step. (Legacy
+    # 'sj_authorized' rows still satisfy this and submit too.)
+    live = SJ_SUBMIT_LIVE
 
     result = submit_sj(claim, profile, live=live)
 

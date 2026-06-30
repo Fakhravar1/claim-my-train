@@ -23,8 +23,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # Hard off-switch for real SJ submissions. Leave unset/false until the SJ
-          # submit flow is mapped + validated (submit_sj.py); dry-run screenshots only.
+          # Hard off-switch for real SJ submissions. LIVE since 2026-06-30 (vars.SJ_SUBMIT_LIVE
+          # = true): an SJ 'pending' claim is submitted on the next run — the SjClaimModal +
+          # sj-lookup are the human/validation gate (worker.py handle_sj). Set to false to
+          # revert to dry-run screenshots.
           SJ_SUBMIT_LIVE: ${{ vars.SJ_SUBMIT_LIVE }}
           # Same hard off-switch for Vy's headless web form (submit_vy.py). Leave unset until
           # the station-dropdown mapping is tuned against a real booking; dry-run only.
