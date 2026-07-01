@@ -387,8 +387,13 @@ export default function DaylightApp() {
         }
 
         // Regional länstrafik operators (and UL) file on their OWN förseningsersättning forms —
-        // EXTERNAL redirect for now (no claims row); headless is a follow-up.
-        if (op === "varmlandstrafik" || op === "ostgotatrafiken" || op === "jlt" || op === "malartag" || op === "ul") {
+        // EXTERNAL redirect for now (no claims row); headless is a follow-up. Tåg i Bergslagen,
+        // Kronoberg, Blekingetrafiken, Snälltåget and Tågab (mailto) are external link-outs too.
+        if (
+          op === "varmlandstrafik" || op === "ostgotatrafiken" || op === "jlt" ||
+          op === "malartag" || op === "ul" || op === "tagibergslagen" || op === "kronoberg" ||
+          op === "blekingetrafiken" || op === "snalltaget" || op === "tagab"
+        ) {
           return <ShortcutClaimModal journey={journey} operator={op} onClose={() => setClaim(null)} />;
         }
 

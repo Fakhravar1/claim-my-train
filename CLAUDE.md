@@ -666,9 +666,16 @@ architecture is dictated by **where (if at all) the operator's form gates on Ban
 | Vy (Vy Tåg) | `vy` | **headless worker** (`submit_vy`, own Azure no-login form) | wired + dry-run-validated (spike); `supported:true`, `HeadlessClaimModal`. Aborts with `station_no_match` if origin/dest can't be matched to Vy's station list (fail-safe). Set `VY_SUBMIT_LIVE` to go live. migrations `20260625150000` (operator) / `20260625160000` (`claims.service_number`) |
 
 | Arlanda Express | `arlandaexpress` | **EXTERNAL** (link to `arlandaexpress.se/hjalp-och-support/reklamation`) | live (external). Airport shuttle (TV operator "A-train"); own reklamation scheme, not resegaranti. `supported:false` + `externalClaimUrl`. Owner-hint `A-train → arlandaexpress` routes the board CTA. migration `20260701130000` |
+| Tåg i Bergslagen | `tagibergslagen` | **EXTERNAL** (`evf.tagibergslagen.regionvastmanland.se`) | live (external). Surfaced by the Närke+Västmanland fill. migration `20260701140000` |
+| Länstrafiken Kronoberg | `kronoberg` | **EXTERNAL** (`lanstrafikenkron.se/ansok-om-forseningsersattning`) | live (external). Was only reachable via Öresundståg origin-routing; now directly selectable. migration `20260701140000` |
+| Blekingetrafiken | `blekingetrafiken` | **EXTERNAL** (`respons.blekingetrafiken.se/…/bltresegarantiv2.aspx`) | live (external). Respons vendor (headless-fileable later, like Kalmar/HLT). migration `20260701140000` |
+| Snälltåget | `snalltaget` | **EXTERNAL** (`snalltaget.se/min-resa`) | live (external). No longer inert. Already in the CHECK. |
+| Tågab | `tagab` | **EXTERNAL — mailto** (`installt@tagakeriet.se`) | live (external). No online form; the CTA opens a pre-addressed mailto. migration `20260701140000` |
 
-(`snalltaget`/`other` are selectable but inert — no filing path.) All are in the
-`profiles.purchasing_operator` CHECK (migrations `20260624…`/`20260625…`/`20260701130000`) + `PURCHASING_OPERATORS`.
+(`other` is selectable but inert — no filing path.) All are in the
+`profiles.purchasing_operator` CHECK (migrations `20260624…`/`20260625…`/`20260701130000`/`20260701140000`) + `PURCHASING_OPERATORS`.
+
+**Västtrafik is EXTERNAL-only again (2026-07-01):** the iOS Shortcut autofill (`vasttrafik-fill-script`) is still under development, so `ShortcutClaimModal`'s `vasttrafik` config **dropped its `scriptUrl`** — iOS users also just link out to Västtrafik's form (no half-built autofill shipped). Re-enable by restoring `scriptUrl` + the `extras` payload once the fill script is validated on the live form.
 
 **Vy headless worker (built 2026-06-25, dry-run-validated).** Vy files on its own Azure
 reimbursement portal (`prod-reimbursement-swe-web.azurewebsites.net/complaint-ticket/vytag`) —

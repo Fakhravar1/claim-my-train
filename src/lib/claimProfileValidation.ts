@@ -56,6 +56,19 @@ export const PURCHASING_OPERATORS = [
   { value: "jlt", label: "Jönköpings Länstrafik (JLT)", supported: false, externalClaimUrl: "https://www.jlt.se/kundservice/forseningsersattning/" },
   { value: "ul", label: "UL (Uppsala län)", supported: false, externalClaimUrl: "https://www.ul.se/kundservice/forseningsersattning/formular-forseningsersattning/" },
   { value: "malartag", label: "Mälartåg (Mälardalen)", supported: false, externalClaimUrl: "https://www.malardalstrafik.se/kundservice/ansoek-om-ersaettning-vid-foersening/" },
+  // Tåg i Bergslagen — surfaced by the Närke+Västmanland station fill (2026-07-01). Own
+  // resegaranti; EXTERNAL link-out to its application form (the evf.* form subdomain).
+  { value: "tagibergslagen", label: "Tåg i Bergslagen", supported: false, externalClaimUrl: "https://evf.tagibergslagen.regionvastmanland.se" },
+  // Länstrafiken Kronoberg + Blekingetrafiken — previously reachable ONLY via Öresundståg
+  // origin-routing (REGION_AUTHORITIES); now directly selectable for a Kronoberg/Blekinge
+  // ticket. EXTERNAL link-out (Blekinge = its respons application form).
+  { value: "kronoberg", label: "Länstrafiken Kronoberg", supported: false, externalClaimUrl: "https://lanstrafikenkron.se/ansok-om-forseningsersattning" },
+  { value: "blekingetrafiken", label: "Blekingetrafiken", supported: false, externalClaimUrl: "https://respons.blekingetrafiken.se/internet/bltresegarantiv2.aspx" },
+  // Snälltåget — no longer inert: EXTERNAL link-out to its "Min resa" claim page.
+  { value: "snalltaget", label: "Snälltåget", supported: false, externalClaimUrl: "https://www.snalltaget.se/min-resa" },
+  // Tågab (Tågåkeriet i Bergslagen) — no online form; claims go by e-mail. The link-out is a
+  // mailto: the CTA opens the user's mail client pre-addressed to installt@tagakeriet.se.
+  { value: "tagab", label: "Tågab", supported: false, externalClaimUrl: "mailto:installt@tagakeriet.se" },
   // Arlanda Express (TV operator "A-train") — the Arlanda N/S platforms (Arnn/Arns) are polled
   // but this is a premium airport shuttle with its OWN reklamation scheme (not Lag 2015:953 /
   // resegaranti), so it's EXTERNAL: the CTA links out to its form, no claims row is stored.
@@ -75,9 +88,9 @@ export const REGION_AUTHORITIES: Record<RegionAuthorityKey, {
 }> = {
   skanetrafiken:    { label: "Skånetrafiken",          county: "Skåne (och Köpenhamn)", externalClaimUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/", inApp: false },
   hallandstrafiken: { label: "Hallandstrafiken",       county: "Halland",          externalClaimUrl: "https://hallandstrafiken.se/reklamation-och-forseningsersattning", inApp: false },
-  blekingetrafiken: { label: "Blekingetrafiken",       county: "Blekinge",         externalClaimUrl: "https://www.blekingetrafiken.se/kundservice/forseningsersattning/", inApp: false },
+  blekingetrafiken: { label: "Blekingetrafiken",       county: "Blekinge",         externalClaimUrl: "https://respons.blekingetrafiken.se/internet/bltresegarantiv2.aspx", inApp: false },
   kalmar:           { label: "Kalmar länstrafik",      county: "Kalmar län",       externalClaimUrl: "https://kalmarlanstrafik.se/Kundservice/ansok-om-forseningsersattning/", inApp: false },
-  kronoberg:        { label: "Länstrafiken Kronoberg", county: "Kronoberg",        externalClaimUrl: "https://lanstrafikenkron.se/forseningsersattning", inApp: false },
+  kronoberg:        { label: "Länstrafiken Kronoberg", county: "Kronoberg",        externalClaimUrl: "https://lanstrafikenkron.se/ansok-om-forseningsersattning", inApp: false },
   vasttrafik:       { label: "Västtrafik",             county: "Västra Götaland",  externalClaimUrl: "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning-oresundstagbiljett/", inApp: false },
 };
 export const isRegionAuthorityKey = (v: unknown): v is RegionAuthorityKey =>
@@ -112,6 +125,11 @@ const OPERATOR_OWNER_HINT: Record<string, PurchasingOperator> = {
   "Jönköpings Länstrafik": "jlt",
   "Mälardalstrafik AB": "malartag",
   "A-train": "arlandaexpress",
+  "Tåg i Bergslagen": "tagibergslagen",
+  "Länstrafiken Kronoberg": "kronoberg",
+  "Blekingetrafiken": "blekingetrafiken",
+  "Snälltåget": "snalltaget",
+  "Tågab": "tagab",
 };
 export const purchasingOperatorFromOwner = (owner: string | null | undefined): PurchasingOperator | null =>
   (owner && OPERATOR_OWNER_HINT[owner.trim()]) || null;

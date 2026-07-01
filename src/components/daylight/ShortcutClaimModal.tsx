@@ -21,7 +21,8 @@ const FN_BASE = "https://jnfwmdirvnqfpfhtipld.supabase.co/functions/v1";
 
 type ShortcutOperator =
   | "sl" | "skanetrafiken" | "vasttrafik" | "hallandstrafiken"
-  | "varmlandstrafik" | "ostgotatrafiken" | "jlt" | "ul" | "malartag";
+  | "varmlandstrafik" | "ostgotatrafiken" | "jlt" | "ul" | "malartag"
+  | "tagibergslagen" | "kronoberg" | "blekingetrafiken" | "snalltaget" | "tagab";
 
 type Profile = ReturnType<typeof useAuth>["profile"];
 
@@ -53,16 +54,14 @@ const OPS: Record<ShortcutOperator, {
     formUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/",
     extras: () => ({}),
   },
+  // Västtrafik: EXTERNAL only for now — the iOS Shortcut autofill (vasttrafik-fill-script) is
+  // still under development, so we DON'T hand iOS users a half-built flow; everyone just links
+  // out to Västtrafik's form. Re-enable autofill by restoring `scriptUrl` + the `extras` payload
+  // (mobile / payoutMethod / personnummer) once the fill script is validated on the live form.
   vasttrafik: {
     label: "Västtrafik",
     formUrl: "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning/",
-    scriptUrl: `${FN_BASE}/vasttrafik-fill-script`,
-    // BankID is at the END; section ③ "Kontaktuppgifter" is only a personnummer field.
-    extras: (profile) => ({
-      mobile: profile?.claim_mobile ?? "",
-      payoutMethod: profile?.payout_method ?? "",
-      personnummer: profile?.claim_personnummer ?? "",
-    }),
+    extras: () => ({}),
   },
   // EXTERNAL only (no scriptUrl): Hallandstrafiken's reklamation form geo-blocks our worker's
   // IP (US/datacenter), so headless filing is backlogged — for now just link the user out to
@@ -97,6 +96,35 @@ const OPS: Record<ShortcutOperator, {
   malartag: {
     label: "Mälartåg",
     formUrl: "https://www.malardalstrafik.se/kundservice/ersaettning-vid-foersening/",
+    extras: () => ({}),
+  },
+  // EXTERNAL-only link-outs (no autofill). Tåg i Bergslagen was surfaced by the
+  // Närke+Västmanland station fill; Kronoberg/Blekingetrafiken are now directly selectable;
+  // Snälltåget is no longer inert; Tågab has no online form so its link-out is a mailto.
+  tagibergslagen: {
+    label: "Tåg i Bergslagen",
+    formUrl: "https://evf.tagibergslagen.regionvastmanland.se",
+    extras: () => ({}),
+  },
+  kronoberg: {
+    label: "Länstrafiken Kronoberg",
+    formUrl: "https://lanstrafikenkron.se/ansok-om-forseningsersattning",
+    extras: () => ({}),
+  },
+  blekingetrafiken: {
+    label: "Blekingetrafiken",
+    formUrl: "https://respons.blekingetrafiken.se/internet/bltresegarantiv2.aspx",
+    extras: () => ({}),
+  },
+  snalltaget: {
+    label: "Snälltåget",
+    formUrl: "https://www.snalltaget.se/min-resa",
+    extras: () => ({}),
+  },
+  // Tågab has no web form — claims go by e-mail; the CTA opens a pre-addressed mailto.
+  tagab: {
+    label: "Tågab",
+    formUrl: "mailto:installt@tagakeriet.se",
     extras: () => ({}),
   },
 };
