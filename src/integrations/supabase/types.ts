@@ -149,6 +149,24 @@ export type Database = {
         }
         Relationships: []
       }
+      data_freshness_alert_state: {
+        Row: {
+          breaching: boolean
+          check_name: string
+          last_notified_at: string | null
+        }
+        Insert: {
+          breaching?: boolean
+          check_name: string
+          last_notified_at?: string | null
+        }
+        Update: {
+          breaching?: boolean
+          check_name?: string
+          last_notified_at?: string | null
+        }
+        Relationships: []
+      }
       digest_events: {
         Row: {
           created_at: string
@@ -569,6 +587,7 @@ export type Database = {
           origin_stop_name: string | null
           route_distance_km: number | null
           service_number: string | null
+          train_owner: string | null
           transport_mode: string | null
         }
         Insert: {
@@ -592,6 +611,7 @@ export type Database = {
           origin_stop_name?: string | null
           route_distance_km?: number | null
           service_number?: string | null
+          train_owner?: string | null
           transport_mode?: string | null
         }
         Update: {
@@ -615,6 +635,7 @@ export type Database = {
           origin_stop_name?: string | null
           route_distance_km?: number | null
           service_number?: string | null
+          train_owner?: string | null
           transport_mode?: string | null
         }
         Relationships: []
@@ -641,12 +662,30 @@ export type Database = {
           origin_stop_name: string | null
           route_distance_km: number | null
           service_number: string | null
+          train_owner: string | null
           transport_mode: string | null
+        }
+        Relationships: []
+      }
+      v_station_claim_authority: {
+        Row: {
+          region_authority_key: string | null
+          stop_id: string | null
         }
         Relationships: []
       }
     }
     Functions: {
+      check_data_freshness: {
+        Args: never
+        Returns: {
+          age_minutes: number
+          breaching: boolean
+          check_name: string
+          last_ingested: string
+          threshold_minutes: number
+        }[]
+      }
       claim_eligibility: {
         Args: {
           p_canceled: boolean
