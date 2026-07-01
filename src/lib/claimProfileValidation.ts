@@ -56,6 +56,10 @@ export const PURCHASING_OPERATORS = [
   { value: "jlt", label: "Jönköpings Länstrafik (JLT)", supported: false, externalClaimUrl: "https://www.jlt.se/kundservice/forseningsersattning/" },
   { value: "ul", label: "UL (Uppsala län)", supported: false, externalClaimUrl: "https://www.ul.se/kundservice/forseningsersattning/formular-forseningsersattning/" },
   { value: "malartag", label: "Mälartåg (Mälardalen)", supported: false, externalClaimUrl: "https://www.malardalstrafik.se/kundservice/ansoek-om-ersaettning-vid-foersening/" },
+  // Arlanda Express (TV operator "A-train") — the Arlanda N/S platforms (Arnn/Arns) are polled
+  // but this is a premium airport shuttle with its OWN reklamation scheme (not Lag 2015:953 /
+  // resegaranti), so it's EXTERNAL: the CTA links out to its form, no claims row is stored.
+  { value: "arlandaexpress", label: "Arlanda Express", supported: false, externalClaimUrl: "https://www.arlandaexpress.se/hjalp-och-support/reklamation" },
   { value: "sj", label: "SJ", supported: false },
 ] as const;
 
@@ -107,6 +111,7 @@ const OPERATOR_OWNER_HINT: Record<string, PurchasingOperator> = {
   "ÖstgötaTrafiken": "ostgotatrafiken",
   "Jönköpings Länstrafik": "jlt",
   "Mälardalstrafik AB": "malartag",
+  "A-train": "arlandaexpress",
 };
 export const purchasingOperatorFromOwner = (owner: string | null | undefined): PurchasingOperator | null =>
   (owner && OPERATOR_OWNER_HINT[owner.trim()]) || null;

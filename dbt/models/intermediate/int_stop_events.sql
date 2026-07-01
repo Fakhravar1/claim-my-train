@@ -82,9 +82,12 @@ with tv as (   -- Swedish stop-events
       -- corridor scouting (agg_corridor_delays); list their signatures here so they
       -- never leak into fct_journeys / dim_active_stations / the dropdowns. Adding a
       -- signature here hides it from the claim UI; removing it launches that station
-      -- as a claim corridor. CURRENTLY EMPTY — Stockholm C (Cst) was reclassified to a
-      -- claimable SJ corridor on 2026-06-23 (trunk launch). To re-add: AND the filter
-      --   and t.location_signature not in ('Sig1', 'Sig2')
+      -- as a claim corridor. Arlanda N/S (Arnn/Arns) are polled but fenced off here: their
+      -- only operator is A-train (Arlanda Express), which has no in-app filing path — it's an
+      -- EXTERNAL link-out (purchasing_operator='arlandaexpress', §19), so the platforms stay
+      -- out of the board/dropdowns rather than showing un-claimable rows. (Stockholm C / Cst
+      -- was reclassified to a claimable SJ corridor on 2026-06-23 — trunk launch.)
+      and t.location_signature not in ('Arnn', 'Arns')
     {% if is_incremental() %}
       and t.ingested_at >= (select max(ingested_at) from {{ this }}) - interval '6 hours'
     {% endif %}
