@@ -556,3 +556,19 @@
   }
 }
 
+/* iOS auto-zoom guard: Safari zooms the viewport in (and doesn't zoom back out
+   on blur, producing the "wobble") whenever a focused form control renders below
+   16px. All our fields sit just under that (.88–.95rem), so force >=16px on
+   phones only — desktop sizing above is untouched. Prefer this to
+   maximum-scale=1, which would also kill legitimate pinch-zoom (WCAG). */
+@media(max-width:720px){
+  .cmt-daylight input,
+  .cmt-daylight select,
+  .cmt-daylight textarea,
+  .cmt-daylight-scrim input,
+  .cmt-daylight-scrim select,
+  .cmt-daylight-scrim textarea{
+    font-size:16px;
+  }
+}
+
