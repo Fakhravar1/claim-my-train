@@ -148,6 +148,12 @@ const OWNER_TO_OPERATOR: Record<string, PurchasingOperator> = {
   "A-train": "arlandaexpress",
   "Snälltåget": "snalltaget",
   "Tågab": "tagab",
+  // VR Sverige AB operates Öresundståg (the corporate operator label the REST/Danish
+  // leg carries — "VR Sverige AB"/"VR Sverige"/"VR"). Route as Öresundståg -> the board
+  // then origin-routes to the right länstrafikbolag (a Danish/Köpenhamn origin -> Skånetrafiken).
+  "VR Sverige AB": "oresundstag",
+  "VR Sverige": "oresundstag",
+  "VR": "oresundstag",
 };
 
 // train_owner (CODE) -> purchasing_operator. Secondary signal for null-information_owner rows.
@@ -164,6 +170,7 @@ const TRAIN_OWNER_TO_OPERATOR: Record<string, PurchasingOperator> = {
   "JLT": "jlt",
   "TIB": "tagibergslagen",
   "SLL": "sl",
+  "RV": "oresundstag",   // VR Sverige's code — operates Öresundståg
 };
 
 export const purchasingOperatorFromOwner = (owner: string | null | undefined): PurchasingOperator | null =>
