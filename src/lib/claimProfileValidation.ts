@@ -28,10 +28,12 @@ export const PURCHASING_OPERATORS = [
   { value: "skanetrafiken", label: "Skånetrafiken (JoJo, app, biljettautomat)", supported: false, externalClaimUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/" },
   // Öresundståg is NOT a single authority: the claim goes to the länstrafikbolag of the
   // county where the journey STARTED (origin-routed at claim time — see REGION_AUTHORITIES
-  // + v_station_claim_authority). Skåne/Köpenhamn-origin files in-app (Skånetrafiken PDF);
-  // the other counties link out to their own form. `supported` is true so the in-app Skåne
-  // path is allowed — non-Skåne origins are intercepted and sent external before filing.
-  { value: "oresundstag", label: "Öresundståg", supported: true },
+  // + v_station_claim_authority). `supported: false` since the in-app Skånetrafiken PDF flow
+  // is ON ICE (2026-07-01) — every Öresundståg origin now links OUT to the right bolag's form
+  // (Skåne/Köpenhamn → Skånetrafiken's site), so nothing routes to the PDF worker. The board
+  // handles Öresundståg via origin routing independently of this flag; false just keeps the
+  // bulk paths (MyDelays/ClaimReview) from creating a PDF claim.
+  { value: "oresundstag", label: "Öresundståg", supported: false },
   { value: "sl", label: "SL (Stockholm)", supported: false, externalClaimUrl: "https://sl.se/kundservice/forseningsersattning/resan" },
   // Hallandstrafiken: EXTERNAL for now. The headless worker (submit_hallandstrafiken) is built
   // but its form geo-blocks our US/datacenter worker IP — moving the worker to an EU host is
@@ -67,7 +69,7 @@ export type RegionAuthorityKey =
 export const REGION_AUTHORITIES: Record<RegionAuthorityKey, {
   label: string; county: string; externalClaimUrl: string | null; inApp: boolean;
 }> = {
-  skanetrafiken:    { label: "Skånetrafiken",          county: "Skåne (och Köpenhamn)", externalClaimUrl: null, inApp: true },
+  skanetrafiken:    { label: "Skånetrafiken",          county: "Skåne (och Köpenhamn)", externalClaimUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/", inApp: false },
   hallandstrafiken: { label: "Hallandstrafiken",       county: "Halland",          externalClaimUrl: "https://hallandstrafiken.se/reklamation-och-forseningsersattning", inApp: false },
   blekingetrafiken: { label: "Blekingetrafiken",       county: "Blekinge",         externalClaimUrl: "https://www.blekingetrafiken.se/kundservice/forseningsersattning/", inApp: false },
   kalmar:           { label: "Kalmar länstrafik",      county: "Kalmar län",       externalClaimUrl: "https://kalmarlanstrafik.se/Kundservice/ansok-om-forseningsersattning/", inApp: false },

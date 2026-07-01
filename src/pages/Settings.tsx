@@ -454,7 +454,7 @@ const Settings = () => {
       toast({
         title: "Åtgärda de markerade fälten",
         description:
-          "Dessa uppgifter hamnar på din Skånetrafiken-reklamation. Ofullständiga eller felaktigt formaterade uppgifter kan göra att ansökan nekas.",
+          "Dessa uppgifter används i din ersättningsansökan. Ofullständiga eller felaktigt formaterade uppgifter kan göra att ansökan nekas.",
         variant: "destructive",
       });
       return;
@@ -596,9 +596,9 @@ const Settings = () => {
                     <DialogHeader>
                       <DialogTitle>Varför dessa uppgifter spelar roll</DialogTitle>
                       <DialogDescription className="text-left">
-                        Dina personuppgifter, adress, personnummer och biljett-ID skickas in på
-                        Skånetrafiken-reklamationen. Om något obligatoriskt fält saknas eller är fel
-                        formaterat kan Skånetrafiken neka ansökan. Fält markerade med{" "}
+                        Dina personuppgifter, adress, personnummer och biljett-ID används för att
+                        fylla i din ersättningsansökan hos operatören. Om något obligatoriskt fält
+                        saknas eller är fel formaterat kan ansökan nekas. Fält markerade med{" "}
                         <span className="font-semibold text-destructive">*</span> är obligatoriska.
                       </DialogDescription>
                     </DialogHeader>
@@ -749,9 +749,8 @@ const Settings = () => {
                       Signatur <span className="text-destructive">*</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Ritas en gång och återanvänds på varje ansökningsformulär. Skånetrafiken-
-                      reklamationen kräver en signatur; vi lägger till den först när du bekräftar
-                      och skickar in en ansökan.
+                      Ritas en gång och återanvänds. Vissa operatörers ansökningsformulär kräver en
+                      underskrift; vi lägger till den först när du bekräftar och skickar in en ansökan.
                     </p>
                   </div>
 
@@ -821,9 +820,8 @@ const Settings = () => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Vi hanterar för närvarande bara <span className="font-medium">Skånetrafiken</span>-ansökningar.
-                    Om du köpte din biljett från en annan operatör, använd den operatörens egen
-                    process för förseningsersättning.
+                    Var du köpte biljetten avgör hur ansökan görs — för vissa operatörer fyller vi i
+                    formuläret åt dig, för andra länkar vi dig vidare till operatörens egen ansökan.
                   </p>
                   {errors.purchasingOperator && (
                     <p className="text-sm text-destructive">{errors.purchasingOperator}</p>
@@ -835,7 +833,7 @@ const Settings = () => {
                       formulär (vi länkar dit från förseningssidorna).
                     </div>
                   )}
-                  {purchasingOperator && !isSupportedPurchasingOperator(purchasingOperator) && !purchasingOperatorClaimUrl(purchasingOperator) && (
+                  {purchasingOperator && purchasingOperator !== "oresundstag" && !isSupportedPurchasingOperator(purchasingOperator) && !purchasingOperatorClaimUrl(purchasingOperator) && (
                     <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                       Obs: ansökningar stöds inte för {purchasingOperatorLabel(purchasingOperator)} ännu,
                       så du kommer inte kunna ansöka från förseningssidorna med detta val.
@@ -844,9 +842,9 @@ const Settings = () => {
                   {purchasingOperator === "oresundstag" && (
                     <div className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900">
                       För Öresundståg avgör <span className="font-medium">var resan började</span> vart
-                      ansökan går: vi väljer rätt länstrafikbolag automatiskt när du ansöker. Resor från
-                      Skåne (och Köpenhamn) hanterar vi i appen; för Halland, Blekinge, Kalmar, Kronoberg
-                      och Västra Götaland länkar vi till respektive bolags formulär.
+                      ansökan går: vi väljer rätt länstrafikbolag automatiskt när du ansöker och länkar
+                      dig vidare till rätt formulär — Skåne (och Köpenhamn) till Skånetrafiken, annars
+                      Halland, Blekinge, Kalmar, Kronoberg eller Västra Götaland.
                     </div>
                   )}
                 </div>
@@ -888,7 +886,7 @@ const Settings = () => {
                   <p className="text-xs text-muted-foreground">
                     {purchasingOperator === "sl"
                       ? "SL betalar ut förseningsersättning till bankkonto."
-                      : "Skånetrafiken betalar ut antingen via banköverföring eller som en Värdekod via SMS eller e-post."}
+                      : "Utbetalning sker via banköverföring eller som en värdekod via SMS eller e-post, beroende på operatör."}
                   </p>
                   {errors.payoutMethod && (
                     <p className="text-sm text-destructive">{errors.payoutMethod}</p>
@@ -1177,8 +1175,7 @@ const Settings = () => {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Dina inskickade ansökningar</p>
                   <p className="text-xs text-muted-foreground">
-                    Varje försening du skickar in dyker upp här. När vi har genererat det ifyllda
-                    Skånetrafiken-formuläret kan du ladda ner det.
+                    Varje försening du skickar in dyker upp här med sin status och operatörens svar.
                   </p>
                 </div>
 

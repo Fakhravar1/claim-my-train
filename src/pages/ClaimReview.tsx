@@ -240,11 +240,11 @@ export default function ClaimReview() {
 
             {!operatorSupported && !externalClaimUrl && !isSj && (
               <div className="board" style={{ marginBottom: 16, borderColor: "var(--severe)" }}>
-                <p style={{ fontWeight: 600 }}>Ansökningar stöds endast för Skånetrafiken-biljetter</p>
+                <p style={{ fontWeight: 600 }}>Bulkansökan stöds inte för den här operatören</p>
                 <p style={{ margin: "6px 0 12px" }}>
                   {profile?.purchasing_operator
-                    ? `Du valde ${purchasingOperatorLabel(profile.purchasing_operator)} som biljettleverantör. Ansökningar för andra operatörer stöds inte än.`
-                    : "Ange var du köpte din biljett först — vi stöder för närvarande bara Skånetrafiken-biljetter."}
+                    ? `Du valde ${purchasingOperatorLabel(profile.purchasing_operator)} som biljettleverantör. Ansök en resa i taget från tavlan på startsidan — vi vägleder dig till rätt formulär.`
+                    : "Ange var du köpte din biljett först under Inställningar."}
                 </p>
                 <button type="button" className="btn btn--ghost" onClick={() => navigate("/settings")}>Uppdatera biljettleverantör</button>
               </div>
@@ -355,8 +355,8 @@ export default function ClaimReview() {
                   </div>
                   <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
                     Genom att ansöka intygar du att du reste på dessa avgångar och godkänner att din
-                    sparade underskrift används på Skånetrafikens blanketter. Falska ansökningar
-                    polisanmäls av Skånetrafiken.
+                    sparade underskrift används på ansökningsformuläret. Falska ansökningar kan
+                    polisanmälas av operatören.
                   </p>
                 </>
               )}

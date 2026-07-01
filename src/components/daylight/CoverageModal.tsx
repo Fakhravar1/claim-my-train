@@ -19,8 +19,8 @@ const MODE_META: Record<Mode, { label: string; tone: string }> = {
 };
 
 const ROWS: { operator: string; region: string; how: string; mode: Mode }[] = [
-  { operator: "Skånetrafiken", region: "Skåne", how: "Vi skapar din ansökan (PDF) — på iPhone även autofyll i deras formulär.", mode: "direct" },
-  { operator: "Öresundståg", region: "Sydsverige (dit resan startade)", how: "Skåne/Köpenhamn: direkt i appen. Övriga län: vidarekoppling till länstrafiken.", mode: "direct" },
+  { operator: "Skånetrafiken", region: "Skåne", how: "Vi öppnar Skånetrafikens formulär åt dig — du fyller i och skickar in.", mode: "redirect" },
+  { operator: "Öresundståg", region: "Sydsverige (dit resan startade)", how: "Vi vidarekopplar till rätt länstrafikbolags formulär utifrån var resan startade.", mode: "redirect" },
   { operator: "Kalmar länstrafik", region: "Kalmar län", how: "Vi fyller i åt dig — du granskar och godkänner innan inskick.", mode: "direct" },
   { operator: "Vy (Vy Tåg)", region: "Vy-tåg i Sverige", how: "Vi fyller i åt dig — du granskar och godkänner innan inskick.", mode: "direct" },
   { operator: "SL", region: "Stockholm", how: "Autofyll via Qvitta-genvägen på iPhone — du loggar in med BankID och skickar in.", mode: "assist" },
