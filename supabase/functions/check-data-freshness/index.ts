@@ -17,6 +17,37 @@ const ALERT_EMAIL = Deno.env.get('ALERT_EMAIL') ?? 'arianfakhravar@gmail.com'
 const FROM = 'Qvitta <noreply@qvitta.nu>'
 const RENOTIFY_HOURS = 6
 
+// Event-driven investigator: on a FIRST breach, poke the Claude "Data-freshness
+// breach investigator" routine (trig_01KZWTRp2T7WNdwoAB62mPBS) so an agent starts
+// diagnosing immediately — same event that emails us. No-op unless both secrets
+// are set, so this is safe to deploy before the token exists.
+//   CLAUDE_TRIGGER_URL   = the routine's api.anthropic.com/v1/claude_code/routines/{id}/fire endpoint
+//   CLAUDE_TRIGGER_TOKEN = the sk-ant-oat01 token that authorizes the fire call
+const CLAUDE_TRIGGER_URL = Deno.env.get('CLAUDE_TRIGGER_URL') ?? ''
+const CLAUDE_TRIGGER_TOKEN = Deno.env.get('CLAUDE_TRIGGER_TOKEN') ?? ''
+
+const fireInvestigator = async (): Promise<boolean> => {
+  if (!CLAUDE_TRIGGER_URL || !CLAUDE_TRIGGER_TOKEN) return false
+  try {
+    const resp = await fetch(CLAUDE_TRIGGER_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${CLAUDE_TRIGGER_TOKEN}`,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    })
+    if (!resp.ok) {
+      console.error('investigator trigger error', resp.status, (await resp.text()).slice(0, 300))
+    }
+    return resp.ok
+  } catch (e) {
+    console.error('investigator trigger threw', e)
+    return false
+  }
+}
+
 type Check = {
   check_name: string
   last_ingested: string | null
@@ -65,11 +96,13 @@ Deno.serve(async () => {
   const recoveryMsgs: string[] = []
   const upserts: State[] = []
   const nowIso = new Date().toISOString()
+  let newBreach = false
 
   for (const c of (checks as Check[])) {
     const prev = stateMap.get(c.check_name)
     if (c.breaching) {
       const firstBreach = !prev?.breaching
+      if (firstBreach) newBreach = true
       const dueReminder = prev?.breaching && hoursSince(prev.last_notified_at) >= RENOTIFY_HOURS
       const notify = firstBreach || dueReminder
       if (notify) {
@@ -122,6 +155,10 @@ Deno.serve(async () => {
     emailed = await sendEmail(subject, parts.join('\n'))
   }
 
+  // Fire the Claude investigator only on a NEW breach (not reminders/recoveries),
+  // so each outage wakes an agent once. No-op unless the trigger secrets are set.
+  const investigatorFired = newBreach ? await fireInvestigator() : false
+
   return new Response(
     JSON.stringify({
       success: true,
@@ -129,6 +166,7 @@ Deno.serve(async () => {
       breached: breachMsgs.length,
       recovered: recoveryMsgs.length,
       emailed,
+      investigatorFired,
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   )
