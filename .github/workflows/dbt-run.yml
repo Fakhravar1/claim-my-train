@@ -1,9 +1,11 @@
 name: dbt run
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'   # every 15 min — matches raw_departures ingestion
-  workflow_dispatch:          # so you can trigger manually for the first test
+  # Scheduling is EXTERNAL since 2026-07-01: cron-jobs.org fires this workflow every
+  # 15 min via the GitHub workflow_dispatch API (reliable cadence, no free-tier
+  # `schedule:` jitter). The in-repo `schedule:` was removed on purpose — do NOT
+  # re-add it, or the job double-fires (cron-jobs.org + GitHub both trigger).
+  workflow_dispatch:          # external cron + manual "Run workflow" button
 
 jobs:
   run:
