@@ -86,6 +86,10 @@ select
         when dest.source   = 'tv' then dest.operator
         else coalesce(origin.operator, dest.operator)
     end                            as operator,
+    -- TV operator code (train_owner) — the SECONDARY auto-routing signal used when the
+    -- information_owner-derived `operator` is null (esp. SJ). TV-only, so a plain coalesce
+    -- picks whichever leg has it. Descriptive-only (§8: never a rule key).
+    coalesce(origin.train_owner, dest.train_owner)       as train_owner,
 
     -- which feed supplied each leg (TV Swedish vs REST Danish) — source audit
     origin.source                  as origin_source,
@@ -160,6 +164,7 @@ select
     line_name,
     line_terminus,
     operator,
+    train_owner,
     origin_source,
     destination_source,
     origin_scheduled,

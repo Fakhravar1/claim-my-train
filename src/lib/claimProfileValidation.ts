@@ -114,25 +114,73 @@ export const purchasingOperatorClaimUrl = (value: string | null | undefined): st
 export const purchasingOperatorLabel = (value: string | null | undefined): string =>
   PURCHASING_OPERATORS.find((o) => o.value === value)?.label ?? (value ?? "");
 
-// "Match by means of transport": map a journey's observed operator label (TV information_owner)
-// to a purchasing_operator, so the board can route the claim CTA to the right operator's form
-// from the JOURNEY itself, regardless of the user's saved ticket operator (§1 lets us hint from
-// the observed owner; the user can still override in Settings). UL is absent on purpose — its
-// trains carry no "UL" label (Mälardalstrafik AB / X-trafik), so a UL claim is manual-select only.
-const OPERATOR_OWNER_HINT: Record<string, PurchasingOperator> = {
-  "Värmlandstrafik": "varmlandstrafik",
+// "Match by means of transport": identify the responsible operator/authority FROM THE JOURNEY
+// so the board can auto-route the claim CTA without the user picking from a list (§1). The
+// Trafikverket feed carries two signals, exposed on the journey as `operator` (TV
+// information_owner — the recognizable BRAND) and `train_owner` (TV's terse operator CODE).
+// We resolve on information_owner first, then fall back to train_owner — because a large share
+// of events (notably MOST SJ trains) have a null information_owner but a populated train_owner.
+//
+// `oresundstag` is a valid target here: it means "no own claim route" — the board then
+// origin-routes it to a länstrafikbolag via v_station_claim_authority. An UNMAPPED signal
+// returns null -> the UI falls back to the manual operator picker (safe default). Deliberately
+// left unmapped because they'd mis-route or have no path: "X-Trafik"/"VR"/"MTRX" (MTR Express)
+// have no purchasing_operator; train_owner "ARRIVA" is ambiguous (runs both Pågatåg→Skånetrafiken
+// AND Öresundståg→origin-routed), so an ARRIVA-only row must be picked by hand.
+
+// information_owner (BRAND) -> purchasing_operator. Exact TV strings.
+const OWNER_TO_OPERATOR: Record<string, PurchasingOperator> = {
+  "SL": "sl",
+  "Skånetrafiken": "skanetrafiken",
+  "Västtrafik": "vasttrafik",
+  "Öresundståg": "oresundstag",
+  "SJ": "sj",
+  "VY": "vy",
+  "Kalmar Länstrafik": "kalmar",
+  "Hallandstrafiken": "hallandstrafiken",
+  "Mälardalstrafik AB": "malartag",
   "ÖstgötaTrafiken": "ostgotatrafiken",
   "Jönköpings Länstrafik": "jlt",
-  "Mälardalstrafik AB": "malartag",
-  "A-train": "arlandaexpress",
+  "Värmlandstrafik": "varmlandstrafik",
   "Tåg i Bergslagen": "tagibergslagen",
   "Länstrafiken Kronoberg": "kronoberg",
   "Blekingetrafiken": "blekingetrafiken",
+  "A-train": "arlandaexpress",
   "Snälltåget": "snalltaget",
   "Tågab": "tagab",
 };
+
+// train_owner (CODE) -> purchasing_operator. Secondary signal for null-information_owner rows.
+const TRAIN_OWNER_TO_OPERATOR: Record<string, PurchasingOperator> = {
+  "SJ": "sj",
+  "Ö-TÅG": "oresundstag",
+  "ATRAIN": "arlandaexpress",
+  "MÄLAB": "malartag",
+  "SKANE": "skanetrafiken",
+  "VASTTRAF": "vasttrafik",
+  "SNÄLL": "snalltaget",
+  "VY": "vy",
+  "TÅGAB": "tagab",
+  "JLT": "jlt",
+  "TIB": "tagibergslagen",
+  "SLL": "sl",
+};
+
 export const purchasingOperatorFromOwner = (owner: string | null | undefined): PurchasingOperator | null =>
-  (owner && OPERATOR_OWNER_HINT[owner.trim()]) || null;
+  (owner && OWNER_TO_OPERATOR[owner.trim()]) || null;
+
+/**
+ * Auto-detect the operator/authority to file a journey's claim through, from the feed
+ * signals on the journey (information_owner first, then train_owner). Returns a
+ * PurchasingOperator (possibly `oresundstag`, which the caller then origin-routes) or
+ * null when the signal is unknown/ambiguous — in which case the UI shows the manual picker.
+ */
+export const resolveOperatorFromJourney = (
+  journey: { operator?: string | null; train_owner?: string | null },
+): PurchasingOperator | null =>
+  (journey.operator && OWNER_TO_OPERATOR[journey.operator.trim()]) ||
+  (journey.train_owner && TRAIN_OWNER_TO_OPERATOR[journey.train_owner.trim()]) ||
+  null;
 
 export type ClaimProfileInput = {
   firstName: string;

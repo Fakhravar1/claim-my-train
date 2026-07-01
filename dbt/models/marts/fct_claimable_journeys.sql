@@ -50,6 +50,7 @@ select
     line_name,
     line_terminus,
     operator,
+    train_owner,
     origin_source,
     destination_source,
     origin_scheduled,

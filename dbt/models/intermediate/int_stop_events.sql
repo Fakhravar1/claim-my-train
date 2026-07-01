@@ -71,6 +71,12 @@ with tv as (   -- Swedish stop-events
         -- Snälltåget) — what users recognize. TV's `operator` field is the corporate
         -- contractor (ARRIVA, SNÄLL); deliberately not used for display.
         ,t.information_owner                                as operator
+        -- train_owner is TV's terse operator CODE (SJ, Ö-TÅG, ATRAIN, MÄLAB, SKANE,
+        -- VASTTRAF, SNÄLL, VY, TÅGAB, JLT, TIB…). It's our SECONDARY routing signal:
+        -- information_owner is null for a large share of events (notably most SJ trains),
+        -- but train_owner is populated there — so operator auto-detection coalesces
+        -- information_owner -> train_owner downstream. Descriptive-only (§8: never a rule key).
+        ,t.train_owner                                      as train_owner
         ,t.ingested_at
         ,'tv'                                               as source
     from {{ ref('stg_train_announcements') }} t
@@ -110,6 +116,7 @@ rest as (      -- Danish stop-events ONLY — REST is the Danish leg for trains
         ,route__name                                        as line_name
         ,route__destination__name                           as line_terminus
         ,agency__operator                                   as operator
+        ,null::text                                         as train_owner   -- TV-only signal; REST has no equivalent
         ,ingested_at
         ,'rest'                                             as source
     from {{ ref('stg_departures') }}
@@ -164,6 +171,7 @@ select
     ,line_name
     ,line_terminus
     ,operator
+    ,train_owner                                            -- TV operator code; secondary auto-routing signal (null on REST)
     ,source                                                 -- 'tv' (Swedish) | 'rest' (Danish) — degenerate dim
     ,ingested_at
 from deduped

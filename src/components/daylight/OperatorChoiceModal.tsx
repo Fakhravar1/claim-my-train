@@ -1,15 +1,22 @@
+import { useState } from "react";
 import type { Journey } from "@/hooks/useJourneys";
-import { PURCHASING_OPERATORS, type PurchasingOperator } from "@/lib/claimProfileValidation";
+import {
+  PURCHASING_OPERATORS,
+  purchasingOperatorLabel,
+  resolveOperatorFromJourney,
+  type PurchasingOperator,
+} from "@/lib/claimProfileValidation";
 import { operatorLabel } from "./Board";
 import { Scrim, ModalHead } from "./primitives";
 
 /**
- * First step of every claim: let the user pick WHICH operator's site/flow to file
- * through, rather than silently inferring it from the saved profile (which was
- * routing every claim to the user's stored default ticket operator — wrong whenever
- * the journey was actually a different operator). Shown for every real journey, for
- * every operator including Skånetrafiken — the parent then dispatches to the right
- * per-operator modal once the user has chosen.
+ * First step of a claim: pick WHICH operator's flow to file through. We auto-detect the
+ * operator FROM THE JOURNEY (Trafikverket information_owner / train_owner) and, when we can,
+ * present it as a single one-tap confirm ("Ansök hos SJ") instead of an 18-item list — the
+ * user no longer has to choose, only confirm. A "byt operatör" affordance reveals the full
+ * list for the rare mislabel / when we can't detect (§8: keep a human confirmation before
+ * filing a real claim rather than fully-silent auto-routing). Öresundståg resolves here too;
+ * the parent then origin-routes it to the right länstrafikbolag.
  */
 export function OperatorChoiceModal({
   journey,
@@ -20,7 +27,9 @@ export function OperatorChoiceModal({
   onChoose: (operator: PurchasingOperator) => void;
   onClose: () => void;
 }) {
-  const hint = operatorLabel(journey);
+  const detected = resolveOperatorFromJourney(journey);
+  // When detected, start collapsed (one-tap confirm); when not, show the list immediately.
+  const [showAll, setShowAll] = useState(!detected);
 
   return (
     <Scrim onClose={onClose}>
@@ -30,20 +39,40 @@ export function OperatorChoiceModal({
           <div className="step">
             <div className="summary">
               <div className="summary__row"><span>Resa</span><b>{journey.origin_stop_name} → {journey.destination_stop_name}</b></div>
-              <div className="summary__row"><span>Operatör (resa)</span><b>{hint}</b></div>
+              <div className="summary__row"><span>Operatör (resa)</span><b>{operatorLabel(journey)}</b></div>
             </div>
-            <p className="lead">Vilken operatör vill du ansöka hos? Vi tar dig till rätt formulär eller flöde.</p>
-            <div className="operator-pick">
-              {PURCHASING_OPERATORS.map((o) => (
-                <button
-                  key={o.value}
-                  className="btn btn--ghost btn--block"
-                  onClick={() => onChoose(o.value)}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
+
+            {detected && !showAll ? (
+              <>
+                <p className="lead">
+                  Vi känner igen den här resan som <b>{purchasingOperatorLabel(detected)}</b> och
+                  tar dig direkt till rätt flöde.
+                </p>
+                <div className="operator-pick">
+                  <button className="btn btn--primary btn--block" onClick={() => onChoose(detected)}>
+                    Ansök hos {purchasingOperatorLabel(detected)}
+                  </button>
+                  <button className="btn btn--ghost btn--block" onClick={() => setShowAll(true)}>
+                    Det stämmer inte – välj annan operatör
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="lead">Vilken operatör vill du ansöka hos? Vi tar dig till rätt formulär eller flöde.</p>
+                <div className="operator-pick">
+                  {PURCHASING_OPERATORS.map((o) => (
+                    <button
+                      key={o.value}
+                      className={`btn btn--block ${o.value === detected ? "btn--primary" : "btn--ghost"}`}
+                      onClick={() => onChoose(o.value)}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
         <div className="modal__foot">
