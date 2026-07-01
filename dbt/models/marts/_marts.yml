@@ -64,9 +64,23 @@ models:
               Negative = early. NULL when the destination event is unrealised. Drives
               is_claimable against the authority's min_delay_seconds.
         - name: origin_stop_id
-          data_tests: [not_null]
+          description: Text station id; must resolve to a station carried in dim_active_stations.
+          data_tests:
+            - not_null
+            # Every journey endpoint must be a known active station. Guards the
+            # crosswalk chain end-to-end: a station that produced a journey but
+            # vanished from dim_active_stations (naming/derivation drift) fails here.
+            - relationships:
+                arguments:
+                  to: ref('dim_active_stations')
+                  field: stop__id
         - name: destination_stop_id
-          data_tests: [not_null]
+          data_tests:
+            - not_null
+            - relationships:
+                arguments:
+                  to: ref('dim_active_stations')
+                  field: stop__id
     data_tests:
         - dbt_utils.unique_combination_of_columns:
             arguments:
