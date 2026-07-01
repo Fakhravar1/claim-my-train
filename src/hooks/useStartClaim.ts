@@ -148,3 +148,35 @@ export function useStartClaim() {
 
   return { startClaim, pending };
 }
+
+/**
+ * Records that the user says they SUBMITTED a claim on the operator's OWN form
+ * (external link-out / iOS Shortcut paths, where Qvitta never files). Inserts a
+ * claims row with status 'filed_externally' — never picked up by the worker (it
+ * only polls pending/*_authorized) — so the journey stops being re-suggested
+ * (digest + MyDelays dedupe on journey_key) and appears in "Mina ansökningar".
+ * A duplicate (23505) counts as ok: the journey is already tracked.
+ */
+export function useMarkFiledExternally() {
+  const [pending, setPending] = useState(false);
+
+  async function markFiledExternally(journey: Journey, operator: string): Promise<Result> {
+    setPending(true);
+    try {
+      const { data: userResp } = await supabase.auth.getUser();
+      if (!userResp.user) return { ok: false, error: "Not signed in" };
+
+      const payload = {
+        ...buildClaimPayload(journey, userResp.user.id, null, operator),
+        status: "filed_externally",
+      };
+      const { error } = await supabase.from("claims").insert(payload);
+      if (error && error.code !== "23505") return { ok: false, error: error.message };
+      return { ok: true };
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return { markFiledExternally, pending };
+}

@@ -189,6 +189,29 @@ export const resolveOperatorFromJourney = (
   (journey.train_owner && TRAIN_OWNER_TO_OPERATOR[journey.train_owner.trim()]) ||
   null;
 
+// Which profile fields an operator's LIVE filing path actually needs beyond the
+// always-required basics (name, e-post, mobil). Personnummer, address and the drawn
+// signature were historically required for everyone because the Skånetrafiken paper
+// PDF needed them — that path is ON ICE, and no live path needs a personnummer or a
+// signature, so requiring them at profile save is pure onboarding friction (an SJ
+// user files with just a booking + email). Kept as a map so reviving the PDF path
+// (or adding an operator that posts an address) re-tightens in ONE place.
+export type ProfileFieldRequirement = "personnummer" | "address" | "signature";
+export const profileFieldRequirements = (
+  operator: string | null | undefined
+): readonly ProfileFieldRequirement[] => {
+  switch (operator) {
+    // Vy's Azure reimbursement form posts the street address (submit_vy fills it
+    // from the profile), so a Vy filing needs the address saved.
+    case "vy":
+      return ["address"];
+    // If the Skånetrafiken PDF path is ever revived:
+    // case "skanetrafiken": return ["personnummer", "address", "signature"];
+    default:
+      return [];
+  }
+};
+
 export type ClaimProfileInput = {
   firstName: string;
   lastName: string;
@@ -331,9 +354,13 @@ export const validateAccountNumber = (raw: string): string | null => {
 
 export const validateClaimProfile = (
   input: ClaimProfileInput,
-  opts: { skipTicket?: boolean } = {}
+  opts: { skipTicket?: boolean; operator?: string | null } = {}
 ): ClaimProfileErrors => {
   const errors: ClaimProfileErrors = {};
+  // Fields beyond name/email/mobile are only REQUIRED when the operator's filing
+  // path needs them (profileFieldRequirements). A non-empty value is still
+  // format-validated regardless, so junk never gets saved.
+  const required = profileFieldRequirements(opts.operator);
 
   const firstName = validateRequiredText(input.firstName, "Förnamn");
   if (firstName) errors.firstName = firstName;
@@ -347,17 +374,24 @@ export const validateClaimProfile = (
   const mobile = validateMobile(input.claimMobile);
   if (mobile) errors.claimMobile = mobile;
 
-  const pnr = validatePersonnummer(input.claimPersonnummer);
-  if (pnr) errors.claimPersonnummer = pnr;
+  if (input.claimPersonnummer.trim() || required.includes("personnummer")) {
+    const pnr = validatePersonnummer(input.claimPersonnummer);
+    if (pnr) errors.claimPersonnummer = pnr;
+  }
 
-  const street = validateRequiredText(input.streetAddress, "Gatuadress");
-  if (street) errors.streetAddress = street;
-
-  const postal = validatePostalCode(input.postalCode);
-  if (postal) errors.postalCode = postal;
-
-  const city = validateRequiredText(input.city, "Ort");
-  if (city) errors.city = city;
+  const needsAddress = required.includes("address");
+  if (input.streetAddress.trim() || needsAddress) {
+    const street = validateRequiredText(input.streetAddress, "Gatuadress");
+    if (street) errors.streetAddress = street;
+  }
+  if (input.postalCode.trim() || needsAddress) {
+    const postal = validatePostalCode(input.postalCode);
+    if (postal) errors.postalCode = postal;
+  }
+  if (input.city.trim() || needsAddress) {
+    const city = validateRequiredText(input.city, "Ort");
+    if (city) errors.city = city;
+  }
 
   // Ticket-ID, payout method and purchasing operator are no longer collected on the
   // Settings page — they're gathered in the claim pop-up at filing time. Settings passes

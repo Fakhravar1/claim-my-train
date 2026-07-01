@@ -29,6 +29,128 @@ const isIOS = () =>
   (/iP(hone|ad|od)/.test(navigator.userAgent) ||
     (/Macintosh/.test(navigator.userAgent) && "ontouchend" in document));
 
+/**
+ * Looping animated walkthrough of the Shortcut flow — a CSS-keyframe "screen
+ * recording" (4 scenes × 4 s) instead of a GIF: crisp at any size, ~0 bytes of
+ * assets, and editable in code when the flow changes. Class names are qvdemo-
+ * prefixed so nothing collides with daylight.css inside .cmt-daylight.
+ */
+function ShortcutDemo() {
+  const scenes = [
+    {
+      caption: "1. Öppna en försening på qvitta.nu och tryck ”Öppna via Qvitta”",
+      body: (
+        <>
+          <div className="qvdemo__row"><span className="qvdemo__dot" />Malmö C → Stockholm C</div>
+          <div className="qvdemo__tag">+42 min · Berättigad</div>
+          <div className="qvdemo__btn qvdemo__btn--pulse">Öppna SL via Qvitta</div>
+        </>
+      ),
+    },
+    {
+      caption: "2. Operatörens formulär öppnas — logga in med BankID",
+      body: (
+        <>
+          <div className="qvdemo__bar" />
+          <div className="qvdemo__bankid">BankID</div>
+          <div className="qvdemo__line" style={{ width: "70%" }} />
+          <div className="qvdemo__line" style={{ width: "50%" }} />
+        </>
+      ),
+    },
+    {
+      caption: "3. Öppna Dela-menyn i Safari och kör Qvitta igen",
+      body: (
+        <>
+          <div className="qvdemo__sheet">
+            <div className="qvdemo__sheetrow">Kopiera länk</div>
+            <div className="qvdemo__sheetrow qvdemo__sheetrow--hl">Qvitta</div>
+            <div className="qvdemo__sheetrow">Lägg till bokmärke</div>
+          </div>
+        </>
+      ),
+    },
+    {
+      caption: "4. Fälten fylls i — granska och skicka in själv",
+      body: (
+        <>
+          <div className="qvdemo__field qvdemo__field--fill">Malmö C</div>
+          <div className="qvdemo__field qvdemo__field--fill" style={{ animationDelay: "0.4s" }}>Stockholm C</div>
+          <div className="qvdemo__field qvdemo__field--fill" style={{ animationDelay: "0.8s" }}>2026-07-01 · 07:42</div>
+          <div className="qvdemo__toast">Qvitta fyllde i 3 fält ✓</div>
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <div className="qvdemo" aria-hidden="true">
+      <style>{`
+        .qvdemo { display:flex; flex-direction:column; align-items:center; gap:.75rem; margin:.5rem 0 1rem; }
+        .qvdemo__phone { position:relative; width:230px; height:300px; border:3px solid var(--ink-2, #333);
+          border-radius:26px; background:#fff; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.12); }
+        .qvdemo__notch { position:absolute; top:8px; left:50%; transform:translateX(-50%);
+          width:70px; height:8px; border-radius:6px; background:var(--ink-2, #333); opacity:.25; z-index:2; }
+        .qvdemo__scene { position:absolute; inset:0; padding:34px 18px 16px; display:flex; flex-direction:column;
+          gap:10px; opacity:0; animation:qvdemoScene 16s infinite; }
+        .qvdemo__scene:nth-child(2) { animation-delay:0s; }
+        .qvdemo__scene:nth-child(3) { animation-delay:4s; }
+        .qvdemo__scene:nth-child(4) { animation-delay:8s; }
+        .qvdemo__scene:nth-child(5) { animation-delay:12s; }
+        @keyframes qvdemoScene {
+          0% { opacity:0; } 2% { opacity:1; } 23% { opacity:1; } 25% { opacity:0; } 100% { opacity:0; }
+        }
+        .qvdemo__row { font:600 13px/1.3 var(--font-body, system-ui); color:#111; display:flex; align-items:center; gap:6px; }
+        .qvdemo__dot { width:8px; height:8px; border-radius:50%; background:#E4572E; flex:none; }
+        .qvdemo__tag { align-self:flex-start; font:600 11px/1 var(--font-mono, monospace); color:#8a4f00;
+          background:#FFF3E0; border:1px solid #F0C27B; border-radius:999px; padding:5px 9px; }
+        .qvdemo__btn { margin-top:auto; text-align:center; font:600 13px/1 var(--font-body, system-ui);
+          color:#fff; background:#0E8C7E; border-radius:10px; padding:11px 10px; }
+        .qvdemo__btn--pulse { animation:qvdemoPulse 1.2s ease-in-out infinite; }
+        @keyframes qvdemoPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.05); } }
+        .qvdemo__bar { height:26px; border-radius:8px; background:#eef1f0; }
+        .qvdemo__bankid { margin:auto; font:700 15px/1 var(--font-body, system-ui); color:#fff; background:#193E4F;
+          border-radius:12px; padding:14px 26px; }
+        .qvdemo__line { height:10px; border-radius:6px; background:#eef1f0; }
+        .qvdemo__sheet { margin-top:auto; border:1px solid #e3e7e5; border-radius:14px 14px 0 0; overflow:hidden;
+          box-shadow:0 -6px 18px rgba(0,0,0,.08); }
+        .qvdemo__sheetrow { padding:11px 14px; font:500 13px/1 var(--font-body, system-ui); color:#333;
+          border-bottom:1px solid #eef1f0; background:#fff; }
+        .qvdemo__sheetrow--hl { font-weight:700; color:#0E8C7E; animation:qvdemoHl 1.4s ease-in-out infinite; }
+        @keyframes qvdemoHl { 0%,100% { background:#fff; } 50% { background:#E2F7F0; } }
+        .qvdemo__field { border:1px solid #d9e0dd; border-radius:8px; padding:9px 10px;
+          font:500 12px/1 var(--font-body, system-ui); color:#111; opacity:.25; animation:qvdemoFill .5s forwards; }
+        .qvdemo__field--fill { animation-delay:0s; }
+        @keyframes qvdemoFill { to { opacity:1; border-color:#0E8C7E; background:#F2FBF8; } }
+        .qvdemo__toast { margin-top:auto; text-align:center; font:600 12px/1 var(--font-body, system-ui);
+          color:#fff; background:#0E8C7E; border-radius:8px; padding:9px 8px; }
+        .qvdemo__caption { position:relative; width:100%; max-width:320px; height:2.6em; }
+        .qvdemo__caption span { position:absolute; inset:0; text-align:center; font-size:.85rem; color:var(--ink-2, #555);
+          opacity:0; animation:qvdemoScene 16s infinite; }
+        .qvdemo__caption span:nth-child(1) { animation-delay:0s; }
+        .qvdemo__caption span:nth-child(2) { animation-delay:4s; }
+        .qvdemo__caption span:nth-child(3) { animation-delay:8s; }
+        .qvdemo__caption span:nth-child(4) { animation-delay:12s; }
+        @media (prefers-reduced-motion: reduce) {
+          .qvdemo__scene, .qvdemo__caption span { animation-duration: 32s; }
+          .qvdemo__btn--pulse, .qvdemo__sheetrow--hl { animation: none; }
+        }
+      `}</style>
+      <div className="qvdemo__phone">
+        <div className="qvdemo__notch" />
+        {scenes.map((s, i) => (
+          <div className="qvdemo__scene" key={i}>{s.body}</div>
+        ))}
+      </div>
+      <div className="qvdemo__caption">
+        {scenes.map((s, i) => (
+          <span key={i}>{s.caption}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const card: React.CSSProperties = { marginBottom: 16 };
 const stepNo: React.CSSProperties = {
   fontFamily: "var(--font-mono)", fontSize: ".8rem", fontWeight: 600,
@@ -72,8 +194,10 @@ export default function ShortcutGuide() {
           Vissa operatörer (SL, Skånetrafiken, Västtrafik) kräver BankID på sina egna formulär — då
           kan vi inte fylla i åt dig på servern. Istället gör en liten iPhone-genväg jobbet: den tar
           med din resa till formuläret och fyller i fälten medan du själv loggar in och skickar in.
-          Du installerar den <b>en gång</b>.
+          Du installerar den <b>en gång</b>. Så här ser flödet ut:
         </p>
+
+        <ShortcutDemo />
 
         {!onIOS && (
           <div className="board" style={{ ...card, borderColor: "var(--accent-deep)" }}>

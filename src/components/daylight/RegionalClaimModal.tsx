@@ -1,4 +1,7 @@
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
+import { useMarkFiledExternally } from "@/hooks/useStartClaim";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
 import { operatorLabel } from "./Board";
@@ -35,6 +38,25 @@ export function RegionalClaimModal({
 }) {
   const [selected, setSelected] = useState<RegionAuthorityKey>(derivedKey);
   const auth = REGION_AUTHORITIES[selected];
+
+  // Same external-filing tracking as ShortcutClaimModal: after the link-out, let
+  // the user confirm they submitted → filed_externally claims row (stops the
+  // digest/MyDelays from re-suggesting; visible in "Mina ansökningar").
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { markFiledExternally, pending: marking } = useMarkFiledExternally();
+  const [opened, setOpened] = useState(false);
+  const [tracked, setTracked] = useState<"yes" | "error" | null>(null);
+
+  async function confirmFiled() {
+    const res = await markFiledExternally(journey, selected);
+    if (res.ok) {
+      setTracked("yes");
+      void queryClient.invalidateQueries({ queryKey: ["my-claims"] });
+    } else {
+      setTracked("error");
+    }
+  }
 
   const meta = useMemo(
     () => statusMeta(journey.destination_delay_minutes, Boolean(journey.canceled), journey.route_distance_km),
@@ -77,14 +99,37 @@ export function RegionalClaimModal({
             ) : (
               <p className="muted" style={{ marginTop: 4 }}>
                 {auth.label} har ett eget formulär. Vi öppnar det åt dig i en ny flik — fyll i
-                din boknings-/biljettinformation där. (Vi sparar ingen ansökan i Qvitta för
-                {" "}{auth.label}.)
+                din boknings-/biljettinformation där. Säg till efteråt om du skickade in, så
+                bockar vi av resan.
               </p>
+            )}
+
+            {user && opened && (
+              tracked === "yes" ? (
+                <div className="verdict verdict--eligible">
+                  <b>Noterat!</b> Resan finns nu under <b>Mina ansökningar</b> i inställningarna,
+                  och vi föreslår den inte igen.
+                </div>
+              ) : (
+                <div className="verdict verdict--near">
+                  <p style={{ margin: "0 0 .5rem" }}>
+                    <b>Skickade du in ansökan hos {auth.label}?</b>
+                  </p>
+                  <button className="btn btn--accent" disabled={marking} onClick={() => void confirmFiled()}>
+                    {marking ? "Sparar…" : "Ja, jag har skickat in"}
+                  </button>
+                  {tracked === "error" && (
+                    <p className="muted" style={{ margin: ".5rem 0 0" }}>
+                      Det gick inte att spara just nu — du kan stänga rutan ändå.
+                    </p>
+                  )}
+                </div>
+              )
             )}
           </div>
         </div>
         <div className="modal__foot">
-          <button className="btn btn--ghost" onClick={onClose}>Avbryt</button>
+          <button className="btn btn--ghost" onClick={onClose}>{tracked === "yes" ? "Stäng" : "Avbryt"}</button>
           {auth.inApp ? (
             <button className="btn btn--accent" onClick={onUseInApp}>Ansök i appen</button>
           ) : (
@@ -93,7 +138,7 @@ export function RegionalClaimModal({
               href={auth.externalClaimUrl ?? "#"}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => onClose()}
+              onClick={() => setOpened(true)}
             >
               Öppna {auth.label}s formulär
             </a>

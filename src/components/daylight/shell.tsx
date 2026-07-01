@@ -169,9 +169,10 @@ export function Footer(): ReactNode {
         <span>© 2026 Qvitta</span>
         <div className="footer__links">
           <CoverageButton className="linklike footer__cov" />
-          <a href="#">Integritet</a>
+          <Link to="/integritet">Integritet</Link>
+          <Link to="/faq">Vanliga frågor</Link>
           <Link to="/genvag">Installera genvägen</Link>
-          <a href="#">Kontakt</a>
+          <a href="mailto:kontakt@qvitta.nu">Kontakt</a>
         </div>
       </div>
     </footer>

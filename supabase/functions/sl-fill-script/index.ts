@@ -18,7 +18,7 @@
 // we know; /biljett (ticket app-id / card number — per-trip data we don't have)
 // and /personuppgifter (BankID pre-fills it) are left to the user.
 
-const VERSION = "sl-fill-1 (2026-06-24)";
+const VERSION = "sl-fill-2 (2026-07-01, payload-version gate)";
 
 // The injected script deliberately uses NO template literals / ${} so it can
 // live inside this outer template literal without escaping headaches.
@@ -27,6 +27,20 @@ const SCRIPT = `
   "use strict";
   var P = window.__QVITTA__ || {};
   var log = function (m) { try { console.log("[Qvitta] " + m); } catch (e) {} };
+
+  // Payload-contract version gate: the app stamps v:1 in the deep-link payload
+  // (ShortcutClaimModal). If a future payload bumps v, an OLD script fetched from
+  // a cached/stale deploy must fail LOUDLY instead of half-filling the form with
+  // fields that moved. Bump SUPPORTED_V in lockstep with the payload's v.
+  // (NB no backticks in comments here - we are INSIDE a template literal.)
+  var SUPPORTED_V = 1;
+  if (P.v != null && P.v !== SUPPORTED_V) {
+    try {
+      alert("Qvitta-genvagen och appen har olika versioner - oppna qvitta.nu/genvag och installera om genvagen, sa fylls formularet i korrekt.");
+    } catch (e) {}
+    log("payload v=" + P.v + " unsupported (script v=" + SUPPORTED_V + ") - aborting fill");
+    return;
+  }
 
   // React-safe value setter: go through the native setter so React's tracked
   // value updates and onChange fires (plain el.value = x does NOT).

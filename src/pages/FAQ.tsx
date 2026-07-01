@@ -42,9 +42,23 @@ const ITEMS = [
   },
   {
     q: "Vad händer med mina personuppgifter?",
-    a: "Dina uppgifter lagras säkert och används enbart för att skicka in din ersättningsansökan. Vi delar dem endast med den operatör du ansöker hos. Läs mer i vår integritetspolicy.",
+    a: "Dina uppgifter lagras säkert och används enbart för att skicka in din ersättningsansökan. Vi delar dem endast med den operatör du ansöker hos. Läs mer i vår integritetspolicy på qvitta.nu/integritet — där ser du också hur du exporterar eller raderar dina uppgifter.",
   },
 ];
+
+// schema.org FAQPage markup — makes the Q&A eligible for rich results on the
+// queries this page targets ("ersättning försenat tåg" etc.). Derived from ITEMS
+// so the markup can never drift from the visible content.
+const FAQ_JSONLD = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  inLanguage: "sv",
+  mainEntity: ITEMS.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+});
 
 export default function FAQ() {
   useDaylightStyles();
@@ -55,6 +69,7 @@ export default function FAQ() {
         <title>Vanliga frågor — Qvitta</title>
         <meta name="description" content="Vanliga frågor och svar om ersättning för försenade och inställda tåg." />
         <link rel="canonical" href="https://qvitta.nu/faq" />
+        <script type="application/ld+json">{FAQ_JSONLD}</script>
       </Helmet>
 
       <Nav signedIn={false} accountLabel="" onSignOut={() => {}} onLogin={() => {}} />

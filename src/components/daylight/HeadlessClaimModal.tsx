@@ -6,7 +6,7 @@ import { useStartClaim } from "@/hooks/useStartClaim";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
 import { operatorLabel } from "./Board";
-import { validateEmail } from "@/lib/claimProfileValidation";
+import { validateEmail, profileFieldRequirements } from "@/lib/claimProfileValidation";
 import { Scrim, ModalHead, Field } from "./primitives";
 import { CheckIcon } from "./icons";
 
@@ -50,6 +50,12 @@ export function HeadlessClaimModal({
     () => statusMeta(journey.destination_delay_minutes, Boolean(journey.canceled), journey.route_distance_km),
     [journey]
   );
+
+  // Address is optional at profile save (profileFieldRequirements), but Vy's form
+  // posts it — warn here so the worker's fill doesn't go out with blanks.
+  const addressMissing =
+    profileFieldRequirements(operator).includes("address") &&
+    !(profile?.street_address && profile?.postal_code && profile?.city);
 
   const ticketErr = touched && !ticket.trim() ? `Ange ${ticketLabel.toLowerCase()} från ${label}.` : null;
   const contactErr = touched && Boolean(validateEmail(contact)) ? "Ange en giltig e-postadress." : null;
@@ -130,6 +136,15 @@ export function HeadlessClaimModal({
                 />
               </Field>
               {contactErr && <span className="field__err">{contactErr}</span>}
+              {addressMissing && (
+                <div className="verdict verdict--near">
+                  {label}s formulär behöver din adress. Lägg till gatuadress, postnummer och ort under{" "}
+                  <button className="linklike" onClick={() => { onClose(); navigate("/settings"); }}>
+                    Inställningar
+                  </button>{" "}
+                  innan du godkänner ansökan.
+                </div>
+              )}
               {serverError && <div className="verdict verdict--near">{serverError}</div>}
             </div>
           )}

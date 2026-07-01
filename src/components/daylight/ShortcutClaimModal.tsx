@@ -1,6 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMarkFiledExternally } from "@/hooks/useStartClaim";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
 import { operatorLabel } from "./Board";
@@ -145,7 +147,26 @@ export function ShortcutClaimModal({
 }) {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
   const cfg = OPS[operator];
+
+  // After the user opens the operator's form (or the Shortcut), ask whether they
+  // actually submitted. "Ja" records a filed_externally claims row so the journey
+  // stops being re-suggested (digest/MyDelays) and shows in "Mina ansökningar".
+  // Signed-out users just get the link-out — nothing to track against.
+  const { markFiledExternally, pending: marking } = useMarkFiledExternally();
+  const [opened, setOpened] = useState(false);
+  const [tracked, setTracked] = useState<"yes" | "error" | null>(null);
+
+  async function confirmFiled() {
+    const res = await markFiledExternally(journey, operator);
+    if (res.ok) {
+      setTracked("yes");
+      void queryClient.invalidateQueries({ queryKey: ["my-claims"] });
+    } else {
+      setTracked("error");
+    }
+  }
 
   const meta = useMemo(
     () => statusMeta(journey.destination_delay_minutes, Boolean(journey.canceled), journey.route_distance_km),
@@ -237,14 +258,38 @@ export function ShortcutClaimModal({
                 fyller du i resan ovan manuellt.
               </p>
             )}
+
+            {user && opened && (
+              tracked === "yes" ? (
+                <div className="verdict verdict--eligible">
+                  <b>Noterat!</b> Resan finns nu under <b>Mina ansökningar</b> i inställningarna,
+                  och vi föreslår den inte igen.
+                </div>
+              ) : (
+                <div className="verdict verdict--near">
+                  <p style={{ margin: "0 0 .5rem" }}>
+                    <b>Skickade du in ansökan hos {cfg.label}?</b> Säg till så bockar vi av resan —
+                    då tjatar vi inte om den igen och du kan följa den under Mina ansökningar.
+                  </p>
+                  <button className="btn btn--accent" disabled={marking} onClick={() => void confirmFiled()}>
+                    {marking ? "Sparar…" : "Ja, jag har skickat in"}
+                  </button>
+                  {tracked === "error" && (
+                    <p className="muted" style={{ margin: ".5rem 0 0" }}>
+                      Det gick inte att spara just nu — du kan stänga rutan ändå.
+                    </p>
+                  )}
+                </div>
+              )
+            )}
           </div>
         </div>
         <div className="modal__foot">
-          <button className="btn btn--ghost" onClick={onClose}>Avbryt</button>
+          <button className="btn btn--ghost" onClick={onClose}>{tracked === "yes" ? "Stäng" : "Avbryt"}</button>
           {ios ? (
-            <a className="btn btn--accent" href={deepLink}>Öppna {cfg.label} via Qvitta</a>
+            <a className="btn btn--accent" href={deepLink} onClick={() => setOpened(true)}>Öppna {cfg.label} via Qvitta</a>
           ) : (
-            <a className="btn btn--accent" href={cfg.formUrl} target="_blank" rel="noreferrer">Öppna {cfg.label}s formulär</a>
+            <a className="btn btn--accent" href={cfg.formUrl} target="_blank" rel="noreferrer" onClick={() => setOpened(true)}>Öppna {cfg.label}s formulär</a>
           )}
         </div>
       </div>

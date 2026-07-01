@@ -72,6 +72,9 @@ const CLAIM_STATUS_META: Record<string, { label: string; className: string }> = 
   awaiting_vy_authorization: { label: "Granska & skicka", className: "border-amber-300 bg-amber-50 text-amber-900" },
   submitted: { label: "Inskickad", className: "border-sky-300 bg-sky-50 text-sky-900" },
   sj_already_claimed: { label: "Redan ansökt hos SJ", className: "border-sky-300 bg-sky-50 text-sky-900" },
+  // The user confirmed they submitted on the operator's OWN form (external
+  // link-out / iOS Shortcut) — Qvitta only tracks it, nothing was filed by us.
+  filed_externally: { label: "Inskickad hos operatören", className: "border-sky-300 bg-sky-50 text-sky-900" },
   error: { label: "Fel", className: "border-destructive/40 bg-destructive/10 text-destructive" },
 };
 
@@ -311,6 +314,14 @@ const Settings = () => {
   const [errors, setErrors] = useState<ClaimProfileErrors>({});
   const [activeTab, setActiveTab] = useState("personal");
 
+  // Konto section: GDPR data export + permanent account deletion, plus the
+  // e-mail verification nudge (only bites when "Confirm email" is enabled in
+  // the Supabase Auth dashboard — Google-OAuth users are always confirmed).
+  const [exporting, setExporting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sent" | "error">("idle");
+
   // Signature: stored once in the private `signatures` bucket; profiles.signature_path
   // points at it. We preview the saved one (signed URL) and let the user draw a
   // replacement. A fresh drawing overrides the saved one on Save.
@@ -443,12 +454,12 @@ const Settings = () => {
     }, { skipTicket: true });
     setErrors(validationErrors);
 
-    // Signature lives outside validateClaimProfile (it's a canvas, not a text
-    // field). The form requires one, so block save without a saved or new signature.
-    const signatureMissing = !hasSignatureOnFile;
-    setSigError(signatureMissing ? "En signatur krävs för ansökningsformuläret." : null);
+    // Signature is OPTIONAL at save — no live filing path needs one (the paper-PDF
+    // path that did is on ice; see profileFieldRequirements). A drawn one still
+    // uploads and is kept for operators that may need it later.
+    setSigError(null);
 
-    if (Object.keys(validationErrors).length > 0 || signatureMissing) {
+    if (Object.keys(validationErrors).length > 0) {
       // All remaining validated fields (incl. signature) live on the personal tab.
       setActiveTab("personal");
       toast({
@@ -539,6 +550,73 @@ const Settings = () => {
     }
   };
 
+  const emailUnverified = !user.email_confirmed_at;
+
+  const resendVerification = async () => {
+    if (!user.email) return;
+    const { error } = await supabase.auth.resend({ type: "signup", email: user.email });
+    setResendState(error ? "error" : "sent");
+  };
+
+  // GDPR data export: everything the user's RLS lets them read about themselves,
+  // downloaded as one JSON file. Signature/claim files are excluded (binary,
+  // private buckets) — the JSON notes where they live.
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const [profileRes, claimsRes, routesRes, digestRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+        supabase.from("claims").select("*").order("created_at", { ascending: false }),
+        supabase.from("commute_routes").select("*"),
+        supabase.from("digest_log").select("*"),
+      ]);
+      const payload = {
+        exported_at: new Date().toISOString(),
+        account: { id: user.id, email: user.email, created_at: user.created_at },
+        profile: profileRes.data ?? null,
+        claims: claimsRes.data ?? [],
+        commute_routes: routesRes.data ?? [],
+        digest_log: digestRes.data ?? [],
+        note: "Din ritade signatur (om du sparat en) lagras som en bildfil och ingår inte i exporten.",
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `qvitta-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast({
+        title: "Exporten misslyckades",
+        description: "Försök igen om en stund.",
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Permanent deletion via the delete-account edge function (it verifies the JWT
+  // and deletes ONLY the calling user: storage files + rows + the auth account).
+  const deleteAccount = async () => {
+    if (deleteConfirm.trim().toUpperCase() !== "RADERA") return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-account", { method: "POST" });
+      if (error || !data?.ok) throw error ?? new Error("delete_failed");
+      await supabase.auth.signOut();
+      // The !user guard redirects to "/" once the session clears.
+    } catch {
+      toast({
+        title: "Raderingen misslyckades",
+        description: "Försök igen, eller mejla kontakt@qvitta.nu så hjälper vi dig.",
+        variant: "destructive",
+      });
+      setDeleting(false);
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#F2F5F3" }}>
       <Helmet>
@@ -573,6 +651,23 @@ const Settings = () => {
           </p>
         </div>
 
+        {emailUnverified && (
+          <div className="mb-4 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <p className="text-sm font-medium text-amber-900">Bekräfta din e-postadress</p>
+            <p className="text-xs text-amber-900/80">
+              Ansökningar innehåller person- och utbetalningsuppgifter, så vi vill veta att{" "}
+              <b>{user.email}</b> verkligen är din. Klicka på länken i bekräftelsemejlet.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => void resendVerification()}>
+                Skicka bekräftelsemejlet igen
+              </Button>
+              {resendState === "sent" && <span className="text-xs text-amber-900">Skickat — kolla inkorgen.</span>}
+              {resendState === "error" && <span className="text-xs text-destructive">Kunde inte skicka just nu.</span>}
+            </div>
+          </div>
+        )}
+
         <Card className="p-5">
           <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -596,10 +691,11 @@ const Settings = () => {
                     <DialogHeader>
                       <DialogTitle>Varför dessa uppgifter spelar roll</DialogTitle>
                       <DialogDescription className="text-left">
-                        Dina personuppgifter, adress, personnummer och biljett-ID används för att
-                        fylla i din ersättningsansökan hos operatören. Om något obligatoriskt fält
-                        saknas eller är fel formaterat kan ansökan nekas. Fält markerade med{" "}
-                        <span className="font-semibold text-destructive">*</span> är obligatoriska.
+                        Dina uppgifter används för att fylla i din ersättningsansökan hos
+                        operatören. Namn, e-post och mobilnummer räcker för de flesta operatörer
+                        (fält markerade med <span className="font-semibold text-destructive">*</span>).
+                        Adress, personnummer och signatur är valfria — de behövs bara för vissa
+                        operatörers formulär, och vi säger till när en ansökan kräver dem.
                       </DialogDescription>
                     </DialogHeader>
                   </DialogContent>
@@ -678,9 +774,10 @@ const Settings = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="claim-personnummer">
-                    Personnummer <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="claim-personnummer">Personnummer</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Valfritt — behövs bara för operatörer vars formulär kräver det.
+                  </p>
                   <Input
                     id="claim-personnummer"
                     value={claimPersonnummer}
@@ -694,9 +791,10 @@ const Settings = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="street-address">
-                    Gatuadress <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="street-address">Gatuadress</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Adressen är valfri — den behövs t.ex. för Vy:s formulär.
+                  </p>
                   <Input
                     id="street-address"
                     value={streetAddress}
@@ -712,9 +810,7 @@ const Settings = () => {
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="postal-code">
-                      Postnummer <span className="text-destructive">*</span>
-                    </Label>
+                    <Label htmlFor="postal-code">Postnummer</Label>
                     <Input
                       id="postal-code"
                       value={postalCode}
@@ -728,9 +824,7 @@ const Settings = () => {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="city">
-                      Ort <span className="text-destructive">*</span>
-                    </Label>
+                    <Label htmlFor="city">Ort</Label>
                     <Input
                       id="city"
                       value={city}
@@ -745,12 +839,11 @@ const Settings = () => {
 
                 <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
                   <div>
-                    <p className="text-sm font-semibold">
-                      Signatur <span className="text-destructive">*</span>
-                    </p>
+                    <p className="text-sm font-semibold">Signatur</p>
                     <p className="text-xs text-muted-foreground">
-                      Ritas en gång och återanvänds. Vissa operatörers ansökningsformulär kräver en
-                      underskrift; vi lägger till den först när du bekräftar och skickar in en ansökan.
+                      Valfri. Ritas en gång och återanvänds. Vissa operatörers pappersblanketter
+                      kräver en underskrift; vi lägger till den först när du bekräftar och skickar
+                      in en sådan ansökan.
                     </p>
                   </div>
 
@@ -1416,6 +1509,53 @@ const Settings = () => {
               </Link>
             </div>
           </form>
+        </Card>
+
+        {/* Konto: GDPR tools — export everything, or delete the account permanently. */}
+        <Card className="mt-6 space-y-4 p-5">
+          <div>
+            <p className="text-sm font-semibold">Ditt konto och dina uppgifter</p>
+            <p className="text-xs text-muted-foreground">
+              Du äger dina uppgifter. Exportera allt vi har om dig, eller radera kontot helt —
+              läs mer i vår <Link to="/integritet" className="underline">integritetspolicy</Link>.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" disabled={exporting} onClick={() => void exportData()}>
+              {exporting ? "Exporterar…" : "Exportera mina uppgifter (JSON)"}
+            </Button>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+            <p className="text-sm font-medium text-destructive">Radera kontot permanent</p>
+            <p className="text-xs text-muted-foreground">
+              Tar omedelbart bort din profil, dina ansökningar, bevakningar och sparade filer
+              (inklusive signatur). Detta går inte att ångra. Redan inskickade ansökningar hos
+              operatörerna påverkas inte — de hanterar dem vidare utan oss.
+            </p>
+            <Label htmlFor="delete-confirm" className="text-xs">
+              Skriv <b>RADERA</b> för att bekräfta
+            </Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                id="delete-confirm"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder="RADERA"
+                className="max-w-[10rem]"
+                autoComplete="off"
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleting || deleteConfirm.trim().toUpperCase() !== "RADERA"}
+                onClick={() => void deleteAccount()}
+              >
+                {deleting ? "Raderar…" : "Radera mitt konto"}
+              </Button>
+            </div>
+          </div>
         </Card>
       </div>
 
