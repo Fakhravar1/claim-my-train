@@ -1,10 +1,7 @@
 {{ config(
     materialized='view',
     schema='public',
-    post_hook=[
-        "alter view {{ this }} set (security_invoker = on)",
-        "grant select on {{ this }} to anon, authenticated"
-    ]
+    post_hook="grant select on {{ this }} to anon, authenticated"
 ) }}
 
 -- v_station_claim_authority
