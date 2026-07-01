@@ -119,7 +119,14 @@ export function SjClaimModal({
       <div className="modal modal--sm">
         <ModalHead title="Ansök om ersättning · SJ" onClose={onClose} />
         <div className="modal__body">
-          {phase === "done" ? (
+          {checking || pending ? (
+            // Waiting for SJ's response: show a loading circle, then the confirmed/error
+            // message replaces it (serverError back on the form, or the "done" screen).
+            <div className="loading" role="status" aria-live="polite">
+              <div className="spinner" aria-hidden="true" />
+              <p>{checking ? "Kontrollerar din bokning hos SJ…" : "Skickar in din ansökan…"}</p>
+            </div>
+          ) : phase === "done" ? (
             <div className="step">
               <div className="verdict verdict--eligible">
                 <b>Tack! Vi förbereder din ansökan till SJ.</b> Vi fyller i SJ:s formulär med uppgifterna
@@ -174,7 +181,7 @@ export function SjClaimModal({
             </div>
           )}
         </div>
-        {phase === "form" && (
+        {phase === "form" && !checking && !pending && (
           <div className="modal__foot">
             <button className="btn btn--ghost" onClick={onClose}>Avbryt</button>
             <button className="btn btn--accent" disabled={!canSubmit} onClick={() => void submit()}>
