@@ -659,7 +659,7 @@ architecture is dictated by **where (if at all) the operator's form gates on Ban
 
 | Operator | `purchasing_operator` | Filing path | Status |
 |---|---|---|---|
-| Skånetrafiken | `skanetrafiken` | **EXTERNAL** (link to skanetrafiken.se's own form) — the in-app **PDF** flow is ON ICE / likely sunset (2026-07-01). `supported:false`. The `claim-worker` `handle_skanetrafiken` + `fill_template` code still exists but is **dormant** (no UI creates a `skanetrafiken`/`oresundstag`/NULL claim anymore, so nothing reaches it). | pdf paused |
+| Skånetrafiken | `skanetrafiken` | **iOS Shortcut** (form is FULLY BankID-gated at ENTRY — verified 2026-07-02, permanent; user does BankID first, then the share-sheet run injects `skanetrafiken-fill-script` v2 which fills steg-1/2/3 by hash). Desktop = EXTERNAL link-out. Re-enabled 2026-07-02 (`scriptUrl` + extras restored in `ShortcutClaimModal`); **still needs one on-device iPhone test behind BankID**. The in-app **PDF** flow stays ON ICE / likely sunset; `handle_skanetrafiken` + `fill_template` dormant. | shortcut re-enabled (device test pending) |
 | Öresundståg | `oresundstag` | origin-county routed (§1) but **all external now** (`supported:false`, 2026-07-01): Skåne/DK-origin → Skånetrafiken's site, other counties → that bolag's form. No claims row, no PDF. | live (external) |
 | SL | `sl` | **iOS Shortcut** (BankID at form START) | live |
 | Västtrafik | `vasttrafik` | **iOS Shortcut** (BankID at form END) | live (section-③ personnummer autofilled; trip-pick + "Så här blev det" are the user's) |
