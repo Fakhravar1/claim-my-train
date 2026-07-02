@@ -41,3 +41,4 @@ supabase/.branches/
 # SJ form-spike screenshots (may contain real journey data)
 claim-worker/spike_out/
 claim-worker/run_sj_live.py
+claim-worker/canary_out/

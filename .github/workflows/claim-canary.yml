@@ -1,0 +1,47 @@
+name: claim canary
+
+# Daily dry-run canary over the operator claim forms (claim-worker/canary.py).
+# Asserts each form's pre-BankID DOM still matches what our fill scripts /
+# headless workers expect, and POSTs results to the report-claim-canary edge
+# function (breach/recovery emails + the claim_canary_state heartbeat).
+# NEVER submits anything, never authenticates BankID (CLAUDE.md §19).
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # daily ~07:00 Stockholm; GH free-tier jitter is fine here
+  workflow_dispatch:
+
+jobs:
+  canary:
+    # Keep the Lovable companion mirror quiet (same guard as dbt-run.yml).
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        working-directory: claim-worker
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Run canary
+        working-directory: claim-worker
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CANARY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python canary.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-screenshots
+          path: claim-worker/canary_out/
+          retention-days: 14
