@@ -27,11 +27,27 @@ const OUTCOME: Record<string, { subject: string; heading: string; lead: string }
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// Service-level bearer check: exact match first; else validate BY USE via the Auth admin
+// API (the repo secret may be the new sb_secret_… format while the edge env holds the
+// legacy JWT — same privilege, different bytes; only a service-level key can list users).
+async function isServiceBearer(req: Request): Promise<boolean> {
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return false;
+  if (token === SERVICE_ROLE) return true;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=1`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: token },
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("method", { status: 405 });
-  // Backend-only: require the service-role bearer.
-  if ((req.headers.get("Authorization") ?? "") !== `Bearer ${SERVICE_ROLE}`)
-    return new Response("forbidden", { status: 403 });
+  // Backend-only: require a service-level bearer.
+  if (!(await isServiceBearer(req))) return new Response("forbidden", { status: 403 });
 
   let claimId = "";
   try { claimId = String((await req.json()).claim_id ?? ""); } catch { /* ignore */ }
