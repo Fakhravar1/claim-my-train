@@ -17,13 +17,25 @@
 //           uses the BankID-prefilled personnummer (NO account entry — unlike SL)
 //   steg-3: email + mobil + (user: tick attestations + Skicka in)
 
-const VERSION = "skane-fill-1 (2026-06-24)";
+const VERSION = "skane-fill-2 (2026-07-02, payload-version gate)";
 
 const SCRIPT = `
 (function () {
   "use strict";
   var P = window.__QVITTA__ || {};
   var log = function (m) { try { console.log("[Qvitta] " + m); } catch (e) {} };
+
+  // Payload-contract version gate (same as sl-fill-2): abort LOUDLY on a version
+  // mismatch instead of half-filling a moved form. Bump SUPPORTED_V in lockstep with
+  // the payload's v. (NB no backticks in comments here - inside a template literal.)
+  var SUPPORTED_V = 1;
+  if (P.v != null && P.v !== SUPPORTED_V) {
+    try {
+      alert("Qvitta-genvagen och appen har olika versioner - oppna qvitta.nu/genvag och installera om genvagen, sa fylls formularet i korrekt.");
+    } catch (e) {}
+    log("payload v=" + P.v + " unsupported (script v=" + SUPPORTED_V + ") - aborting fill");
+    return;
+  }
 
   function fire(el) {
     el.dispatchEvent(new Event("input", { bubbles: true }));

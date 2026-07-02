@@ -49,12 +49,21 @@ const OPS: Record<ShortcutOperator, {
       return { clearing: ok ? profile?.clearing_number ?? "" : "", account: ok ? profile?.account_number ?? "" : "" };
     },
   },
-  // Skånetrafiken: in-app PDF flow + Shortcut autofill are ON ICE — EXTERNAL only for now
-  // (no scriptUrl), so we just link out to Skånetrafiken's own claim form like the others.
+  // Skånetrafiken: the form is FULLY BankID-gated at entry (verified 2026-07-02, permanent).
+  // iOS flow: run 1 opens the form (user does BankID on #/logga-in), run 2 injects the fill
+  // script from the share sheet AFTER login — it polls the hash and fills steg-1/2/3 as the
+  // user advances. Desktop still links out. Attestations + submit stay the user's (§8).
   skanetrafiken: {
     label: "Skånetrafiken",
     formUrl: "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/",
-    extras: () => ({}),
+    scriptUrl: `${FN_BASE}/skanetrafiken-fill-script`,
+    bankNudge: true,
+    extras: (profile) => ({
+      // steg-2 swedishBank fallback + payout routing; steg-3 contact fields.
+      personnummer: profile?.claim_personnummer ?? "",
+      payoutMethod: profile?.payout_method ?? "",
+      mobile: profile?.claim_mobile ?? "",
+    }),
   },
   // Västtrafik: EXTERNAL only for now — the iOS Shortcut autofill (vasttrafik-fill-script) is
   // still under development, so we DON'T hand iOS users a half-built flow; everyone just links
