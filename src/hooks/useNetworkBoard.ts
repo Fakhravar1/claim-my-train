@@ -6,28 +6,24 @@ import type { Journey } from "@/hooks/useJourneys";
  * Date-only, network-wide read for the live board (the design's "Förseningar i
  * nätet"). Unlike useJourneys, this is NOT gated on an O-D pair.
  *
- * Rather than dumping the most-delayed N (which saturates with eligible rows on
- * a busy day), it pulls a small, representative SAMPLE across every status tier
- * — a couple cancelled, severe, eligible, near, minor and an on-time — so the
- * board shows the full spread of statuses the colour-coding is meant to convey.
- * One small query per bucket, run in parallel; each bucket over-fetches and is
- * randomly down-sampled so the mix varies between loads, then everything is
- * combined, deduped and ordered by DEPARTURE TIME — the tiers are intentionally
- * NOT grouped together, just interleaved chronologically.
+ * Reads the PRECOMPUTED sample table `public.v_network_board` (built once per
+ * `dbt build` by agg_network_board): a tiny per-(date, tier) pool. We can't sample
+ * the full fct_journeys view live — its per-day scan grew with the network (~240k
+ * journeys/day) and blew anon's 3s statement_timeout, so the board showed nothing.
+ * One index read (<100ms) fetches the whole day's pool; we shuffle each tier
+ * client-side and take a few per tier, so the visible mix still varies between
+ * loads. Rows are then interleaved by DEPARTURE TIME (tiers not clumped).
  */
-type Bucket = { apply: (q: PostgrestQuery) => PostgrestQuery; n: number };
-// Loose alias — the supabase query builder type is unwieldy to name precisely.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PostgrestQuery = any;
-
-const BUCKETS: Bucket[] = [
-  { n: 2, apply: (q) => q.eq("canceled", true) },
-  { n: 2, apply: (q) => q.not("canceled", "is", true).gte("destination_delay_minutes", 40) },
-  { n: 2, apply: (q) => q.not("canceled", "is", true).gte("destination_delay_minutes", 20).lt("destination_delay_minutes", 40) },
-  { n: 1, apply: (q) => q.not("canceled", "is", true).gte("destination_delay_minutes", 15).lt("destination_delay_minutes", 20) },
-  { n: 2, apply: (q) => q.not("canceled", "is", true).gte("destination_delay_minutes", 4).lt("destination_delay_minutes", 15) },
-  { n: 1, apply: (q) => q.not("canceled", "is", true).lt("destination_delay_minutes", 4) },
-];
+// How many rows to surface per display tier (matches src/lib/daylightStatus.ts).
+// The table holds up to 15 per tier; we shuffle and take these counts.
+const TIER_TAKE: Record<string, number> = {
+  cancelled: 2,
+  severe: 2,
+  eligible: 2,
+  near: 1,
+  minor: 2,
+  ontime: 1,
+};
 
 /**
  * Date-scoped read of every journey that TOUCHES any of the given stations
@@ -74,33 +70,32 @@ export function useNetworkBoard(date: string, enabled = true) {
     queryKey: ["network-board", date],
     enabled,
     queryFn: async () => {
-      const results = await Promise.all(
-        BUCKETS.map(async ({ apply, n }) => {
-          // Over-fetch, then randomly down-sample to `n` so the visible mix
-          // varies between loads instead of always surfacing the same rows.
-          const { data, error } = await apply(
-            (supabase as any).from("v_journeys").select("*").eq("origin_local_date", date)
-          ).limit(Math.max(n * 6, 8));
-          if (error) throw error;
-          return shuffle((data ?? []) as Journey[]).slice(0, n);
-        })
-      );
+      // One index read of the whole day's precomputed pool (all tiers, <100ms).
+      const { data, error } = await (supabase as any)
+        .from("v_network_board")
+        .select("*")
+        .eq("origin_local_date", date);
+      if (error) throw error;
+      const pool = (data ?? []) as (Journey & { tier?: string })[];
 
-      // Dedupe (a row can't match two buckets, but guard anyway), then order by
-      // departure time so the eligibility tiers are interleaved chronologically
-      // rather than clumped (cancelled-block, then severe-block, …).
-      const seen = new Set<string>();
-      const rows: Journey[] = [];
-      for (const j of results.flat()) {
-        const key = j.journey_key ?? "";
-        if (key && seen.has(key)) continue;
-        if (key) seen.add(key);
-        rows.push(j);
+      // Shuffle each tier's pool and take a few, so the visible mix varies between
+      // loads even though the pool itself only refreshes on `dbt build`.
+      const byTier = new Map<string, (Journey & { tier?: string })[]>();
+      for (const j of pool) {
+        const t = j.tier ?? "ontime";
+        (byTier.get(t) ?? byTier.set(t, []).get(t)!).push(j);
       }
-      rows.sort((a, b) =>
+      const picked: Journey[] = [];
+      for (const [tier, take] of Object.entries(TIER_TAKE)) {
+        picked.push(...shuffle(byTier.get(tier) ?? []).slice(0, take));
+      }
+
+      // Order by departure time so tiers are interleaved chronologically rather
+      // than clumped (cancelled-block, then severe-block, …).
+      picked.sort((a, b) =>
         (a.origin_scheduled ?? "").localeCompare(b.origin_scheduled ?? "")
       );
-      return rows;
+      return picked;
     },
     staleTime: 5 * 60 * 1000,
   });

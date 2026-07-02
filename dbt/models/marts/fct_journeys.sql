@@ -147,6 +147,17 @@ join arrivals as dest
     and dest.scheduled >  origin.scheduled
     and dest.scheduled <= origin.scheduled + interval '12 hours'   -- one physical run; excludes next-day recurrence
     and origin.station_id <> dest.station_id                       -- O-D legs only; drop self-loops from services that revisit a stop
+    -- Perf: bound the arrival's service_date to the origin's day (or the next, for a
+    -- cross-midnight run). service_date = (scheduled at tz 'Europe/Stockholm')::date on
+    -- BOTH legs, and dest.scheduled is always later than origin.scheduled by <= 12h, so
+    -- dest.service_date is exactly origin.service_date or +1 — NEVER earlier. This drops
+    -- ZERO journeys but lets a date-filtered read (the board's origin_local_date = X) prune
+    -- the arrival index scan to 1-2 days instead of scanning ALL retained arrivals: a single
+    -- filtered v_journeys read went 9.5s -> 0.37s (matters now the network is ~450 stations /
+    -- ~240k journeys/day, and anon has a 3s statement_timeout, so the un-pruned scan timed out
+    -- and the public board silently showed nothing).
+    and dest.service_date >= origin.service_date
+    and dest.service_date <= origin.service_date + 1
 cross join authority as auth                                        -- single-row claim FLOOR (min across dim_compensation_rules)
 left join {{ ref('dim_station_coords') }} oc on oc.stop__id = origin.station_id   -- origin coords for route_distance_km
 left join {{ ref('dim_station_coords') }} dc on dc.stop__id = dest.station_id     -- destination coords

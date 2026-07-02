@@ -1,6 +1,7 @@
 import { forwardRef, useMemo } from "react";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
+import { resolveOperatorFromJourney, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
 import { ArrowIcon, BellIcon, CloseIcon, SearchIcon } from "./icons";
 import { StationField } from "./StationField";
 
@@ -49,11 +50,17 @@ export function modeLabel(j: Pick<Journey, "transport_mode">): string {
 /**
  * Operator brand for the card — the name riders recognize (SJ / Öresundståg /
  * Skånetrafiken / Pågatåg), taken from the journey's descriptive `operator`
- * (information_owner on the TV side). Falls back to the mode ("Tåg") when the
- * feed didn't label the leg (some intermediate-station pairings have no operator).
+ * (information_owner on the TV side). When information_owner is null (notably MOST
+ * SJ trains) we fall back to the same feed-signal resolver the claim modal uses
+ * (train_owner code -> brand), so a card reads "SJ" / "Arlanda Express" instead of
+ * a bare "Tåg" — descriptive-only, never a rule key (§5/§8). Only when neither
+ * signal resolves do we fall back to the mode ("Tåg").
  */
-export function operatorLabel(j: Pick<Journey, "operator" | "transport_mode">): string {
-  return (j.operator ?? "").trim() || modeLabel(j);
+export function operatorLabel(j: Pick<Journey, "operator" | "train_owner" | "transport_mode">): string {
+  const raw = (j.operator ?? "").trim();
+  if (raw) return raw;
+  const resolved = resolveOperatorFromJourney(j);
+  return resolved ? purchasingOperatorLabel(resolved) : modeLabel(j);
 }
 
 export type StationOption = { id: string; name: string };

@@ -1,6 +1,12 @@
-{{ config(materialized='view') }}
+{{ config(materialized='table', indexes=[{'columns': ['stop__id'], 'unique': True}]) }}
 
 -- dim_station_coords
+-- Materialized as a TABLE (not a view): coords are static per station, but this is
+-- joined TWICE by fct_journeys (origin + destination) for route_distance_km, and as a
+-- view it re-scanned all ~46k raw_departures rows (sort + dedup) on every journey read
+-- — a fixed ~1.4s tax on every board/route/claim-review query that made the public board
+-- time out under anon's 3s statement_timeout. As a ~630-row table the joins are instant.
+-- Rebuilt on every `dbt build`, so new stations still appear.
 -- Unified (stop__id -> lat/lon) lookup across both feeds, so any model can resolve a
 -- station's coordinates by the conformed short stop id used in int_stop_events.
 --   * Danish stops: coords from dim_stations (REST-polled boards).

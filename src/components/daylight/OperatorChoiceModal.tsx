@@ -48,14 +48,12 @@ export function OperatorChoiceModal({
                   Vi känner igen den här resan som <b>{purchasingOperatorLabel(detected)}</b> och
                   tar dig direkt till rätt flöde.
                 </p>
-                <div className="operator-pick">
-                  <button className="btn btn--primary btn--block" onClick={() => onChoose(detected)}>
-                    Ansök hos {purchasingOperatorLabel(detected)}
-                  </button>
-                  <button className="btn btn--ghost btn--block" onClick={() => setShowAll(true)}>
-                    Det stämmer inte – välj annan operatör
-                  </button>
-                </div>
+                <button className="btn btn--primary btn--block btn--lg" onClick={() => onChoose(detected)}>
+                  Ansök hos {purchasingOperatorLabel(detected)}
+                </button>
+                <button className="linkbtn linkbtn--center" onClick={() => setShowAll(true)}>
+                  Det stämmer inte – välj annan operatör
+                </button>
               </>
             ) : (
               <>
