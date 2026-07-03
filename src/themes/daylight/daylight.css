@@ -409,8 +409,8 @@
 .cmt-daylight .brand__mark{width:34px;height:34px;background:transparent;border-radius:0;display:inline-flex;align-items:center;justify-content:center;color:var(--accent);}
 .cmt-daylight .brand__mark::after{content:none;}
 .cmt-daylight .brand__word{line-height:1;}
-.cmt-daylight .nav__cta{display:inline-flex;align-items:center;height:38px;padding:0 .95rem;border-radius:var(--btn-radius);background:var(--surface-2);color:var(--ink);font-size:.92rem;font-weight:600;transition:background .18s,color .18s;}
-.cmt-daylight .nav__cta:hover{background:var(--accent);color:var(--accent-ink);}
+.cmt-daylight .nav__cta{display:inline-flex;align-items:center;height:38px;padding:0 .95rem;border:var(--bw) solid var(--line-2);border-radius:var(--btn-radius);background:var(--surface);color:var(--ink);font-size:.92rem;font-weight:600;transition:background .18s,color .18s,border-color .18s;}
+.cmt-daylight .nav__cta:hover{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
 
 /* ───────── mobile board layout ───────── */
 @media(max-width:720px){
