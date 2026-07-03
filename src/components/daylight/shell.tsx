@@ -110,8 +110,8 @@ export function Hero({ onSearch }: { onSearch: () => void }) {
       <div className="wrap">
         <p className="eyebrow">Live · försenade tåg just nu</p>
         <h1>
-          Sent tåg? Vi hittar avgången<br />
-          och visar vad du kan ha rätt till.
+          En samlad plats för alla tågförseningar<br />
+          och ersättningsanspråk – gratis.
         </h1>
         <p className="hero__lead">
           Du vet att du var sen — men inte alltid vilket tåg det var, eller om förseningen räcker för
