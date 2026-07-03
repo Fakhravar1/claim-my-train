@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      claim_canary_state: {
+        Row: {
+          breaching: boolean
+          check_name: string
+          detail: string | null
+          last_notified_at: string | null
+          reported_at: string | null
+        }
+        Insert: {
+          breaching?: boolean
+          check_name: string
+          detail?: string | null
+          last_notified_at?: string | null
+          reported_at?: string | null
+        }
+        Update: {
+          breaching?: boolean
+          check_name?: string
+          detail?: string | null
+          last_notified_at?: string | null
+          reported_at?: string | null
+        }
+        Relationships: []
+      }
       claims: {
         Row: {
           booking_email: string | null
@@ -323,6 +347,57 @@ export type Database = {
           street_address?: string | null
           ticket_valid_until?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      push_log: {
+        Row: {
+          id: string
+          journey_key: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          journey_key: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          journey_key?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -664,6 +739,84 @@ export type Database = {
           service_number: string | null
           train_owner: string | null
           transport_mode: string | null
+        }
+        Relationships: []
+      }
+      v_network_board: {
+        Row: {
+          canceled: boolean | null
+          destination_actual: string | null
+          destination_delay_minutes: number | null
+          destination_scheduled: string | null
+          destination_source: string | null
+          destination_stop_id: string | null
+          destination_stop_name: string | null
+          is_claimable: boolean | null
+          journey_key: string | null
+          line_name: string | null
+          line_terminus: string | null
+          operator: string | null
+          origin_actual: string | null
+          origin_local_date: string | null
+          origin_scheduled: string | null
+          origin_source: string | null
+          origin_stop_id: string | null
+          origin_stop_name: string | null
+          route_distance_km: number | null
+          service_number: string | null
+          tier: string | null
+          train_owner: string | null
+          transport_mode: string | null
+        }
+        Insert: {
+          canceled?: boolean | null
+          destination_actual?: string | null
+          destination_delay_minutes?: number | null
+          destination_scheduled?: string | null
+          destination_source?: string | null
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          is_claimable?: boolean | null
+          journey_key?: string | null
+          line_name?: string | null
+          line_terminus?: string | null
+          operator?: string | null
+          origin_actual?: string | null
+          origin_local_date?: string | null
+          origin_scheduled?: string | null
+          origin_source?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          route_distance_km?: number | null
+          service_number?: string | null
+          tier?: string | null
+          train_owner?: string | null
+          transport_mode?: string | null
+        }
+        Update: {
+          canceled?: boolean | null
+          destination_actual?: string | null
+          destination_delay_minutes?: number | null
+          destination_scheduled?: string | null
+          destination_source?: string | null
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          is_claimable?: boolean | null
+          journey_key?: string | null
+          line_name?: string | null
+          line_terminus?: string | null
+          operator?: string | null
+          origin_actual?: string | null
+          origin_local_date?: string | null
+          origin_scheduled?: string | null
+          origin_source?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          route_distance_km?: number | null
+          service_number?: string | null
+          tier?: string | null
+          train_owner?: string | null
+          transport_mode?: string | null
         }
         Relationships: []
       }

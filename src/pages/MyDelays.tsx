@@ -11,6 +11,7 @@ import { buildClaimPayload } from "@/hooks/useStartClaim";
 import { useMyClaims } from "@/hooks/useMyClaims";
 import { useCommuteRoutes } from "@/hooks/useCommuteRoutes";
 import { useMyDelays } from "@/hooks/useMyDelays";
+import { useAppBadge } from "@/hooks/useAppBadge";
 import { isSupportedPurchasingOperator, purchasingOperatorLabel, purchasingOperatorClaimUrl } from "@/lib/claimProfileValidation";
 import { Nav, Footer } from "@/components/daylight/shell";
 import { SjClaimModal } from "@/components/daylight/SjClaimModal";
@@ -42,6 +43,7 @@ const d = (iso: string | null | undefined) => (iso ? fmtDate.format(new Date(iso
  */
 export default function MyDelays() {
   useDaylightStyles();
+  useAppBadge(); // keep the installed-PWA icon badge in sync with this list
 
   const { user, profile, loading: authLoading, signOut, signInWithGoogle } = useAuth();
   const navigate = useNavigate();

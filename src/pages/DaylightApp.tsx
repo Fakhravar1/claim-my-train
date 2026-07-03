@@ -21,6 +21,8 @@ import { useStationAuthorities } from "@/hooks/useStationAuthorities";
 import { EligibilityModal } from "@/components/daylight/EligibilityModal";
 import { WatchModal } from "@/components/daylight/WatchModal";
 import { usePendingClaimCompletion } from "@/hooks/usePendingClaimCompletion";
+import { InstallBanner } from "@/components/daylight/InstallBanner";
+import { useAppBadge } from "@/hooks/useAppBadge";
 
 /**
  * Merged "Daylight" app page at `/` — the design handoff's single scroll page:
@@ -31,6 +33,7 @@ import { usePendingClaimCompletion } from "@/hooks/usePendingClaimCompletion";
 export default function DaylightApp() {
   useDaylightStyles();
   usePendingClaimCompletion(); // finish a deferred claim after email verification
+  useAppBadge(); // installed-PWA icon badge = unclaimed delays on monitored routes
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, loading: authLoading, signOut } = useAuth();
@@ -298,6 +301,9 @@ export default function DaylightApp() {
       />
       <main>
         <Hero onSearch={focusSearch} />
+        <div className="wrap">
+          <InstallBanner />
+        </div>
         <Board
           ref={boardRef}
           rows={rows}

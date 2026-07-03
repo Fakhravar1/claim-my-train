@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useStations } from "@/hooks/useStations";
 import { useMyClaims, type ClaimOutcome } from "@/hooks/useMyClaims";
+import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -310,6 +311,7 @@ const Settings = () => {
   const [routes, setRoutes] = useState<CommuteRoute[]>([]);
   const [routesInit, setRoutesInit] = useState(false);
   const [digestFrequency, setDigestFrequency] = useState("off");
+  const push = usePushSubscription();
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<ClaimProfileErrors>({});
   const [activeTab, setActiveTab] = useState("personal");
@@ -1259,6 +1261,43 @@ const Settings = () => {
                     <p className="text-xs text-amber-600">
                       Lägg till minst en pendlingssträcka ovan — mejlet täcker bara dina bevakade
                       sträckor.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-border/70 bg-card/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Push-notiser</p>
+                      <p className="text-xs text-muted-foreground">
+                        Få en notis på den här enheten när en ny försening dyker upp på dina
+                        bevakade pendlingar — samma dag, i stället för kvällens mejl.
+                      </p>
+                    </div>
+                    {push.supported && (
+                      <Switch
+                        checked={Boolean(push.subscribed)}
+                        disabled={push.busy || push.subscribed === null}
+                        onCheckedChange={(on) => {
+                          if (on) void push.subscribe();
+                          else void push.unsubscribe();
+                        }}
+                        aria-label="Push-notiser"
+                      />
+                    )}
+                  </div>
+                  {!push.supported && (
+                    <p className="text-xs text-muted-foreground">
+                      Din webbläsare stöder inte push-notiser här. På iPhone: lägg först till
+                      Qvitta på hemskärmen (Dela → Lägg till på hemskärmen) och öppna appen
+                      därifrån — då kan notiser slås på.
+                    </p>
+                  )}
+                  {push.error && <p className="text-xs text-destructive">{push.error}</p>}
+                  {push.supported && push.subscribed && routes.length === 0 && (
+                    <p className="text-xs text-amber-600">
+                      Lägg till minst en pendlingssträcka ovan — notiserna täcker bara dina
+                      bevakade sträckor.
                     </p>
                   )}
                 </div>

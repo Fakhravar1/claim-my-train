@@ -572,3 +572,9 @@
   }
 }
 
+
+/* ---- Install-to-home-screen banner (PWA) ---- */
+.cmt-daylight .install-banner{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-top:.9rem;padding:.8rem 1.1rem;background:var(--surface-2);border:var(--bw) solid var(--line-2);border-radius:var(--btn-radius);}
+.cmt-daylight .install-banner__text{display:flex;flex-direction:column;gap:.15rem;font-size:.9rem;color:var(--ink-2);min-width:14rem;flex:1;}
+.cmt-daylight .install-banner__text strong{color:var(--ink);font-weight:700;}
+.cmt-daylight .install-banner__actions{display:flex;gap:.5rem;align-items:center;}
