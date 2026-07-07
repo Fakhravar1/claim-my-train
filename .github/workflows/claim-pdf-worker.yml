@@ -15,14 +15,61 @@ jobs:
     if: github.repository == 'Fakhravar1/claim-my-train'
     steps:
       - uses: actions/checkout@v4
+
+      # Cheap preflight: most runs have nothing to do, yet the old flow paid for a
+      # full Python + Chromium install every time. Query the claims table once and
+      # only install what this run actually needs.
+      #   count   > 0  -> Python + worker (PDF path needs no browser)
+      #   browser > 0  -> also install Chromium (SJ/Vy/HLT/Kalmar web-form paths)
+      # Fail-safe: if the query errors, force both nonzero so we never silently skip
+      # real claims — we'd rather pay for one wasted run than drop a filing.
+      - name: Preflight — any claims to process?
+        id: claims
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          statuses="pending,sj_authorized,hlt_authorized,kalmar_authorized,vy_authorized"
+          resp=$(curl -sS --max-time 25 \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            "${SUPABASE_URL}/rest/v1/claims?select=status,purchasing_operator&status=in.(${statuses})") || resp=""
+          if ! echo "$resp" | jq -e 'type=="array"' >/dev/null 2>&1; then
+            echo "Preflight query failed; running the full worker to be safe."
+            { echo "count=1"; echo "browser=1"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          count=$(echo "$resp" | jq 'length')
+          # Browser needed if any claim is an *_authorized review, or a pending row
+          # whose operator files via a headless web form (SJ/Vy/HLT/Kalmar). The
+          # Skanetrafiken/Oresundstag/NULL PDF path uses reportlab — no browser.
+          browser=$(echo "$resp" | jq '[.[] | select(
+              (.status | endswith("_authorized")) or
+              ((.purchasing_operator // "" | ascii_downcase) | IN("sj","vy","hallandstrafiken","kalmar"))
+            )] | length')
+          { echo "count=$count"; echo "browser=$browser"; } >> "$GITHUB_OUTPUT"
+          echo "Pending claims: $count (browser-needing: $browser)"
+
       - uses: actions/setup-python@v5
+        if: steps.claims.outputs.count != '0'
         with:
           python-version: "3.12"
-      - run: pip install -r claim-worker/requirements.txt
-      # Chromium for the SJ web-form path (submit_sj.py). Cheap relative to the daily
-      # cadence; the SJ branch only launches a browser when an SJ claim is present.
-      - run: python -m playwright install --with-deps chromium
-      - run: python claim-worker/worker.py
+          cache: pip
+          cache-dependency-path: claim-worker/requirements.txt
+
+      - name: Install Python deps
+        if: steps.claims.outputs.count != '0'
+        run: pip install -r claim-worker/requirements.txt
+
+      # Chromium only for the headless web-form paths — skipped on the common
+      # PDF-only / nothing-to-do runs, which is where the minutes were going.
+      - name: Install Chromium
+        if: steps.claims.outputs.browser != '0'
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run worker
+        if: steps.claims.outputs.count != '0'
+        run: python claim-worker/worker.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
