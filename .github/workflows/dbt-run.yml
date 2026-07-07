@@ -26,13 +26,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          # Persist pip's wheel-download cache across the ~96 scheduled runs/day
+          # so re-installing dbt each run skips the downloads. Keyed on the CI
+          # requirements file below (the version pins never change between runs).
+          cache: pip
+          cache-dependency-path: .github/requirements/dbt.txt
 
       - name: Install dbt
-        # Cap dbt-core below 2.0: dbt-postgres==1.10.0 depends on
-        # dbt-core>=1.8.0rc1 (no upper bound), and that pre-release lower bound
-        # lets pip pull the Fusion alpha (dbt-core 2.0.0a1) once it hit PyPI.
-        # Fusion has no Postgres adapter, so it fails immediately (dbt1005).
-        run: pip install "dbt-core<2.0" dbt-postgres==1.10.0
+        # Pins + rationale live in .github/requirements/dbt.txt (Fusion-alpha cap).
+        run: pip install -r .github/requirements/dbt.txt
 
       - name: Configure profile
         env:

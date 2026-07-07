@@ -1,0 +1,10 @@
+# CI-only dbt install, consumed by .github/workflows/dbt-run.yml.
+# Kept as a file (not an inline `pip install`) so setup-python's pip cache has a
+# stable path to hash — the download cache then persists across scheduled runs.
+#
+# dbt-core is capped below 2.0 on purpose: dbt-postgres==1.10.0 depends on
+# dbt-core>=1.8.0rc1 with no upper bound, and that pre-release lower bound lets
+# pip pull the Fusion alpha (dbt-core 2.0.0a1) once it hit PyPI. Fusion has no
+# Postgres adapter, so it fails immediately (dbt1005).
+dbt-core<2.0
+dbt-postgres==1.10.0
