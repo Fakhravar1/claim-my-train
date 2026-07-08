@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import { prerenderGuidePages } from "./scripts/prerenderGuides";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -49,6 +50,16 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
+    {
+      // SEO prerender: writes static HTML for /ersattning + the operator
+      // guides into dist/ after the client build (scripts/prerenderGuides.ts).
+      // Lives inside `vite build` so it runs on Lovable's pipeline too.
+      name: "prerender-guides",
+      apply: "build" as const,
+      closeBundle() {
+        prerenderGuidePages(path.resolve(__dirname, "dist"));
+      },
+    },
   ].filter(Boolean),
   resolve: {
     alias: {
