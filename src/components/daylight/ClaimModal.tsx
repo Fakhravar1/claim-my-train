@@ -20,6 +20,7 @@ import {
   type ClaimProfileErrors,
 } from "@/lib/claimProfileValidation";
 import { SignaturePad, type SignaturePadHandle } from "@/components/SignaturePad";
+import { isStandalone } from "@/hooks/useInstallPrompt";
 import { savePendingClaim, buildProfileRow, blobToDataUrl } from "@/lib/pendingClaim";
 import { Scrim, ModalHead, Field } from "./primitives";
 import { ArrowIcon, BellIcon, CheckIcon, GoogleIcon, ShieldIcon } from "./icons";
@@ -801,12 +802,19 @@ function AccountView({
   onClose: () => void;
 }) {
   const { toast } = useToast();
-  // null = the Google / e-post chooser; otherwise the inline e-post form.
-  const [emailMode, setEmailMode] = useState<null | "signin" | "signup">(null);
+  // null = the Google / e-post chooser; "signin"/"signup" = the inline
+  // password form; "otp" = the emailed one-time-code flow. The code flow is
+  // the only login that works in the INSTALLED iOS app (standalone mode):
+  // Google OAuth completes in a Safari context whose storage iOS partitions
+  // away from the home-screen app, so its session never reaches us there.
+  const [emailMode, setEmailMode] = useState<null | "signin" | "signup" | "otp">(null);
   const [acctEmail, setAcctEmail] = useState(email ?? "");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
+  const standalone = isStandalone();
 
   if (intent === "submitted") {
     return (
@@ -871,6 +879,115 @@ function AccountView({
     }
   };
 
+  // Emailed one-time code: request → type the 6-digit code. No redirect and no
+  // password, so it works in every context (incl. the installed app) and for
+  // Google-created accounts (same e-post → same konto).
+  const sendCode = async () => {
+    const emailErr = validateEmail(acctEmail);
+    if (emailErr) {
+      setInfo(emailErr);
+      return;
+    }
+    setBusy(true);
+    setInfo(null);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: acctEmail.trim(),
+        options: { shouldCreateUser: true },
+      });
+      if (error) {
+        setInfo(error.message);
+        return;
+      }
+      setCodeSent(true);
+      setInfo("Vi har mejlat en engångskod. Skriv in den här — den gäller i en timme.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    if (code.trim().length < 6) {
+      setInfo("Skriv in koden från mejlet.");
+      return;
+    }
+    setBusy(true);
+    setInfo(null);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: acctEmail.trim(),
+        token: code.trim(),
+        type: "email",
+      });
+      if (error) {
+        setInfo(error.message === "Token has expired or is invalid" ? "Fel eller utgången kod — försök igen." : error.message);
+        return;
+      }
+      // AuthContext picks up the session and the parent closes the modal.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (emailMode === "otp") {
+    return (
+      <div className="step acct">
+        <div className="acct__badge"><BellIcon width={24} height={24} /></div>
+        <h3 className="acct__h">Logga in med engångskod</h3>
+        <p className="acct__p">
+          {codeSent
+            ? "Koden är mejlad — kolla inkorgen (och skräpposten)."
+            : "Vi mejlar en engångskod till dig. Har du inget konto skapas ett automatiskt."}
+        </p>
+        <Field label="E-post">
+          <input
+            type="email"
+            value={acctEmail}
+            onChange={(e) => setAcctEmail(e.target.value)}
+            autoComplete="email"
+            disabled={codeSent}
+          />
+        </Field>
+        {codeSent && (
+          <Field label="Engångskod">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="6 siffror"
+            />
+          </Field>
+        )}
+        {info && <p className="muted" style={{ textAlign: "center" }}>{info}</p>}
+        <div className="acct__btns">
+          {codeSent ? (
+            <button className="btn btn--accent btn--block" disabled={busy} onClick={() => void verifyCode()}>
+              {busy ? "…" : "Logga in"}
+            </button>
+          ) : (
+            <button className="btn btn--accent btn--block" disabled={busy} onClick={() => void sendCode()}>
+              {busy ? "…" : "Skicka kod"}
+            </button>
+          )}
+          {codeSent && (
+            <button className="btn btn--ghost btn--block" disabled={busy} onClick={() => void sendCode()}>
+              Skicka ny kod
+            </button>
+          )}
+          <button
+            className="btn btn--ghost btn--block"
+            disabled={busy}
+            onClick={() => { setEmailMode(null); setCodeSent(false); setCode(""); setInfo(null); }}
+          >
+            Tillbaka
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (emailMode) {
     return (
       <div className="step acct">
@@ -926,9 +1043,22 @@ function AccountView({
           : "Vi fyller i operatörens formulär med dina sparade uppgifter och fäster din signatur. Logga in för att fortsätta."}
       </p>
       <div className="acct__btns">
-        <button className="btn btn--dark btn--block" onClick={onGoogle}><GoogleIcon width={18} height={18} /> Fortsätt med Google</button>
+        {standalone ? (
+          // Installed app: Google OAuth can't return a session here (iOS
+          // partitions the Safari-side storage away) — lead with the code.
+          <button className="btn btn--dark btn--block" onClick={() => { setEmailMode("otp"); setInfo(null); }}>
+            Fortsätt med engångskod via e-post
+          </button>
+        ) : (
+          <>
+            <button className="btn btn--dark btn--block" onClick={onGoogle}><GoogleIcon width={18} height={18} /> Fortsätt med Google</button>
+            <button className="btn btn--quiet btn--block" onClick={() => { setEmailMode("otp"); setInfo(null); }}>
+              Fortsätt med engångskod via e-post
+            </button>
+          </>
+        )}
         <button className="btn btn--ghost btn--block" onClick={() => { setEmailMode(saving ? "signup" : "signin"); setInfo(null); }}>
-          Fortsätt med e-post
+          Fortsätt med e-post och lösenord
         </button>
       </div>
       <button className="linkbtn linkbtn--center" onClick={onClose}>Inte nu</button>
