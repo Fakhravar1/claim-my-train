@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
-import { prerenderGuidePages } from "./scripts/prerenderGuides";
+import { prerenderSeoPages } from "./scripts/prerenderGuides";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -45,19 +45,30 @@ export default defineConfig(({ mode }) => ({
       },
       injectManifest: {
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        // og.png + the demo gif are shared/marketing assets, no need to precache
-        globIgnores: ["**/og.png", "**/genvag-demo.gif"],
+        // og.png + the demo gif are shared/marketing assets, no need to precache.
+        // The prerendered SEO pages (~700 html files) must stay OUT of the SW
+        // precache — they'd bloat every install by megabytes for pages the app
+        // renders client-side anyway.
+        globIgnores: [
+          "**/og.png",
+          "**/genvag-demo.gif",
+          "ersattning.html",
+          "ersattning/**",
+          "forseningar.html",
+          "forseningar/**",
+        ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
     {
-      // SEO prerender: writes static HTML for /ersattning + the operator
-      // guides into dist/ after the client build (scripts/prerenderGuides.ts).
-      // Lives inside `vite build` so it runs on Lovable's pipeline too.
+      // SEO prerender: writes static HTML for /ersattning (+ operator guides),
+      // /forseningar (+ station stats pages) and sitemap.xml into dist/ after
+      // the client build (scripts/prerenderGuides.ts). Lives inside
+      // `vite build` so it runs on Lovable's pipeline too.
       name: "prerender-guides",
       apply: "build" as const,
       closeBundle() {
-        prerenderGuidePages(path.resolve(__dirname, "dist"));
+        prerenderSeoPages(path.resolve(__dirname, "dist"));
       },
     },
   ].filter(Boolean),

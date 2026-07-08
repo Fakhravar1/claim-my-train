@@ -41,7 +41,7 @@ export type Guide = {
   updated: string;
 };
 
-const UPDATED = "2026-07-07";
+const UPDATED = "2026-07-08";
 
 export const SITE = "https://qvitta.nu";
 
@@ -516,6 +516,622 @@ export const GUIDES: Guide[] = [
     ],
     officialUrl: "https://www.malardalstrafik.se/kundservice/ansoek-om-ersaettning-vid-foersening/",
     officialLabel: "Mälardalstrafiks ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "snalltaget",
+    operator: "Snälltåget",
+    metaTitle: "Snälltåget förseningsersättning — 25–50 % tillbaka, så ansöker du | Qvitta",
+    metaDescription:
+      "Försenat Snälltåg? Vid 60 minuters försening får du 25 % av biljettpriset tillbaka, vid 120 minuter 50 %. Ansökan görs under Min resa på snalltaget.se — inom två månader.",
+    h1: "Förseningsersättning hos Snälltåget",
+    lead:
+      "Snälltåget kör långdistans — Malmö–Stockholm och nattågen mot Åre och Berlin — så EU:s tågpassagerarförordning gäller: ersättningen börjar vid 60 minuters försening till slutstationen.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["60–119 minuter", "25 % av biljettpriset"],
+          ["120 minuter eller mer", "50 % av biljettpriset"],
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "ul",
+        items: [
+          "Gå till Min resa på snalltaget.se och logga in med bokningsnummer och e-postadress.",
+          "När det sista tåget i bokningen har kommit fram visas knappen \"Försenad?\" i bokningen — klicka där för att skicka in ansökan.",
+          "Ansökan kan göras först när hela resan är genomförd, och senast två månader efter resan.",
+        ],
+      },
+      { t: "h2", text: "Undantagen" },
+      {
+        t: "ul",
+        items: [
+          "Ingen ersättning om du informerades om förseningen innan du köpte biljetten.",
+          "Ingen ersättning vid extraordinära omständigheter, till exempel extremt väder eller sabotage.",
+          "Merkostnader som förlorad arbetsinkomst ersätts inte.",
+        ],
+      },
+      { t: "h2", text: "Hitta din försening med Qvitta" },
+      {
+        t: "p",
+        text:
+          "Qvitta bevakar Snälltågets avgångar i realtid med Trafikverkets data. Sök din sträcka och se hur försenat tåget faktiskt var vid ankomsten — det är den siffran ersättningen räknas på.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste Snälltåget vara för ersättning?",
+        a: "Minst 60 minuter vid ankomsten till din slutstation — då får du 25 % av biljettpriset. Vid 120 minuter eller mer får du 50 %.",
+      },
+      {
+        q: "Hur ansöker jag hos Snälltåget?",
+        a: "Under Min resa på snalltaget.se, med bokningsnummer och e-post. Knappen \"Försenad?\" visas i bokningen när resan är avslutad. Ansök inom två månader.",
+      },
+      {
+        q: "Gäller ersättningen nattågen till Berlin och Åre?",
+        a: "Ja, samma EU-regler gäller hela Snälltågets trafik: 25 % vid 60 minuter och 50 % vid 120 minuters försening.",
+      },
+    ],
+    officialUrl: "https://www.snalltaget.se/min-resa",
+    officialLabel: "Snälltåget: Min resa",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "vy",
+    operator: "Vy Tåg",
+    metaTitle: "Vy Tåg förseningsersättning — nattåg och regionaltåg | Qvitta",
+    metaDescription:
+      "Försenat tåg med Vy? För nattågen och andra långa resor gäller 25 % tillbaka vid 60 minuter och 50 % vid 120 minuter. Ansökan görs utan inloggning — så gör du.",
+    h1: "Förseningsersättning hos Vy Tåg",
+    lead:
+      "Vy kör bland annat nattågen mellan Stockholm och övre Norrland. För de långa resorna gäller EU:s tågpassagerarregler — ersättning från 60 minuters försening — och ansökan görs i ett webbformulär utan inloggning.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Resans längd", "Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["150 km eller längre (t.ex. nattågen)", "60–119 min", "25 % av biljettpriset"],
+          ["150 km eller längre", "120 min eller mer", "50 % av biljettpriset"],
+          ["Under 150 km", "20/40/60 min", "50/75/100 % enligt svensk lag"],
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "ul",
+        items: [
+          "Vy:s ersättningsformulär kräver ingen inloggning: du anger bokningsnummer, kontaktuppgifter, tågnummer, avgångs- och ankomststation samt hur du vill få ersättningen (bankkonto, bankgiro eller postgiro).",
+          "Kvitton för biljett och eventuella utlägg kan bifogas men är inte obligatoriska.",
+          "Ansök så snart som möjligt efter resan — operatörernas frister är i regel korta (omkring två månader).",
+        ],
+      },
+      { t: "h2", text: "Eller låt Qvitta göra det åt dig" },
+      {
+        t: "p",
+        text:
+          "Qvitta bevakar Vy:s tåg i realtid. Hittar du din försenade avgång hos oss anger du bokningsnumret, granskar den ifyllda ansökan och godkänner — så skickar vi in den till Vy åt dig.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste ett Vy-tåg vara för ersättning?",
+        a: "För nattågen och andra resor på 150 km eller längre: minst 60 minuter (25 % tillbaka) eller 120 minuter (50 %). För kortare resor gäller den svenska lagens 20-minutersregel.",
+      },
+      {
+        q: "Behöver jag ett konto hos Vy för att ansöka?",
+        a: "Nej. Vy:s formulär kräver ingen inloggning — bokningsnummer och kontaktuppgifter räcker.",
+      },
+      {
+        q: "Kan Qvitta skicka in min Vy-ansökan?",
+        a: "Ja. Ange bokningsnumret när du hittat din försenade avgång, granska och godkänn — vi fyller i och skickar in formuläret åt dig.",
+      },
+    ],
+    officialUrl: "https://www.vy.se/kundservice",
+    officialLabel: "Vy kundservice",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "tagibergslagen",
+    operator: "Tåg i Bergslagen",
+    metaTitle: "Tåg i Bergslagen förseningsersättning — 50–100 % vid 20 min | Qvitta",
+    metaDescription:
+      "Försenat tåg i Bergslagen? Vid 20 minuters försening får du 50–100 % av biljettpriset tillbaka. Ansök inom två månader — så gör du.",
+    h1: "Förseningsersättning hos Tåg i Bergslagen",
+    lead:
+      "Tåg i Bergslagen binder ihop Örebro, Västerås, Falun, Gävle och Mjölby. Blir tåget 20 minuter försenat har du rätt till halva biljettpriset tillbaka — och hela vid en timme.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      {
+        t: "ul",
+        items: [
+          "För periodkort räknas ersättningen på ett snittpris per resa (30-dagarskort delas med 22, årskort med 264).",
+          "Vid befarad försening över 20 minuter kan du ordna egen transport och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+          "Ansökan ska vara inne inom två månader från resan.",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i Tåg i Bergslagens digitala ersättningsformulär. Ange sträcka, datum, avgång och biljettuppgifter. Qvitta bevakar trafiken i Bergslagen i realtid — sök din sträcka så ser du direkt om avgången ger rätt till ersättning.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste tåget vara hos Tåg i Bergslagen?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Hur lång tid har jag på mig att ansöka?",
+        a: "Två månader från resan. Ansökan görs i Tåg i Bergslagens digitala formulär.",
+      },
+    ],
+    officialUrl: "https://evf.tagibergslagen.regionvastmanland.se",
+    officialLabel: "Tåg i Bergslagens ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "ul",
+    operator: "UL (Upptåget)",
+    metaTitle: "UL förseningsersättning — Upptåget och tågen i Uppsala län | Qvitta",
+    metaDescription:
+      "Försenat Upptåg eller annat tåg med UL-biljett? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset. Så ansöker du hos UL.",
+    h1: "Förseningsersättning hos UL",
+    lead:
+      "Reser du med UL-biljett i Uppsala län — på Upptåget mot Gävle eller Sala, eller på regionaltågen — ger 20 minuters försening rätt till ersättning enligt den svenska kollektivtrafiklagen.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      { t: "h2", text: "Vilka resor gäller det?" },
+      {
+        t: "p",
+        text:
+          "Ersättningen gäller resor med UL:s biljetter — Upptåget Uppsala–Gävle och Uppsala–Sala samt UL:s bussar. Reser du med SJ- eller Mälartågsbiljett på samma sträcka är det i stället SJ respektive Mälardalstrafik du vänder dig till; det är biljetten som avgör, inte tåget.",
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "ul",
+        items: [
+          "Ansökan görs i UL:s webbformulär för förseningsersättning — ange resa, datum och biljettuppgifter.",
+          "Vid befarad försening över 20 minuter kan du i stället ta taxi eller egen bil och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+          "Ansök så snart som möjligt — fristen är kort (omkring två månader).",
+        ],
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste Upptåget vara för ersättning?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Jag åkte Upptåget med SJ-biljett — vem ansöker jag hos?",
+        a: "Hos den som sålde biljetten. UL-biljett → UL, SJ-biljett → SJ, Movingo/Mälartågsbiljett → Mälardalstrafik.",
+      },
+    ],
+    officialUrl: "https://www.ul.se/kundservice/forseningsersattning/formular-forseningsersattning/",
+    officialLabel: "UL:s ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "ostgotatrafiken",
+    operator: "Östgötatrafiken",
+    metaTitle: "Östgötatrafiken förseningsersättning — Östgötapendeln | Qvitta",
+    metaDescription:
+      "Försenad Östgötapendel? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset tillbaka. Så ansöker du hos Östgötatrafiken.",
+    h1: "Förseningsersättning hos Östgötatrafiken",
+    lead:
+      "Östgötapendeln mellan Norrköping, Linköping, Mjölby och Motala omfattas av den svenska kollektivtrafiklagen: 20 minuters försening ger rätt till halva biljettpriset tillbaka.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      {
+        t: "ul",
+        items: [
+          "Gäller resor med Östgötatrafikens biljetter — Östgötapendeln och bussarna. Inställda avgångar räknas på samma sätt.",
+          "Vid befarad försening över 20 minuter kan du ordna egen transport och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+          "För periodkort räknas ersättningen på ett snittpris per resa.",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i Östgötatrafikens webbformulär — ange resa, datum och biljettuppgifter, och ansök så snart som möjligt efter resan. Qvitta bevakar Östgötapendeln i realtid: sök din sträcka, till exempel Linköping–Norrköping, och se direkt vilka avgångar som ger rätt till ersättning.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenad måste Östgötapendeln vara för ersättning?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Jag åkte med SJ-biljett genom Östergötland — vem ansöker jag hos?",
+        a: "Hos SJ. Det är biljetten som avgör: Östgötatrafikens ersättning gäller resor köpta hos Östgötatrafiken.",
+      },
+    ],
+    officialUrl: "https://www.ostgotatrafiken.se/kundservice/vanliga-arenden/forseningsersattning/",
+    officialLabel: "Östgötatrafikens ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "jlt",
+    operator: "Jönköpings Länstrafik",
+    metaTitle: "JLT förseningsersättning — Krösatågen i Jönköpings län | Qvitta",
+    metaDescription:
+      "Försenat Krösatåg i Jönköpings län? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset. Så ansöker du hos JLT.",
+    h1: "Förseningsersättning hos Jönköpings Länstrafik",
+    lead:
+      "Krösatågen kring Jönköping, Nässjö och Värnamo omfattas av kollektivtrafiklagen: blir tåget 20 minuter försenat har du rätt till ersättning från JLT — om du reste på JLT:s biljett.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      {
+        t: "ul",
+        items: [
+          "Gäller resor med JLT:s biljetter på Krösatågen och länets bussar; inställda avgångar räknas på samma sätt.",
+          "Vid befarad försening över 20 minuter kan du ta taxi eller egen bil och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+          "Krösatågen körs över flera län — det är biljetten som avgör vilket länstrafikbolag du ansöker hos.",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i JLT:s webbformulär för förseningsersättning; ange resa, datum och biljettuppgifter och ansök så snart som möjligt. Qvitta bevakar Krösatågen i realtid — sök din sträcka och se direkt om din avgång ger rätt till ersättning.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste Krösatåget vara för ersättning?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Krösatågen går över länsgränsen — vem ansöker jag hos?",
+        a: "Hos bolaget som sålde biljetten: JLT-biljett → JLT, Krösatågsresa på KLT-biljett → Kalmar länstrafik, och så vidare.",
+      },
+    ],
+    officialUrl: "https://www.jlt.se/kundservice/forseningsersattning/",
+    officialLabel: "JLT:s ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "varmlandstrafik",
+    operator: "Värmlandstrafik",
+    metaTitle: "Värmlandstrafik förseningsersättning — tågen i Värmland | Qvitta",
+    metaDescription:
+      "Försenat tåg i Värmland? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset tillbaka. Så ansöker du hos Värmlandstrafik.",
+    h1: "Förseningsersättning hos Värmlandstrafik",
+    lead:
+      "Värmlandstrafiks tåg — på Värmlandsbanan mot Karlstad och Fryksdalsbanan mot Torsby — omfattas av kollektivtrafiklagen: 20 minuters försening ger rätt till halva biljettpriset tillbaka.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      {
+        t: "ul",
+        items: [
+          "Gäller resor med Värmlandstrafiks biljetter; inställda avgångar räknas på samma sätt.",
+          "Vid befarad försening över 20 minuter kan du ordna egen transport och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+          "Ansök så snart som möjligt efter resan — fristen är kort (omkring två månader).",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i Värmlandstrafiks webbformulär för förseningsersättning. Qvitta bevakar tågen i Värmland i realtid — sök din sträcka, till exempel Karlstad–Kristinehamn, och se direkt om avgången ger rätt till ersättning.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste tåget vara hos Värmlandstrafik?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Jag åkte SJ-tåg genom Värmland — vem ansöker jag hos?",
+        a: "Hos SJ, om biljetten är köpt hos SJ. Värmlandstrafiks ersättning gäller resor på deras egna biljetter.",
+      },
+    ],
+    officialUrl: "https://www.varmlandstrafik.se/varmlandstrafik/kundservice/forseningsersattning",
+    officialLabel: "Värmlandstrafiks ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "hallandstrafiken",
+    operator: "Hallandstrafiken",
+    metaTitle: "Hallandstrafiken förseningsersättning — Öresundståg & Krösatåg | Qvitta",
+    metaDescription:
+      "Försenat tåg i Halland? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset. Hallandstrafiken hanterar även Öresundståg som startar i Halland — så ansöker du.",
+    h1: "Förseningsersättning hos Hallandstrafiken",
+    lead:
+      "Hallandstrafiken ersätter förseningar på resor med deras biljetter — och hanterar dessutom alla Öresundstågsresor som startar i Halland, oavsett biljett. 20 minuter räcker för ersättning.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      { t: "h2", text: "Vilka resor gäller det?" },
+      {
+        t: "ul",
+        items: [
+          "Resor med Hallandstrafikens biljetter — tåg och buss i Halland; inställda avgångar räknas på samma sätt.",
+          "Öresundståg vars resa startade i Halland (t.ex. Halmstad–Malmö) — ansökan görs hos Hallandstrafiken, inte hos Skånetrafiken.",
+          "Vid befarad försening över 20 minuter kan du ta taxi eller egen bil och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i Hallandstrafikens webbformulär för reklamation och förseningsersättning; ange resa, datum och biljettuppgifter och ansök så snart som möjligt. Qvitta bevakar tågen genom Halland i realtid — sök din sträcka så ser du direkt om din avgång ger rätt till ersättning, och vi pekar dig till rätt bolag.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste tåget vara i Halland?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Mitt Öresundståg från Halmstad var försenat — vem ansöker jag hos?",
+        a: "Hos Hallandstrafiken. För Öresundståg gäller länstrafikbolaget i länet där resan startade — startade den i Halland är det Hallandstrafiken.",
+      },
+    ],
+    officialUrl:
+      "https://hallandstrafiken.se/kundservice/vanliga-arenden/forseningsersattning-och-reklamation/reklamation",
+    officialLabel: "Hallandstrafikens ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "kalmar",
+    operator: "Kalmar länstrafik",
+    metaTitle: "Kalmar länstrafik förseningsersättning — Krösatåg & Kustpilen | Qvitta",
+    metaDescription:
+      "Försenat tåg i Kalmar län? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset. Så ansöker du hos Kalmar länstrafik.",
+    h1: "Förseningsersättning hos Kalmar länstrafik",
+    lead:
+      "Krösatågen och Kustpilen mot Linköping samt Öresundstågen från Kalmar omfattas av kollektivtrafiklagen — 20 minuters försening ger rätt till halva biljettpriset tillbaka.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      {
+        t: "ul",
+        items: [
+          "Gäller resor med KLT:s biljetter — Krösatågen, Kustpilen på Stångådals- och Tjustbanan samt bussarna. Öresundståg som startar i Kalmar län hanteras också av KLT.",
+          "Ersättningen betalas ofta ut som värdekod att använda på nya resor.",
+          "Vid befarad försening över 20 minuter kan du ordna egen transport och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du — eller låt Qvitta göra det" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i KLT:s webbformulär med biljett- eller app-uppgifter. Hittar du din försenade avgång hos Qvitta kan vi fylla i ansökan åt dig: du granskar den ifyllda ansökan och godkänner innan något skickas in.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste tåget vara i Kalmar län?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Hur betalas ersättningen ut?",
+        a: "Kalmar länstrafik betalar ofta ut ersättningen som värdekod som du använder vid nästa biljettköp.",
+      },
+      {
+        q: "Kan Qvitta skicka in min KLT-ansökan?",
+        a: "Ja. Ange dina biljettuppgifter när du hittat din försenade avgång, granska den ifyllda ansökan och godkänn — sedan skickar vi in den.",
+      },
+    ],
+    officialUrl: "https://kalmarlanstrafik.se/Kundservice/ansok-om-forseningsersattning/",
+    officialLabel: "KLT:s ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "kronoberg",
+    operator: "Länstrafiken Kronoberg",
+    metaTitle: "Länstrafiken Kronoberg förseningsersättning — tågen via Växjö | Qvitta",
+    metaDescription:
+      "Försenat tåg i Kronoberg? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset. Så ansöker du hos Länstrafiken Kronoberg.",
+    h1: "Förseningsersättning hos Länstrafiken Kronoberg",
+    lead:
+      "Öresundstågen och Krösatågen genom Växjö och Alvesta omfattas av kollektivtrafiklagen: 20 minuters försening ger rätt till halva biljettpriset tillbaka — och Öresundståg som startar i Kronoberg hanteras just av Länstrafiken Kronoberg.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      {
+        t: "ul",
+        items: [
+          "Gäller resor med Länstrafiken Kronobergs biljetter, och Öresundstågsresor som startade i Kronobergs län (t.ex. Växjö–Malmö).",
+          "Inställda avgångar räknas på samma sätt som förseningar.",
+          "Vid befarad försening över 20 minuter kan du ta taxi eller egen bil och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i Länstrafiken Kronobergs webbformulär; ange resa, datum och biljettuppgifter och ansök så snart som möjligt. Qvitta bevakar tågen genom Kronoberg i realtid — sök din sträcka så ser du direkt om din avgång ger rätt till ersättning.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste tåget vara i Kronoberg?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Mitt Öresundståg från Växjö var försenat — vem ansöker jag hos?",
+        a: "Hos Länstrafiken Kronoberg — för Öresundståg gäller länstrafikbolaget i länet där resan startade.",
+      },
+    ],
+    officialUrl: "https://lanstrafikenkron.se/ansok-om-forseningsersattning",
+    officialLabel: "Länstrafiken Kronobergs ansökningsformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "blekingetrafiken",
+    operator: "Blekingetrafiken",
+    metaTitle: "Blekingetrafiken förseningsersättning — Öresundståg i Blekinge | Qvitta",
+    metaDescription:
+      "Försenat tåg på Blekinge kustbana? Vid 20 minuters försening har du rätt till 50–100 % av biljettpriset. Så ansöker du hos Blekingetrafiken.",
+    h1: "Förseningsersättning hos Blekingetrafiken",
+    lead:
+      "Öresundstågen på Blekinge kustbana — Karlskrona, Ronneby, Karlshamn mot Malmö — omfattas av kollektivtrafiklagen: 20 minuters försening ger rätt till halva biljettpriset tillbaka.",
+    blocks: [
+      { t: "h2", text: "Ersättningsnivåerna" },
+      {
+        t: "table",
+        header: ["Försening vid ankomst", "Ersättning"],
+        rows: [
+          ["20–39 minuter", "50 % av biljettpriset"],
+          ["40–59 minuter", "75 % av biljettpriset"],
+          ["60 minuter eller mer", "100 % av biljettpriset"],
+        ],
+      },
+      {
+        t: "ul",
+        items: [
+          "Gäller resor med Blekingetrafikens biljetter, och Öresundstågsresor som startade i Blekinge (t.ex. Karlskrona–Malmö).",
+          "Inställda avgångar räknas på samma sätt som förseningar.",
+          "Vid befarad försening över 20 minuter kan du ta taxi eller egen bil och få utlägget ersatt upp till lagens tak, cirka 1 500 kr, mot kvitto.",
+        ],
+      },
+      { t: "h2", text: "Så ansöker du" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i Blekingetrafikens webbformulär för resegaranti; ange resa, datum och biljettuppgifter och ansök så snart som möjligt. Qvitta bevakar Blekinge kustbana i realtid — sök din sträcka så ser du direkt om din avgång ger rätt till ersättning.",
+      },
+    ],
+    faq: [
+      {
+        q: "Hur försenat måste tåget vara i Blekinge?",
+        a: "20 minuter räcker: 50 % av biljettpriset tillbaka, 75 % vid 40 minuter och 100 % vid 60 minuter eller mer.",
+      },
+      {
+        q: "Mitt Öresundståg från Karlskrona var försenat — vem ansöker jag hos?",
+        a: "Hos Blekingetrafiken — för Öresundståg gäller länstrafikbolaget i länet där resan startade.",
+      },
+    ],
+    officialUrl: "https://respons.blekingetrafiken.se/internet/bltresegarantiv2.aspx",
+    officialLabel: "Blekingetrafikens resegarantiformulär",
+    updated: UPDATED,
+  },
+
+  {
+    slug: "arlandaexpress",
+    operator: "Arlanda Express",
+    metaTitle: "Arlanda Express försening — så reklamerar du | Qvitta",
+    metaDescription:
+      "Försenat Arlanda Express? Bolaget har en egen reklamationsprocess, och EU:s tågpassagerarregler ger ersättning vid längre förseningar. Så gör du.",
+    h1: "Försenat Arlanda Express — det här gäller",
+    lead:
+      "Arlanda Express är ett kommersiellt flygtågsbolag med egen reklamationshantering — det omfattas inte av länstrafikens resegarantier. Vid längre förseningar ger EU:s tågpassagerarregler ändå en lägsta nivå.",
+    blocks: [
+      { t: "h2", text: "Dina rättigheter" },
+      {
+        t: "ul",
+        items: [
+          "EU:s tågpassagerarförordning ger minst 25 % av biljettpriset tillbaka vid 60 minuters försening och 50 % vid 120 minuter — det är golvet som gäller alla tågbolag.",
+          "Arlanda Express hanterar ersättningskrav genom sin egen reklamationsprocess på arlandaexpress.se — där anger du resa, biljett och vad som hände.",
+          "Missade du flyget på grund av förseningen? Ta med det i reklamationen och spara alla underlag — sådana krav prövas från fall till fall.",
+        ],
+      },
+      { t: "h2", text: "Så reklamerar du" },
+      {
+        t: "p",
+        text:
+          "Använd reklamationsformuläret på arlandaexpress.se under Hjälp och support. Ange avgångstid, biljettnummer och förseningen. Qvitta bevakar Arlanda Express-avgångarna i realtid — hos oss ser du exakt hur försenat tåget var, vilket är underlaget du behöver.",
+      },
+    ],
+    faq: [
+      {
+        q: "Ger ett försenat Arlanda Express rätt till ersättning?",
+        a: "Vid 60 minuters försening ger EU-reglerna minst 25 % av biljettpriset tillbaka, vid 120 minuter 50 %. Arlanda Express hanterar kraven via sin egen reklamation.",
+      },
+      {
+        q: "Var reklamerar jag?",
+        a: "På arlandaexpress.se under Hjälp och support → Reklamation. Ange resa, biljettnummer och hur stor förseningen blev.",
+      },
+    ],
+    officialUrl: "https://www.arlandaexpress.se/hjalp-och-support/reklamation",
+    officialLabel: "Arlanda Express reklamation",
     updated: UPDATED,
   },
 ];

@@ -168,6 +168,7 @@ export function Footer(): ReactNode {
         <div className="footer__links">
           <CoverageButton className="linklike footer__cov" />
           <Link to="/ersattning">Ersättningsguide</Link>
+          <Link to="/forseningar">Förseningsstatistik</Link>
           <Link to="/integritet">Integritet</Link>
           <Link to="/faq">Vanliga frågor</Link>
           <Link to="/genvag">Installera genvägen</Link>

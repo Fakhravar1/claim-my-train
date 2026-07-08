@@ -112,3 +112,23 @@ models:
                 - counterpart_signature
                 - operator
                 - service_date
+
+  - name: agg_station_delays_daily
+    description: >
+        Per-station daily departure-delay aggregate (NOT a claim model). One row per
+        (station_id, service_date), read off int_stop_events (departures only, complete
+        days only). Accumulates past the ~5 d int prune (§13 pattern, 400 d cap) — powers
+        the /forseningar station SEO pages via scripts/refresh_station_stats.py.
+        NEVER --full-refresh expecting long history back.
+    columns:
+        - name: station_day_key
+          description: Surrogate key; hash of (station_id, service_date).
+          data_tests:
+            - not_null
+            - unique
+    data_tests:
+        - dbt_utils.unique_combination_of_columns:
+            arguments:
+              combination_of_columns:
+                - station_id
+                - service_date

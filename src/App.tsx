@@ -20,6 +20,8 @@ const FAQ = lazy(() => import("./pages/FAQ"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Ersattning = lazy(() => import("./pages/Ersattning"));
 const ErsattningGuide = lazy(() => import("./pages/ErsattningGuide"));
+const Forseningar = lazy(() => import("./pages/Forseningar"));
+const ForseningarStation = lazy(() => import("./pages/ForseningarStation"));
 
 // The region pages (/regions/skanetrafiken/*) were retired — their function
 // moved onto `/` and `/claim-review`. This preserves links in digest emails
@@ -52,9 +54,11 @@ const App = () => (
               <Route path="/regions/skanetrafiken" element={<Navigate to="/" replace />} />
               <Route path="/faq" element={<FAQ />} />
               <Route path="/integritet" element={<Privacy />} />
-              {/* SEO guide pages — prerendered to static HTML at build time. */}
+              {/* SEO pages — prerendered to static HTML at build time. */}
               <Route path="/ersattning" element={<Ersattning />} />
               <Route path="/ersattning/:slug" element={<ErsattningGuide />} />
+              <Route path="/forseningar" element={<Forseningar />} />
+              <Route path="/forseningar/:slug" element={<ForseningarStation />} />
               <Route path="/settings" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
