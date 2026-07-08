@@ -114,9 +114,7 @@ export function Hero({ onSearch }: { onSearch: () => void }) {
           och ersättningsanspråk – gratis.
         </h1>
         <p className="hero__lead">
-          Du vet att du var sen — men inte alltid vilket tåg det var, eller om förseningen räcker för
-          pengar tillbaka. Enligt våra uppgifter ser du direkt vilka avgångar som kan ge ersättning.
-          Sök fram din resa och ansök på skärmen.
+          Sök station, välj avgång, gör anspråk. Enkelt, gratis och direkt.
         </p>
         <div className="hero__cta">
           <button className="btn btn--accent btn--lg" onClick={onSearch}>
