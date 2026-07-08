@@ -578,3 +578,48 @@
 .cmt-daylight .install-banner__text{display:flex;flex-direction:column;gap:.15rem;font-size:.9rem;color:var(--ink-2);min-width:14rem;flex:1;}
 .cmt-daylight .install-banner__text strong{color:var(--ink);font-weight:700;}
 .cmt-daylight .install-banner__actions{display:flex;gap:.5rem;align-items:center;}
+
+/* ───── mobile compaction (≤560px): tighter nav/hero/board so results are
+   above the fold and nothing overflows horizontally ───── */
+html,body{overflow-x:hidden;}
+.cmt-daylight{overflow-x:hidden;max-width:100vw;}
+@media(max-width:560px){
+  .cmt-daylight{--gut:.85rem;}
+  /* nav: shrink brand + CTAs so "FAQ" and "Så funkar det" fit on one line
+     next to Qvitta without touching it or wrapping */
+  .cmt-daylight .nav__in{height:54px;}
+  .cmt-daylight .brand{font-size:1.15rem;gap:.4rem;}
+  .cmt-daylight .brand__mark{width:24px;height:24px;}
+  .cmt-daylight .nav__right{gap:.25rem;}
+  .cmt-daylight .nav__cta{height:32px;padding:0 .55rem;font-size:.78rem;white-space:nowrap;}
+  .cmt-daylight .btn--dark{padding:.45rem .7rem;font-size:.82rem;}
+  .cmt-daylight .nav__account>.btn{max-width:120px;font-size:.82rem;padding:.45rem .6rem;}
+
+  /* hero: much tighter so the board is reachable with minimal scroll */
+  .cmt-daylight .hero{padding-top:1.1rem;padding-bottom:.75rem;}
+  .cmt-daylight .hero h1{font-size:1.6rem;line-height:1.1;margin:.5rem 0 .6rem;}
+  .cmt-daylight .hero h1 br{display:none;}
+  .cmt-daylight .hero__lead{font-size:.95rem;line-height:1.4;}
+  .cmt-daylight .hero__cta{margin-top:.9rem;}
+  .cmt-daylight .btn--lg{padding:.7rem 1rem;font-size:.92rem;}
+  .cmt-daylight .eyebrow{font-size:.68rem;}
+
+  /* board: tighten header/controls/rows so more results are visible */
+  .cmt-daylight .board-wrap{padding-top:.4rem;padding-bottom:2rem;}
+  .cmt-daylight .board{padding:.85rem .75rem .75rem;border-radius:14px;}
+  .cmt-daylight .board__head{padding-bottom:.7rem;gap:.5rem;}
+  .cmt-daylight .board__h{font-size:.95rem;}
+  .cmt-daylight .board__cap{font-size:.72rem;margin-top:.5rem;}
+  .cmt-daylight .board__controls{padding:.6rem 0 .1rem;gap:.4rem;}
+  .cmt-daylight .board__control select,
+  .cmt-daylight .board__control input{height:40px;}
+  .cmt-daylight .board__filters{gap:.7rem;padding:.5rem 0 .1rem;}
+  .cmt-daylight .board__filter{font-size:.8rem;}
+  .cmt-daylight .board__sub{padding:.55rem 0 .1rem;font-size:.66rem;}
+  .cmt-daylight .rows{gap:.4rem;}
+  .cmt-daylight .row{padding:.6rem .7rem;}
+
+  /* value props: less vertical air */
+  .cmt-daylight .vprops{padding:1.5rem 0;}
+  .cmt-daylight .vprops__h{margin-bottom:1rem;font-size:1.3rem;}
+}
