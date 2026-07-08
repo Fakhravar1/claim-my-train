@@ -1,12 +1,19 @@
 # Qvitta
 
-> Automatiserad ersättning för försenade tåg i Sverige. Vi övervakar din sträcka, upptäcker förseningar på 20 minuter eller mer och hjälper dig skicka in din reklamation till Skånetrafiken — helt gratis.
+> Automatiserad ersättning för försenade tåg i Sverige. Vi övervakar tågtrafiken i realtid med data från Trafikverket, upptäcker förseningar som ger rätt till ersättning och hjälper dig skicka in ansökan till rätt operatör — helt gratis.
 
-Qvitta är en webbtjänst för pendlare och resenärer i Skåne som vill få tillbaka pengar för försenade eller inställda tåg enligt Lag (2015:953) om kollektivtrafikresenärers rättigheter. Tjänsten övervakar hela Skånes järnvägsnät i realtid, flaggar anspråksberättigade resor och fyller i Skånetrafikens reklamationsblankett åt dig.
+Qvitta är en webbtjänst för pendlare och resenärer som vill få tillbaka pengar för försenade eller inställda tåg enligt Lag (2015:953) om kollektivtrafikresenärers rättigheter och EU-förordning 2021/782. Tjänsten bevakar över 450 stationer i hela Sverige, flaggar ersättningsberättigade resor och hjälper dig ansöka hos SJ, Skånetrafiken, SL, Västtrafik, Mälartåg, Öresundståg med flera.
 
 ## Pages
 
-- [/](/): Startsida med live nätverkstavla, så funkar det, sök din resa och anspråksflöde — visar avgångar för hela Skånes järnvägsnät och vilka förseningar som kan ge ersättning.
+- [/](/): Startsida med live nätverkstavla — sök din sträcka och se vilka avgångar som var försenade och vilka som ger rätt till ersättning.
+- [/ersattning](/ersattning): Guide till förseningsersättning för tåg — regler, belopp och frister enligt lagen och EU-förordningen.
+- [/ersattning/sj](/ersattning/sj): SJ förseningsersättning — nivåer per resans längd och hur du ansöker.
+- [/ersattning/skanetrafiken](/ersattning/skanetrafiken): Skånetrafikens förseningsersättning — 50–100 % tillbaka vid 20 minuters försening, även Öresundståg till Danmark.
+- [/ersattning/sl](/ersattning/sl): SL:s förseningsersättning — ersättning för taxi/egen bil vid befarad försening över 20 minuter.
+- [/ersattning/vasttrafik](/ersattning/vasttrafik): Västtrafiks förseningsersättning — 50–100 % tillbaka, ansökan inom 60 dagar.
+- [/ersattning/oresundstag](/ersattning/oresundstag): Öresundståg — vilket länstrafikbolag du ansöker hos beroende på var resan startade.
+- [/ersattning/malartag](/ersattning/malartag): Mälartåg — ersättningsnivåer och ansökan hos Mälardalstrafik.
 - [/faq](/faq): Vanliga frågor och svar om ersättning för försenade och inställda tåg.
 
 ## Optional
