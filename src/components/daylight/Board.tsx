@@ -255,18 +255,17 @@ function Row({
     <div className={"row row--" + m.tone}>
       <div className="row__time">
         <span className="row__dep">{fmtTime(d.origin_scheduled)}</span>
-        <span className="row__date">{fmtDayShort(d.origin_local_date)}</span>
       </div>
 
       <div className="row__route">
         <span className="st st--from">{d.origin_stop_name}</span>
-        <span className="row__to">
-          <ArrowIcon className="row__arrow row__arrow--down" width={13} height={13} />
-          <span className="st st--to">{d.destination_stop_name}</span>
-        </span>
+        <ArrowIcon className="row__arrow" width={13} height={13} />
+        <span className="st st--to">{d.destination_stop_name}</span>
       </div>
 
-      <span className="row__line">{operatorLabel(d)}</span>
+      <span className="row__line">
+        {fmtDayShort(d.origin_local_date)} · {operatorLabel(d)}
+      </span>
 
       <div className="row__status">
         <span className={"tag tag--" + m.tone}>{m.chipLabel}</span>
