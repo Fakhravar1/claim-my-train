@@ -470,7 +470,7 @@
 /* compact cells: route (from → to, ellipsised), line, inline status */
 .cmt-daylight .row__time{flex-direction:column;}
 /* route: FROM → TO on one line, arrow between */
-.cmt-daylight .row__route{display:flex;flex-direction:row;align-items:center;gap:.45rem;min-width:0;}
+.cmt-daylight .row__route{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:.45rem;min-width:0;}
 /* Origin/destination names sit on small solid cards so the text stays readable
    over the diagonal status stripes behind the row (accessibility/contrast). */
 .cmt-daylight .row__route .st{
