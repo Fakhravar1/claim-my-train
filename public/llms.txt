@@ -14,6 +14,19 @@ Qvitta är en webbtjänst för pendlare och resenärer som vill få tillbaka pen
 - [/ersattning/vasttrafik](/ersattning/vasttrafik): Västtrafiks förseningsersättning — 50–100 % tillbaka, ansökan inom 60 dagar.
 - [/ersattning/oresundstag](/ersattning/oresundstag): Öresundståg — vilket länstrafikbolag du ansöker hos beroende på var resan startade.
 - [/ersattning/malartag](/ersattning/malartag): Mälartåg — ersättningsnivåer och ansökan hos Mälardalstrafik.
+- [/ersattning/snalltaget](/ersattning/snalltaget): Snälltåget — 25/50 % enligt EU-förordningen, ansökan via Min resa.
+- [/ersattning/vy](/ersattning/vy): Vy Tåg — nattåg och regionaltåg, ansökan utan inloggning.
+- [/ersattning/tagibergslagen](/ersattning/tagibergslagen): Tåg i Bergslagen — 50–100 % vid 20 min, ansökan inom två månader.
+- [/ersattning/ul](/ersattning/ul): UL/Upptåget — ersättning i Uppsala län.
+- [/ersattning/ostgotatrafiken](/ersattning/ostgotatrafiken): Östgötatrafiken — Östgötapendeln.
+- [/ersattning/jlt](/ersattning/jlt): Jönköpings Länstrafik — Krösatågen.
+- [/ersattning/varmlandstrafik](/ersattning/varmlandstrafik): Värmlandstrafik — tågen i Värmland.
+- [/ersattning/hallandstrafiken](/ersattning/hallandstrafiken): Hallandstrafiken — inkl. Öresundståg som startar i Halland.
+- [/ersattning/kalmar](/ersattning/kalmar): Kalmar länstrafik — Krösatåg och Kustpilen.
+- [/ersattning/kronoberg](/ersattning/kronoberg): Länstrafiken Kronoberg — tågen via Växjö/Alvesta.
+- [/ersattning/blekingetrafiken](/ersattning/blekingetrafiken): Blekingetrafiken — Öresundståg på Blekinge kustbana.
+- [/ersattning/arlandaexpress](/ersattning/arlandaexpress): Arlanda Express — reklamation vid försening.
+- [/forseningar](/forseningar): Förseningsstatistik per station — hur ofta tågen är sena från ~330 svenska stationer, baserat på Trafikverkets realtidsdata.
 - [/faq](/faq): Vanliga frågor och svar om ersättning för försenade och inställda tåg.
 
 ## Optional

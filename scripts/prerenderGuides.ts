@@ -31,6 +31,7 @@ import {
 import {
   STATIONS,
   STATIONS_WORST_FIRST,
+  STATION_STATS_GENERATED,
   type StationStat,
   stationPath,
   stationUrl,
@@ -42,6 +43,7 @@ import {
   operatorDisplay,
   operatorGuideSlug,
 } from "../src/content/stationStats";
+import { FAQ_ITEMS, faqPageJsonLd } from "../src/content/faq";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -316,16 +318,78 @@ function stationIndexPage(): SeoPage {
 }
 
 /* ------------------------------------------------------------------ */
+/* /faq                                                                */
+/* ------------------------------------------------------------------ */
+
+function faqPage(): SeoPage {
+  return {
+    routePath: "/faq",
+    url: `${SITE}/faq`,
+    metaTitle: "Vanliga frågor — Qvitta",
+    metaDescription: "Vanliga frågor och svar om ersättning för försenade och inställda tåg.",
+    jsonld: [faqPageJsonLd()],
+    mainHtml:
+      `<h1>Vanliga frågor</h1>` +
+      `<p>Svar på de vanligaste frågorna om ersättning för försenade och inställda tåg — och om hur Qvitta fungerar.</p>` +
+      FAQ_ITEMS.map((f) => `<h2>${esc(f.q)}</h2><p>${esc(f.a)}</p>`).join("") +
+      `<p>Hittade du inte svaret? Läs <a href="/ersattning">ersättningsguiden</a> eller mejla <a href="mailto:kontakt@qvitta.nu">kontakt@qvitta.nu</a>.</p>`,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* / (homepage) — crawlable content + the internal-link hub            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The homepage is the SPA itself, so we don't create a separate route file —
+ * we enrich dist/index.html's #root with static content (React renders the
+ * live board over it on mount). This is what gives crawlers text on the most
+ * linked page AND no-JS internal links into /ersattning + /forseningar, so
+ * link equity actually flows from / to the SEO pages.
+ */
+function homePage(): SeoPage {
+  const topStations = STATIONS_WORST_FIRST.slice(0, 20);
+  return {
+    routePath: "/",
+    url: `${SITE}/`,
+    // Same title/meta as the template — the swap is a no-op, but keeps one code path.
+    metaTitle: "Qvitta — Ersättning för tågförseningar",
+    metaDescription:
+      "En samlad plats för att ansöka om förseningsersättning – pendlare, nattåg och allt däremellan.",
+    jsonld: [],
+    mainHtml:
+      `<h1>En samlad plats för alla tågförseningar och ersättningsanspråk — gratis</h1>` +
+      `<p>Qvitta bevakar tågtrafiken i hela Sverige i realtid med data från Trafikverket. ` +
+      `Sök din sträcka, se vilka avgångar som var försenade eller inställda, och ansök om ` +
+      `ersättning hos rätt operatör — vi hjälper dig hela vägen, utan att röra dina pengar.</p>` +
+      `<h2>Så funkar det</h2>` +
+      `<ul>` +
+      `<li>Sök station och datum — vi visar varje avgång med faktisk försening.</li>` +
+      `<li>En försening på 20 minuter ger ofta rätt till 50–100 % av biljettpriset tillbaka.</li>` +
+      `<li>Vi fyller i och skickar ansökan där det går, och pekar dig till rätt formulär annars.</li>` +
+      `</ul>` +
+      `<h2>Förseningsersättning per operatör</h2>` +
+      `<p><a href="/ersattning"><strong>Så får du pengar tillbaka för försenade tåg — hela guiden</strong></a></p>` +
+      `<p>${GUIDES.map((g) => `<a href="${guidePath(g.slug)}">${esc(g.operator)}</a>`).join(" · ")}</p>` +
+      `<h2>Tågförseningar per station</h2>` +
+      `<p>Statistik för ${STATIONS.length} stationer: <a href="/forseningar"><strong>hur ofta är tågen sena från din station?</strong></a></p>` +
+      `<p>${topStations.map((s) => `<a href="${stationPath(s)}">${esc(s.station_name)}</a>`).join(" · ")}</p>` +
+      `<p><a href="/faq">Vanliga frågor</a> · <a href="/integritet">Integritetspolicy</a></p>`,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* sitemap.xml                                                         */
 /* ------------------------------------------------------------------ */
 
 function sitemapXml(): string {
-  const urls: { loc: string; changefreq: string; priority: string }[] = [
+  const pillarLastmod = ALL_GUIDE_PAGES[0]?.updated;
+  const urls: { loc: string; changefreq: string; priority: string; lastmod?: string }[] = [
     { loc: `${SITE}/`, changefreq: "daily", priority: "1.0" },
-    { loc: `${SITE}/ersattning`, changefreq: "monthly", priority: "0.9" },
-    ...GUIDES.map((g) => ({ loc: guideUrl(g.slug), changefreq: "monthly", priority: "0.8" })),
-    { loc: `${SITE}/forseningar`, changefreq: "daily", priority: "0.8" },
-    ...STATIONS.map((s) => ({ loc: stationUrl(s), changefreq: "weekly", priority: "0.6" })),
+    { loc: `${SITE}/ersattning`, changefreq: "monthly", priority: "0.9", lastmod: pillarLastmod },
+    ...GUIDES.map((g) => ({ loc: guideUrl(g.slug), changefreq: "monthly", priority: "0.8", lastmod: g.updated })),
+    { loc: `${SITE}/forseningar`, changefreq: "daily", priority: "0.8", lastmod: STATION_STATS_GENERATED },
+    ...STATIONS.map((s) => ({ loc: stationUrl(s), changefreq: "weekly", priority: "0.6", lastmod: STATION_STATS_GENERATED })),
     { loc: `${SITE}/faq`, changefreq: "monthly", priority: "0.7" },
     { loc: `${SITE}/genvag`, changefreq: "monthly", priority: "0.6" },
     { loc: `${SITE}/integritet`, changefreq: "yearly", priority: "0.3" },
@@ -336,7 +400,9 @@ function sitemapXml(): string {
     urls
       .map(
         (u) =>
-          `  <url>\n    <loc>${u.loc}</loc>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
+          `  <url>\n    <loc>${u.loc}</loc>\n` +
+          (u.lastmod ? `    <lastmod>${u.lastmod}</lastmod>\n` : "") +
+          `    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
       )
       .join("\n") +
     `\n</urlset>\n`
@@ -358,10 +424,17 @@ export function prerenderSeoPages(distDir: string): void {
     ...ALL_GUIDE_PAGES.map(guidePage),
     stationIndexPage(),
     ...STATIONS.map(stationPage),
+    faqPage(),
   ];
   for (const p of pages) {
     writePage(distDir, p.routePath, renderSeoPage(template, p));
   }
+
+  // The homepage: enrich dist/index.html itself (no separate route). Rendered
+  // from the pristine `template` string, so ordering vs the loop is irrelevant.
+  // NOTE: index.html is also the SPA fallback for client routes — React
+  // replaces #root on mount, so the static content only ever flashes briefly.
+  fs.writeFileSync(templatePath, renderSeoPage(template, homePage()), "utf8");
 
   // sitemap.xml is generated here (single source of truth: the same data that
   // decides which pages exist) — it overwrites the public/ copy if one exists.

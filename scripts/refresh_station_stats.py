@@ -107,6 +107,18 @@ def slugify(name: str) -> str:
 
 
 def load_dbt_conn() -> dict:
+    # CI path: the dbt session-pooler secrets exposed as env vars
+    # (same SUPABASE_DB_* set the dbt-run workflow uses).
+    import os
+    if os.environ.get("SUPABASE_DB_HOST"):
+        return dict(
+            host=os.environ["SUPABASE_DB_HOST"],
+            port=int(os.environ.get("SUPABASE_DB_PORT", "5432")),
+            user=os.environ["SUPABASE_DB_USER"],
+            password=os.environ["SUPABASE_DB_PASSWORD"],
+            dbname=os.environ.get("SUPABASE_DB_NAME", "postgres"),
+        )
+    # Local path: read the dbt profile.
     profiles = yaml.safe_load((Path.home() / ".dbt" / "profiles.yml").read_text(encoding="utf-8"))
     # first profile's first target — this repo has a single dbt project
     for profile in profiles.values():

@@ -1,0 +1,76 @@
+name: Refresh station stats
+
+# Weekly regeneration of src/content/stationStats.json (the data snapshot
+# behind the /forseningar SEO pages) from dbt_dev.agg_station_delays_daily.
+# The agg accumulates daily, so each refresh widens the published window
+# (capped at 30 d) and keeps the pages' period label fresh.
+#
+# The commit is pushed with GITHUB_TOKEN, and pushes made by Actions do NOT
+# trigger other workflows — so the mirror-to-lovable workflow won't fire.
+# The mirror push to the companion repo is therefore replicated inline below.
+
+on:
+  schedule:
+    - cron: "30 4 * * 1" # Mondays ~04:30 UTC; free-tier jitter is fine at weekly cadence
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    # Working repo only — the mirror copies workflow files to the companion,
+    # which has no secrets and must never run this.
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: refresh-station-stats
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history — the mirror push needs the same ancestry
+          persist-credentials: false # push via explicit token URLs below
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install psycopg2-binary pyyaml
+
+      - name: Regenerate stationStats.json
+        env:
+          # Same session-pooler secrets the dbt-run workflow uses (port 5432).
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+        run: python scripts/refresh_station_stats.py
+
+      - name: Commit and push if changed
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet src/content/stationStats.json; then
+            echo "stationStats.json unchanged — nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/content/stationStats.json
+          git commit -m "Refresh station delay stats snapshot (weekly cron)"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Mirror to Lovable companion
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          PAT: ${{ secrets.LOVABLE_MIRROR_PAT }}
+        run: |
+          if [ -z "${PAT}" ]; then
+            echo "::error::LOVABLE_MIRROR_PAT secret is not set. See CLAUDE.md §11."
+            exit 1
+          fi
+          git push "https://x-access-token:${PAT}@github.com/Fakhravar1/claim-my-train-ab5b0f74.git" HEAD:main
+    permissions:
+      contents: write

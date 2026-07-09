@@ -60,6 +60,8 @@ export default defineConfig(({ mode }) => ({
           "ersattning/**",
           "forseningar.html",
           "forseningar/**",
+          "faq.html",
+          "faq/**",
         ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
