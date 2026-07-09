@@ -48,19 +48,37 @@ export function modeLabel(j: Pick<Journey, "transport_mode">): string {
 }
 
 /**
+ * Display-only brands for train_owner codes that deliberately have NO
+ * purchasing_operator mapping (mapping them would mis-route a claim — §5/§8),
+ * so the card can still name the operator instead of a bare "Tåg".
+ * MTRX = MTR Express, acquired by VR Group 2024 and rebranded VR Snabbtåg
+ * (Stockholm–Göteborg) — NOT the same claim route as VR-operated Öresundståg.
+ */
+const TRAIN_OWNER_BRANDS: Record<string, string> = {
+  MTRX: "VR Snabbtåg",
+  DVVJ: "DVVJ (Dal–Västra Värmlands Järnväg)",
+};
+
+/**
  * Operator brand for the card — the name riders recognize (SJ / Öresundståg /
  * Skånetrafiken / Pågatåg), taken from the journey's descriptive `operator`
  * (information_owner on the TV side). When information_owner is null (notably MOST
  * SJ trains) we fall back to the same feed-signal resolver the claim modal uses
  * (train_owner code -> brand), so a card reads "SJ" / "Arlanda Express" instead of
- * a bare "Tåg" — descriptive-only, never a rule key (§5/§8). Only when neither
- * signal resolves do we fall back to the mode ("Tåg").
+ * a bare "Tåg" — descriptive-only, never a rule key (§5/§8). Codes the resolver
+ * deliberately leaves unmapped for routing still get a display brand (or the raw
+ * code itself — terser but strictly more informative than "Tåg"). Only when the
+ * feed carries no owner signal at all (extra-/ersättningståg: Trafikverket sends
+ * every owner field null) do we fall back to the mode ("Tåg").
  */
 export function operatorLabel(j: Pick<Journey, "operator" | "train_owner" | "transport_mode">): string {
   const raw = (j.operator ?? "").trim();
   if (raw) return raw;
   const resolved = resolveOperatorFromJourney(j);
-  return resolved ? purchasingOperatorLabel(resolved) : modeLabel(j);
+  if (resolved) return purchasingOperatorLabel(resolved);
+  const code = (j.train_owner ?? "").trim();
+  if (code) return TRAIN_OWNER_BRANDS[code] ?? code;
+  return modeLabel(j);
 }
 
 export type StationOption = { id: string; name: string };
