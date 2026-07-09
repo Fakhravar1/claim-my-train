@@ -19,7 +19,11 @@ export default defineConfig(({ mode }) => ({
       strategies: "injectManifest",
       srcDir: "src",
       filename: "sw.ts",
-      registerType: "autoUpdate",
+      // "prompt": install new workers in the background but let the app decide
+      // when to activate them (main.tsx shows a "ny version" toast). The old
+      // "autoUpdate" silently swapped bundles, which stranded already-open
+      // tabs / installed PWAs on a stale cached shell.
+      registerType: "prompt",
       injectRegister: false, // registered manually in main.tsx
       manifest: {
         name: "Qvitta — Ersättning för tågförseningar",

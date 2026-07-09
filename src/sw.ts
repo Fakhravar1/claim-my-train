@@ -6,7 +6,15 @@ import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { NetworkFirst } from "workbox-strategies";
 
-self.skipWaiting();
+// registerType: "prompt" — a new worker installs in the background but stays in
+// the "waiting" state until the user taps "Uppdatera" (see src/main.tsx), which
+// posts SKIP_WAITING here. That on-demand activation is what lets us reload onto
+// the fresh bundle deliberately, instead of the old unconditional skipWaiting()
+// that swapped the bundle mid-session and left phones on a stale cached shell
+// until a full app restart.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
 self.addEventListener("activate", () => self.clients.claim());
 
 // Hashed build assets: precached, served cache-first.
