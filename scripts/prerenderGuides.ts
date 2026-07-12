@@ -62,6 +62,8 @@ const PRERENDER_CSS = `
 .qv-prerender .qv-nav a{text-decoration:none;font-weight:700}
 .qv-prerender ul{padding-left:1.2rem}
 .qv-prerender li{margin:.3rem 0}
+.qv-prerender .qv-btn{display:inline-block;padding:.6rem 1.1rem;border:1px solid #0E8C7E;border-radius:.6rem;text-decoration:none;font-weight:700;margin:0 .5rem .5rem 0}
+.qv-prerender .qv-btn--accent{background:#0E8C7E;color:#fff}
 `;
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +197,33 @@ function blockHtml(b: GuideBlock): string {
   }
 }
 
+/**
+ * The "Ansök här" button pair — mirrors GuideCtaButtons in
+ * src/components/daylight/GuideContent.tsx (keep the two in sync).
+ */
+function guideCtaHtml(g: Guide): string {
+  const qvitta = (primary: boolean) =>
+    `<a class="qv-btn${primary ? " qv-btn--accent" : ""}" href="/">${
+      primary
+        ? g.inAppFiling
+          ? "Ansök via Qvitta — vi skickar in åt dig"
+          : "Sök din försenade avgång — ansök direkt"
+        : "Hitta din försening på Qvitta"
+    }</a>`;
+  const official = (primary: boolean) =>
+    g.officialUrl
+      ? `<a class="qv-btn${primary ? " qv-btn--accent" : ""}" href="${esc(g.officialUrl)}" rel="noopener noreferrer">${
+          primary ? esc(`Ansök här — hos ${g.operator}`) : esc(g.officialLabel ?? "Operatörens formulär")
+        }</a>`
+      : "";
+  const pair = g.inAppFiling
+    ? qvitta(true) + official(false)
+    : g.officialUrl
+      ? official(true) + qvitta(false)
+      : qvitta(true);
+  return `<p>${pair}</p>`;
+}
+
 function guideMainHtml(g: Guide): string {
   const crumbs = g.slug
     ? `<nav aria-label="Brödsmulor"><a href="/ersattning">Förseningsersättning</a> / ${esc(g.operator)}</nav>`
@@ -207,18 +236,18 @@ function guideMainHtml(g: Guide): string {
       ? ""
       : `<h2>Vanliga frågor</h2>` +
         g.faq.map((f) => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join("");
-  const official = g.officialUrl
-    ? ` · <a href="${esc(g.officialUrl)}" rel="noopener noreferrer">${esc(g.officialLabel ?? "Operatörens formulär")}</a>`
-    : "";
 
   return (
     crumbs +
     `<h1>${esc(g.h1)}</h1>` +
     `<p>${esc(g.lead)}</p>` +
     `<p class="qv-muted">Uppdaterad ${esc(g.updated)}</p>` +
+    guideCtaHtml(g) +
     g.blocks.map(blockHtml).join("") +
     faq +
-    `<p><a href="/"><strong>Var ditt tåg försenat? Hitta din avgång på Qvitta</strong></a>${official}</p>` +
+    `<h2>Ansök om ersättning</h2>` +
+    `<p>Var ditt tåg försenat? Sök din sträcka så ser du direkt om du har rätt till ersättning.</p>` +
+    guideCtaHtml(g) +
     `<p class="qv-muted">Fler guider: ${linkList}</p>`
   );
 }

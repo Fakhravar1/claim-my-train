@@ -37,6 +37,8 @@ export type Guide = {
   /** The operator's own claim/info page (external). */
   officialUrl?: string;
   officialLabel?: string;
+  /** True when Qvitta files this operator's claims in-app (CTA leads with Qvitta). */
+  inAppFiling?: boolean;
   /** ISO date shown as "Uppdaterad" and used in Article JSON-LD. */
   updated: string;
 };
@@ -171,15 +173,41 @@ export const GUIDES: Guide[] = [
         text:
           "En resa Stockholm–Göteborg eller Malmö–Stockholm räknas som lång (EU-reglerna, ersättning från 60 minuter), medan en SJ-regionaltågsresa som Uppsala–Stockholm faller under den svenska lagen med ersättning redan vid 20 minuter. Inställda tåg ger ersättning på samma nivåer om du blir försenad till slutstationen.",
       },
-      { t: "h2", text: "Så ansöker du hos SJ" },
+      { t: "h2", text: "Så ansöker du hos SJ — steg för steg" },
+      {
+        t: "p",
+        text:
+          "Ansökan görs i SJ:s webbformulär utan inloggning. Du behöver bara bokningsnumret (8 eller 12 tecken) och den e-postadress eller det mobilnummer som användes vid köpet. Formuläret har fyra steg:",
+      },
       {
         t: "ul",
         items: [
-          "Ansökan görs i SJ:s webbformulär utan inloggning — du behöver bara bokningsnumret (8 eller 12 tecken) och den e-postadress eller det mobilnummer som användes vid köpet.",
-          "Ersättningen för själva förseningen betalas tillbaka till det betalsätt du använde vid köpet.",
-          "Merkostnader — taxi, hotell, mat vid längre förseningar — söks i samma formulär men kräver kvitton och betalas ut separat.",
-          "Varje bokning kan bara användas för en ansökan; har du redan ansökt får du beskedet direkt.",
+          "Hämta resa: fyll i bokningsnumret och e-postadressen eller mobilnumret från köpet.",
+          "Välj resa: bocka för den försenade resan i listan och gå vidare.",
+          "Egna utlägg: har du kvitton på merkostnader (taxi, mat, hotell) lägger du till dem här — annars hoppar du över steget. Det är bara för merkostnader SJ frågar efter utbetalningssätt; själva förseningsersättningen går alltid tillbaka till det betalsätt du använde vid köpet.",
+          "Personuppgifter: namn, mobilnummer och e-post — bekräfta uppgifterna och tryck på Slutför ansökan.",
         ],
+      },
+      {
+        t: "p",
+        text:
+          "När ansökan gått igenom visas ”Din ansökan är registrerad!” tillsammans med ett ärendenummer (formatet 1-XXXXXXXX). Spara det — det är din referens om du behöver kontakta SJ:s kundservice. Står det i stället att ansökan är delvis registrerad har förseningsersättningen gått igenom men inte utläggsdelen; komplettera merkostnaderna via kundservice.",
+      },
+      { t: "h2", text: "Om SJ inte hittar din bokning" },
+      {
+        t: "ul",
+        items: [
+          "Resan måste vara genomförd — formuläret hittar inte bokningar före avgång. Vänta tills du kommit fram och försök igen.",
+          "Använd exakt den e-postadress eller det mobilnummer som angavs vid köpet — det är inte alltid samma som ditt SJ-konto, och köpte någon annan biljetten är det köparens uppgifter som gäller.",
+          "Resplus-biljetter (flera operatörer på samma biljett, t.ex. köpta via en länstrafikapp) hanteras inte i SJ:s formulär utan via Resplus resegaranti.",
+          "Varje bokning ger bara en ansökan — har du redan ansökt får du beskedet direkt.",
+        ],
+      },
+      { t: "h2", text: "Kan SJ neka ersättning?" },
+      {
+        t: "p",
+        text:
+          "För längre resor (EU-förordningen) kan SJ neka ersättning vid extraordinära omständigheter utanför järnvägens kontroll, till exempel extremväder. För kortare resor som faller under den svenska lagen finns inget sådant undantag — där gäller 20-minutersregeln oavsett orsak. Tidtabellsändringar som meddelats mer än tre dygn i förväg räknas dock mot den nya tidtabellen, inte den ursprungliga.",
       },
       { t: "h2", text: "Eller låt Qvitta göra det åt dig" },
       {
@@ -205,10 +233,27 @@ export const GUIDES: Guide[] = [
         q: "Kan Qvitta skicka in min SJ-ansökan?",
         a: "Ja. Ange ditt bokningsnummer när du hittat din försenade avgång, så validerar vi bokningen mot SJ och skickar in ansökan åt dig. Helt gratis.",
       },
+      {
+        q: "Vad betyder ”Vi hittar inte din bokning”?",
+        a: "Oftast att resan inte är genomförd ännu (sök efter ankomst), eller att e-postadressen/mobilnumret inte matchar det som användes vid köpet. Resplus-biljetter hanteras dessutom via Resplus resegaranti, inte SJ:s formulär.",
+      },
+      {
+        q: "Vad är ärendenumret och var hittar jag det?",
+        a: "En referens i formatet 1-XXXXXXXX som visas på bekräftelsesidan när ansökan registrerats. Ansöker du via Qvitta sparar vi ärendenumret åt dig under Mina ärenden.",
+      },
+      {
+        q: "Kan SJ neka min ansökan, till exempel vid oväder?",
+        a: "Bara för längre resor under EU-reglerna, och bara vid extraordinära omständigheter utanför järnvägens kontroll. För kortare resor under svenska lagen gäller ersättningen oavsett orsak till förseningen.",
+      },
+      {
+        q: "Måste jag ansöka inom en viss tid?",
+        a: "Vänta inte — ansök så snart resan är genomförd. Då finns bokningen lätt till hands och du riskerar inga frister. Qvitta flaggar dina försenade avgångar automatiskt om du anger dina resvanor.",
+      },
     ],
     officialUrl: "https://www.sj.se/om-sj/regler-och-villkor/rattigheter-vid-forsening",
     officialLabel: "SJ: rättigheter vid försening",
-    updated: UPDATED,
+    inAppFiling: true,
+    updated: "2026-07-12",
   },
 
   {

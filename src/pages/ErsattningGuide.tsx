@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { useDaylightStyles } from "@/hooks/useDaylightStyles";
 import { Nav, Footer } from "@/components/daylight/shell";
 import { GUIDES, faqJsonLd, articleJsonLd, breadcrumbJsonLd, guideUrl } from "@/content/ersattningGuides";
-import { GuideBlocks, GuideFaqList, GuideLinkList, GuideCta } from "@/components/daylight/GuideContent";
+import { GuideBlocks, GuideFaqList, GuideLinkList, GuideCta, GuideCtaButtons } from "@/components/daylight/GuideContent";
 
 /**
  * /ersattning/:slug — per-operator förseningsersättning guide (SJ, SL,
@@ -45,9 +45,13 @@ export default function ErsattningGuide() {
         <p className="lead" style={{ margin: "0 0 1.2rem", fontSize: "1.05rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
           {g.lead}
         </p>
-        <p style={{ margin: "0 0 1.5rem", fontSize: ".85rem", color: "var(--muted)" }}>
+        <p style={{ margin: "0 0 1.2rem", fontSize: ".85rem", color: "var(--muted)" }}>
           Uppdaterad {g.updated}
         </p>
+
+        <div style={{ margin: "0 0 2rem" }}>
+          <GuideCtaButtons guide={g} />
+        </div>
 
         <GuideBlocks blocks={g.blocks} />
         <GuideFaqList guide={g} />
