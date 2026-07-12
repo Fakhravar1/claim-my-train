@@ -105,6 +105,19 @@ select
     dest.delay_seconds                      as destination_delay_seconds,
     round(dest.delay_seconds / 60.0, 1)     as destination_delay_minutes,
 
+    -- Maintenance-work / planned-disruption signals (TV feed, collector v23+;
+    -- null on REST legs and on rows ingested before 2026-07-12). Descriptive
+    -- context only (§5/§8): per-leg Deviation texts ("Banarbete", "Buss
+    -- ersätter tåg", ...) kept separate per leg like origin/destination_source
+    -- (the frontend merges for display), and a journey-level flag for "this
+    -- delay was known in advance" (PlannedEstimatedTimeAtLocation on either
+    -- leg). NOT the 72h rule — that needs the announced-at timestamp vs T-72h
+    -- (the timetable_amendments design); this flag is the honest hint until then.
+    origin.deviation               as origin_deviation,
+    dest.deviation                 as destination_deviation,
+    (origin.planned_estimated_time is not null
+        or dest.planned_estimated_time is not null)         as has_planned_delay,
+
     -- Great-circle O-D distance (km) x a ~1.2 detour factor to approximate rail distance.
     -- This is what picks the legal regime in dim_compensation_rules / claim_eligibility:
     -- <150 km = Swedish regional regime, >=150 km = EU 2021/782. APPROXIMATE near the 150 km
@@ -184,6 +197,9 @@ select
     destination_actual,
     destination_delay_seconds,
     destination_delay_minutes,
+    origin_deviation,
+    destination_deviation,
+    has_planned_delay,
     route_distance_km,
     is_claimable,
     canceled,
