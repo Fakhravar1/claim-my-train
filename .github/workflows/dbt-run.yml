@@ -74,31 +74,6 @@ jobs:
           PG_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PG_DBNAME:   ${{ secrets.SUPABASE_DB_NAME }}
         run: dbt build
-
-      # On failure, wake the Claude investigator routine via the service-bearer-
-      # gated fire-claude-investigator edge function (debounced server-side to
-      # once per 6 h, so an hourly-failing build wakes ONE agent per incident).
-      # Why this matters: a failing dbt test SKIPs every downstream mart, so
-      # public.v_journeys / v_claimable_journeys stop refreshing while CI is red
-      # — and the data-freshness watchdog can't see that (raw + int_stop_events
-      # stay fresh), so without this ping nobody is alerted.
-      - name: Ping Claude investigator on failure
-        if: failure()
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_ROLE_KEY" ]; then
-            echo "::warning::SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY secrets missing — cannot ping the Claude investigator."
-            exit 0
-          fi
-          payload=$(jq -n --arg run_url "$RUN_URL" '{
-            key: "gh:dbt-run",
-            text: ("CI FAILURE EVENT — this poke comes from GitHub Actions, NOT the freshness watchdog; if check_data_freshness() shows nothing breached, do NOT stop — the failure is in CI itself. The dbt-run workflow FAILED on Fakhravar1/claim-my-train: " + $run_url + " . Pull the failed run logs and diagnose. Common cause: a dbt data test failed — note a failing test on int_stop_events SKIPs all downstream marts, so public.v_journeys / v_claimable_journeys stop refreshing while CI stays red. The safety rules from the routine prompt still apply: no destructive SQL, no dbt --full-refresh, no schema changes; fix only if clearly safe, otherwise report. Email the diagnosis/result to arianfakhravar@gmail.com as usual.")
-          }')
-          curl -sS --max-time 30 -X POST "$SUPABASE_URL/functions/v1/fire-claude-investigator" \
-            -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$payload" \
-            || echo "::warning::Claude investigator ping failed (non-fatal)"
+        # Failure alerting: notify-claude-on-failure.yml (workflow_run catch-all)
+        # pings the Claude investigator when this workflow fails — the inline
+        # if:failure() step that briefly lived here was superseded by it.
