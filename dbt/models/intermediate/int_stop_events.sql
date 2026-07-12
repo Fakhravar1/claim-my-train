@@ -77,6 +77,10 @@ with tv as (   -- Swedish stop-events
         -- but train_owner is populated there — so operator auto-detection coalesces
         -- information_owner -> train_owner downstream. Descriptive-only (§8: never a rule key).
         ,t.train_owner                                      as train_owner
+        -- Maintenance-work / planned-disruption signals (collector v23+, 2026-07-12;
+        -- NULL on older rows). Descriptive context only — never a rule key (§5/§8).
+        ,t.deviation
+        ,t.planned_estimated_time
         ,t.ingested_at
         ,'tv'                                               as source
     from {{ ref('stg_train_announcements') }} t
@@ -117,6 +121,8 @@ rest as (      -- Danish stop-events ONLY — REST is the Danish leg for trains
         ,route__destination__name                           as line_terminus
         ,agency__operator                                   as operator
         ,null::text                                         as train_owner   -- TV-only signal; REST has no equivalent
+        ,null::text[]                                       as deviation     -- TV-only signal
+        ,null::timestamptz                                  as planned_estimated_time
         ,ingested_at
         ,'rest'                                             as source
     from {{ ref('stg_departures') }}
@@ -172,6 +178,8 @@ select
     ,line_terminus
     ,operator
     ,train_owner                                            -- TV operator code; secondary auto-routing signal (null on REST)
+    ,deviation                                              -- TV Deviation descriptions (maintenance-work signal; null on REST/pre-v23)
+    ,planned_estimated_time                                 -- TV planned-in-advance delay (72h-rule signal; null on REST/pre-v23)
     ,source                                                 -- 'tv' (Swedish) | 'rest' (Danish) — degenerate dim
     ,ingested_at
 from deduped

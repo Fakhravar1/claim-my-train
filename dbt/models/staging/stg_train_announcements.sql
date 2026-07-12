@@ -24,6 +24,11 @@ select
   ,canceled
   ,deleted                                                                  -- TV retraction flag; kept, NOT filtered (no row-dropping in staging)
 
+  ,deviation                                                                -- Trafikverket Deviation descriptions ("Banarbete", "Buss ersätter", ...);
+                                                                            -- the maintenance-work signal. Collector v23+; NULL before 2026-07-12.
+  ,planned_estimated_time                                                   -- delay known IN ADVANCE (planned disruption) — 72h-rule groundwork.
+                                                                            -- Distinct from estimated_time, which is the realtime prediction.
+
   ,operator                                                                 -- descriptive only — never a join/rule key (§5, §8)
   ,train_owner                                                              -- flips at contract seams (e.g. Malmö C); descriptive only
   ,information_owner
