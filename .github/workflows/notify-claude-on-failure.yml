@@ -46,10 +46,12 @@ jobs:
             echo "::warning::SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY secrets missing — cannot ping the Claude investigator."
             exit 0
           fi
-          payload=$(jq -n --arg name "$WF_NAME" --arg url "$WF_URL" --arg conclusion "$WF_CONCLUSION" '{
-            key: ("gh:" + $name),
-            text: ("CI FAILURE EVENT — this poke comes from GitHub Actions, NOT the freshness watchdog; if check_data_freshness() shows nothing breached, do NOT stop — the failure is in CI itself. The workflow '" + $name + "' concluded '" + $conclusion + "' on Fakhravar1/claim-my-train: " + $url + " . Pull the failed run logs, identify the failing step, and diagnose. Workflow context: 'dbt run' = the hourly dbt build (a failing dbt data test SKIPs all downstream marts, so public.v_journeys / v_claimable_journeys stop refreshing while it stays red); 'Claim PDF worker' = claim submission processing; 'Mirror to Lovable' = the prod deploy mirror (failures mean production stops receiving updates); 'claim canary' = the daily operator-form dry-run checks; 'Refresh station stats' = the weekly SEO stats snapshot. The routine prompt's safety rules still apply: no destructive SQL, no dbt --full-refresh, no schema changes; fix only if clearly safe, otherwise report. Email the diagnosis/result to arianfakhravar@gmail.com as usual.")
-          }')
+          # NB: the message is built in a bash variable and handed to jq via --arg.
+          # Do NOT inline it into the jq program — an apostrophe inside the
+          # single-quoted jq filter breaks bash quoting (that exact bug shipped
+          # 2026-07-12 and silently killed every ping with a bash syntax error).
+          text="CI FAILURE EVENT — this poke comes from GitHub Actions, NOT the freshness watchdog; if check_data_freshness() shows nothing breached, do NOT stop — the failure is in CI itself. The workflow [$WF_NAME] concluded [$WF_CONCLUSION] on Fakhravar1/claim-my-train: $WF_URL . Pull the failed run logs, identify the failing step, and diagnose. Workflow context: [dbt run] = the hourly dbt build (a failing dbt data test SKIPs all downstream marts, so public.v_journeys / v_claimable_journeys stop refreshing while it stays red); [Claim PDF worker] = claim submission processing; [Mirror to Lovable] = the prod deploy mirror (failures mean production stops receiving updates); [claim canary] = the daily operator-form dry-run checks; [Refresh station stats] = the weekly SEO stats snapshot. The routine prompt safety rules still apply: no destructive SQL, no dbt --full-refresh, no schema changes; fix only if clearly safe, otherwise report. Email the diagnosis/result to arianfakhravar@gmail.com as usual."
+          payload=$(jq -n --arg key "gh:$WF_NAME" --arg text "$text" '{key: $key, text: $text}')
           curl -sS --max-time 30 -X POST "$SUPABASE_URL/functions/v1/fire-claude-investigator" \
             -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
             -H "Content-Type: application/json" \
