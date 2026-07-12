@@ -1,0 +1,57 @@
+name: Notify Claude on failure
+
+# Catch-all CI-failure ping: whenever ANY listed workflow finishes with a
+# failure, fire the Claude "Data-freshness breach investigator" routine via the
+# service-bearer-gated fire-claude-investigator edge function (debounced
+# server-side to once per 6 h PER WORKFLOW via public.investigator_fire_state).
+# The ping carries only the workflow name + run URL — no per-workflow fix logic
+# lives here; the investigator agent pulls the logs and diagnoses whatever it is.
+#
+# GitHub caveat: `workflow_run` has no wildcard — new workflows must be added to
+# the `workflows:` list below to be covered. It also only fires for runs of
+# workflows on the DEFAULT branch (all our scheduled/dispatch workflows are).
+#
+# The one-off spike workflows (Diag HLT block, Respons dry-run spike) are
+# deliberately NOT listed — they're manual experiments, not production jobs.
+
+on:
+  workflow_run:
+    workflows:
+      - dbt run
+      - Claim PDF worker
+      - Mirror to Lovable
+      - claim canary
+      - Refresh station stats
+    types: [completed]
+
+jobs:
+  ping:
+    # Repo guard (house style, see dbt-run.yml): this file gets mirrored to the
+    # Lovable companion repo, which must never fire pings for its own runs.
+    if: >-
+      github.repository == 'Fakhravar1/claim-my-train' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'timed_out')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fire Claude investigator
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+          WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SERVICE_ROLE_KEY" ]; then
+            echo "::warning::SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY secrets missing — cannot ping the Claude investigator."
+            exit 0
+          fi
+          payload=$(jq -n --arg name "$WF_NAME" --arg url "$WF_URL" --arg conclusion "$WF_CONCLUSION" '{
+            key: ("gh:" + $name),
+            text: ("CI FAILURE EVENT — this poke comes from GitHub Actions, NOT the freshness watchdog; if check_data_freshness() shows nothing breached, do NOT stop — the failure is in CI itself. The workflow '" + $name + "' concluded '" + $conclusion + "' on Fakhravar1/claim-my-train: " + $url + " . Pull the failed run logs, identify the failing step, and diagnose. Workflow context: 'dbt run' = the hourly dbt build (a failing dbt data test SKIPs all downstream marts, so public.v_journeys / v_claimable_journeys stop refreshing while it stays red); 'Claim PDF worker' = claim submission processing; 'Mirror to Lovable' = the prod deploy mirror (failures mean production stops receiving updates); 'claim canary' = the daily operator-form dry-run checks; 'Refresh station stats' = the weekly SEO stats snapshot. The routine prompt's safety rules still apply: no destructive SQL, no dbt --full-refresh, no schema changes; fix only if clearly safe, otherwise report. Email the diagnosis/result to arianfakhravar@gmail.com as usual.")
+          }')
+          curl -sS --max-time 30 -X POST "$SUPABASE_URL/functions/v1/fire-claude-investigator" \
+            -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            || echo "::warning::Claude investigator ping failed (non-fatal)"
