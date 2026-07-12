@@ -48,6 +48,22 @@
 --     for it (our query is event-type-agnostic).
 -- If a future station shows this pattern, investigate the same way before
 -- adding it here — don't widen this list speculatively.
+--
+-- TIME-BOUNDED EXCEPTION — Stockholm pendeltåg summer 2026 service change,
+-- added 2026-07-12, EXPIRES 2026-09-01 (the `service_date` bound below).
+-- On 2026-07-11 Trafikverket's feed collapsed Ankomst for several Stockholm
+-- pendeltåg stations while Avgang simultaneously dropped ~40% on BOTH trunks
+-- — Huddinge 45550 (arr 130→10), Stuvsta 772 (130→10), Häggvik 703 (128→12),
+-- Sollentuna 67244 (137→54, one bad day from tripping), plus Mölnbo 715 on
+-- Nyköpingsbanan in milder form (not excluded). Investigated 2026-07-12:
+-- raw_train_announcements shows the IDENTICAL collapse, so this is
+-- Trafikverket publishing fewer announcements (planned summer track work /
+-- reduced timetable that started 2026-07-11), not our pipeline — the
+-- collector is station-agnostic and int matches raw row-for-row. The
+-- exception is date-bounded rather than permanent: if the feed still looks
+-- like this after 2026-09-01, the test re-fails and forces a fresh look
+-- (either the works were extended — extend the bound — or these stations
+-- have become permanent Karlberg-class exceptions).
 with daily_counts as (
     select
         station_id,
@@ -58,6 +74,11 @@ with daily_counts as (
     from {{ ref('int_stop_events') }}
     where service_date = current_date - 1
       and station_id != '45985'  -- Karlberg, see KNOWN EXCEPTION above
+      -- Stockholm pendeltåg summer 2026 works, see TIME-BOUNDED EXCEPTION above
+      and not (
+          station_id in ('45550', '703', '772', '67244')
+          and service_date < date '2026-09-01'
+      )
     group by 1, 2, 3
 ),
 
