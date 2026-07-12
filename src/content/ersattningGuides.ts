@@ -58,12 +58,12 @@ export const guidePath = (slug: string) =>
 export const PILLAR: Guide = {
   slug: "",
   operator: "Alla operatörer",
-  metaTitle: "Förseningsersättning för tåg — så får du pengar tillbaka | Qvitta",
+  metaTitle: "Ersättning för försenat tåg — så får du pengar tillbaka | Qvitta",
   metaDescription:
     "Försenat eller inställt tåg? Vid 20 minuters försening har du ofta rätt till 50–100 % av biljettpriset. Guide till reglerna, beloppen och hur du ansöker — per operatör.",
-  h1: "Förseningsersättning för tåg — så får du pengar tillbaka",
+  h1: "Ersättning för försenat tåg — så får du pengar tillbaka",
   lead:
-    "När tåget är mer än 20 minuter försenat har du i de flesta fall laglig rätt till ersättning — men bara om du ansöker. Här är reglerna, beloppen och fristerna, samlade på ett ställe.",
+    "När tåget är mer än 20 minuter försenat har du i de flesta fall laglig rätt till förseningsersättning — men bara om du ansöker. Här är reglerna, beloppen och fristerna för ersättning vid försenat eller inställt tåg, samlade på ett ställe.",
   blocks: [
     { t: "h2", text: "Dina rättigheter i korthet" },
     {
@@ -136,7 +136,7 @@ export const PILLAR: Guide = {
       a: "Ingenting. Qvitta är gratis och ersättningen betalas ut direkt från operatören till dig.",
     },
   ],
-  updated: UPDATED,
+  updated: "2026-07-12",
 };
 
 /* ------------------------------------------------------------------ */

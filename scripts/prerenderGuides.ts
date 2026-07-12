@@ -353,9 +353,9 @@ function homePage(): SeoPage {
     routePath: "/",
     url: `${SITE}/`,
     // Same title/meta as the template — the swap is a no-op, but keeps one code path.
-    metaTitle: "Qvitta — Ersättning för tågförseningar",
+    metaTitle: "Ersättning för försenade tåg — Qvitta",
     metaDescription:
-      "En samlad plats för att ansöka om förseningsersättning – pendlare, nattåg och allt däremellan.",
+      "Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis.",
     jsonld: [],
     mainHtml:
       `<h1>En samlad plats för alla tågförseningar och ersättningsanspråk — gratis</h1>` +

@@ -226,9 +226,9 @@ export default function DaylightApp() {
     <div className="cmt-daylight">
       <Helmet>
         <link rel="canonical" href="https://qvitta.nu/" />
-        <meta name="description" content="En samlad plats för att ansöka om förseningsersättning – pendlare, nattåg och allt däremellan." />
-        <meta property="og:description" content="En samlad plats för att ansöka om förseningsersättning – pendlare, nattåg och allt däremellan." />
-        <meta name="twitter:description" content="En samlad plats för att ansöka om förseningsersättning – pendlare, nattåg och allt däremellan." />
+        <meta name="description" content="Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis." />
+        <meta property="og:description" content="Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis." />
+        <meta name="twitter:description" content="Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis." />
         <meta property="og:url" content="https://qvitta.nu/" />
         <script type="application/ld+json">
           {JSON.stringify({
@@ -283,7 +283,7 @@ export default function DaylightApp() {
               priceCurrency: "SEK",
             },
             description:
-              "En samlad plats för att ansöka om förseningsersättning – pendlare, nattåg och allt däremellan.",
+              "Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis.",
             featureList: [
               "Live train departure board with delay tracking",
               "Automated compensation eligibility detection",
