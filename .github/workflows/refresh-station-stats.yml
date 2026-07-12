@@ -1,9 +1,11 @@
 name: Refresh station stats
 
-# Weekly regeneration of src/content/stationStats.json (the data snapshot
+# Daily regeneration of src/content/stationStats.json (the data snapshot
 # behind the /forseningar SEO pages) from dbt_dev.agg_station_delays_daily.
-# The agg accumulates daily, so each refresh widens the published window
-# (capped at 30 d) and keeps the pages' period label fresh.
+# Daily cadence keeps the per-day "Senaste dagarna" tables at most ~1 day
+# stale and bumps the sitemap lastmod every day (a freshness signal for
+# "försening idag"-type queries). The agg accumulates, so each refresh also
+# widens the published window (capped at 30 d).
 #
 # The commit is pushed with GITHUB_TOKEN, and pushes made by Actions do NOT
 # trigger other workflows — so the mirror-to-lovable workflow won't fire.
@@ -11,7 +13,7 @@ name: Refresh station stats
 
 on:
   schedule:
-    - cron: "30 4 * * 1" # Mondays ~04:30 UTC; free-tier jitter is fine at weekly cadence
+    - cron: "30 4 * * *" # daily ~04:30 UTC; free-tier jitter is fine at daily cadence
   workflow_dispatch:
 
 jobs:
@@ -58,7 +60,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/content/stationStats.json
-          git commit -m "Refresh station delay stats snapshot (weekly cron)"
+          git commit -m "Refresh station delay stats snapshot (daily cron)"
           git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 

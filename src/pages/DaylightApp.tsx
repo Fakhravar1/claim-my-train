@@ -164,6 +164,21 @@ export default function DaylightApp() {
     setVisibleCount(PAGE);
   }, [query, date, from, to, onlyDelayed, onlyCancelled, onlyClaimable]);
 
+  // Station deep-link (/?station=Göteborg+C#board, used by the /forseningar
+  // pages' "Se dagens avgångar — live" buttons): seed the search box with the
+  // station name so the board lands in stationMode. Works signed-out — the
+  // station query is public. Param is consumed and removed like ?mine.
+  useEffect(() => {
+    const station = searchParams.get("station");
+    if (!station) return;
+    setQuery(station);
+    boardRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const next = new URLSearchParams(searchParams);
+    next.delete("station");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // "Mina förseningar" entry point (signed-in account menu → /?mine=1#board):
   // jump to claimable-only, seeded with the user's preferred route if they
   // haven't picked one explicitly yet. Runs once the profile has loaded.

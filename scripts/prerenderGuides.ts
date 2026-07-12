@@ -35,11 +35,13 @@ import {
   type StationStat,
   stationPath,
   stationUrl,
+  stationLiveHref,
   pctOnTime,
   pctLate5,
   pctLate20,
   minutes,
   periodLabel,
+  dayLabel,
   operatorDisplay,
   operatorGuideSlug,
 } from "../src/content/stationStats";
@@ -293,16 +295,31 @@ function stationMainHtml(s: StationStat): string {
     ["Största försening", `${minutes(s.max_delay_seconds)} min`],
   ];
 
+  const daysTable =
+    s.days && s.days.length > 0
+      ? `<h2>Senaste dagarna</h2>` +
+        `<table><thead><tr><th>Dag</th><th>Avgångar</th><th>≥ 20 min sena</th><th>Inställda</th><th>Största försening</th></tr></thead>` +
+        `<tbody>${s.days
+          .map(
+            (d) =>
+              `<tr><td>${esc(dayLabel(d.d))}</td><td>${d.dep}</td><td>${d.l20}</td><td>${d.canc}</td><td>${esc(minutes(d.mx))} min</td></tr>`
+          )
+          .join("")}</tbody></table>` +
+        `<h2>Hela perioden</h2>`
+      : "";
+
   return (
     `<nav aria-label="Brödsmulor"><a href="/forseningar">Tågförseningar</a> / ${esc(s.station_name)}</nav>` +
     `<h1>Tågförseningar ${esc(s.station_name)}</h1>` +
     `<p>Under perioden ${esc(period)} avgick ${s.n_departures} tåg från ${esc(s.station_name)}` +
     (operator ? ` (främst ${esc(operator)})` : "") +
     `. ${pctOnTime(s)} % gick i tid, ${s.n_late_20} avgångar var minst 20 minuter försenade och ${s.n_cancelled} ställdes in.</p>` +
+    `<p><a class="qv-btn qv-btn--accent" href="${esc(stationLiveHref(s))}">Se dagens avgångar från ${esc(s.station_name)} — live</a></p>` +
+    daysTable +
     `<table><tbody>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>` +
     `<h2>Försenad från ${esc(s.station_name)}? Så får du ersättning</h2>` +
     `<p>En försening på 20 minuter ger i de flesta fall rätt till 50 % av biljettpriset tillbaka — 100 % vid en timme. ` +
-    `<a href="/"><strong>Sök din avgång på Qvitta</strong></a> så ser du direkt om den ger rätt till ersättning. ` +
+    `<a href="${esc(stationLiveHref(s))}"><strong>Sök din avgång på Qvitta</strong></a> så ser du direkt om den ger rätt till ersättning. ` +
     `Läs mer i <a href="/ersattning">ersättningsguiden</a>` +
     (guideSlug && operator ? ` eller guiden för <a href="/ersattning/${guideSlug}">${esc(operator)}</a>` : "") +
     `.</p>` +
