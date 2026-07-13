@@ -160,9 +160,51 @@ export function ValueProps({ onUnknown, onSearch, onHabits }: ValuePropsHandlers
   );
 }
 
+/**
+ * Footer link mesh to the SEO subpages. Hardcoded slugs on purpose: importing
+ * stationStats.json/ersattningGuides.ts here would pull them into the main
+ * bundle. Slugs are stable; a station that drops out of the snapshot just
+ * redirects to /forseningar. This is the rendered-DOM internal linking Google
+ * actually follows (the prerendered homepage lists are replaced on mount).
+ */
+const FOOTER_STATIONS: [slug: string, name: string][] = [
+  ["stockholm-c", "Stockholm C"],
+  ["goteborg-c", "Göteborg C"],
+  ["malmo-c", "Malmö C"],
+  ["lund-c", "Lund C"],
+  ["uppsala-c", "Uppsala C"],
+  ["helsingborg-c", "Helsingborg C"],
+  ["vasteras-c", "Västerås C"],
+  ["linkoping-c", "Linköping C"],
+];
+const FOOTER_GUIDES: [slug: string, name: string][] = [
+  ["sj", "SJ"],
+  ["sl", "SL"],
+  ["skanetrafiken", "Skånetrafiken"],
+  ["vasttrafik", "Västtrafik"],
+  ["oresundstag", "Öresundståg"],
+  ["malartag", "Mälartåg"],
+];
+
 export function Footer(): ReactNode {
   return (
     <footer className="footer">
+      <div className="wrap footer__seo">
+        <div className="footer__row">
+          <span className="footer__label">Ersättningsguider:</span>
+          {FOOTER_GUIDES.map(([slug, name]) => (
+            <Link key={slug} to={`/ersattning/${slug}`}>{name}</Link>
+          ))}
+          <Link to="/ersattning">Alla guider</Link>
+        </div>
+        <div className="footer__row">
+          <span className="footer__label">Tågförseningar:</span>
+          {FOOTER_STATIONS.map(([slug, name]) => (
+            <Link key={slug} to={`/forseningar/${slug}`}>{name}</Link>
+          ))}
+          <Link to="/forseningar">Alla stationer</Link>
+        </div>
+      </div>
       <div className="wrap footer__in">
         <span>© 2026 Qvitta</span>
         <div className="footer__links">

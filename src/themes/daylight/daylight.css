@@ -162,6 +162,11 @@
 .cmt-daylight .footer__in{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;font-size:.85rem;color:var(--muted);}
 .cmt-daylight .footer__links{display:flex;gap:1.4rem;}
 .cmt-daylight .footer__links a:hover{color:var(--ink);}
+.cmt-daylight .footer__seo{display:grid;gap:.45rem;margin-bottom:1.3rem;padding-bottom:1.3rem;border-bottom:var(--bw) solid var(--line);font-size:.83rem;color:var(--muted);}
+.cmt-daylight .footer__seo .footer__row{display:flex;flex-wrap:wrap;gap:.3rem 1rem;align-items:baseline;}
+.cmt-daylight .footer__seo .footer__label{font-weight:700;color:var(--ink-2);}
+.cmt-daylight .footer__seo a{color:var(--muted);}
+.cmt-daylight .footer__seo a:hover{color:var(--ink);}
 
 /* ── modal ── */
 .cmt-daylight-scrim{position:fixed;inset:0;z-index:60;background:rgba(14,15,16,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:clamp(1rem,5vh,3.5rem) 1rem;overflow-y:auto;animation:cmt-fade .2s var(--ease);}
