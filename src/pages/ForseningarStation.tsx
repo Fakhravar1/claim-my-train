@@ -6,12 +6,14 @@ import {
   stationBySlug,
   stationPath,
   stationUrl,
+  stationLiveHref,
   STATIONS_WORST_FIRST,
   pctOnTime,
   pctLate5,
   pctLate20,
   minutes,
   periodLabel,
+  dayLabel,
   operatorDisplay,
   operatorGuideSlug,
 } from "@/content/stationStats";
@@ -71,6 +73,47 @@ export default function ForseningarStation() {
           var minst 20 minuter försenade och {s.n_cancelled} ställdes in.
         </p>
 
+        <div style={{ margin: "0 0 1.6rem" }}>
+          <Link to={stationLiveHref(s)} className="btn btn--accent">
+            Se dagens avgångar från {s.station_name} — live
+          </Link>
+        </div>
+
+        {s.days && s.days.length > 0 && (
+          <>
+            <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 .7rem" }}>
+              Senaste dagarna
+            </h2>
+            <div style={{ overflowX: "auto", margin: "0 0 1.6rem" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", background: "var(--card-bg)" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...cell, fontWeight: 700 }}>Dag</th>
+                    <th style={{ ...cell, fontWeight: 700 }}>Avgångar</th>
+                    <th style={{ ...cell, fontWeight: 700 }}>≥ 20 min sena</th>
+                    <th style={{ ...cell, fontWeight: 700 }}>Inställda</th>
+                    <th style={{ ...cell, fontWeight: 700 }}>Största försening</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {s.days.map((d) => (
+                    <tr key={d.d}>
+                      <td style={cell}>{dayLabel(d.d)}</td>
+                      <td style={cell}>{d.dep}</td>
+                      <td style={cell}>{d.l20}</td>
+                      <td style={cell}>{d.canc}</td>
+                      <td style={cell}>{minutes(d.mx)} min</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 .7rem" }}>
+          Hela perioden
+        </h2>
         <div style={{ overflowX: "auto", margin: "0 0 1.2rem" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", background: "var(--card-bg)" }}>
             <tbody>
@@ -94,7 +137,7 @@ export default function ForseningarStation() {
           ersättning, och vi hjälper dig skicka in ansökan.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: ".6rem", marginBottom: "1.6rem" }}>
-          <Link to="/" className="btn btn--accent">Hitta din försening</Link>
+          <Link to={stationLiveHref(s)} className="btn btn--accent">Hitta din försening</Link>
           <Link to="/ersattning" className="btn">Så funkar ersättningen</Link>
           {guideSlug && operator && (
             <Link to={`/ersattning/${guideSlug}`} className="btn">

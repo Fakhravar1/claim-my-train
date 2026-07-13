@@ -124,6 +124,50 @@ export function GuideLinkList({ current }: { current?: string }) {
   );
 }
 
+/**
+ * The "Ansök här" button pair. Operators Qvitta files in-app (inAppFiling)
+ * lead with Qvitta; everyone else leads with the operator's own form —
+ * the fastest path to an actual claim either way.
+ */
+export function GuideCtaButtons({ guide }: { guide: Guide }) {
+  const qvittaBtn = (primary: boolean) => (
+    <Link to="/" className={primary ? "btn btn--accent" : "btn"}>
+      {primary
+        ? guide.inAppFiling
+          ? "Ansök via Qvitta — vi skickar in åt dig"
+          : "Sök din försenade avgång — ansök direkt"
+        : "Hitta din försening på Qvitta"}
+    </Link>
+  );
+  const officialBtn = (primary: boolean) =>
+    guide.officialUrl ? (
+      <a
+        href={guide.officialUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={primary ? "btn btn--accent" : "btn"}
+      >
+        {primary ? `Ansök här — hos ${guide.operator}` : (guide.officialLabel ?? "Operatörens formulär")}
+      </a>
+    ) : null;
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: ".6rem" }}>
+      {guide.inAppFiling ? (
+        <>
+          {qvittaBtn(true)}
+          {officialBtn(false)}
+        </>
+      ) : (
+        <>
+          {officialBtn(true) ?? qvittaBtn(true)}
+          {guide.officialUrl && qvittaBtn(false)}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** CTA band: into the app + to the operator's own form. */
 export function GuideCta({ guide }: { guide: Guide }) {
   return (
@@ -142,16 +186,7 @@ export function GuideCta({ guide }: { guide: Guide }) {
       <p style={{ margin: 0, fontWeight: 600, color: "var(--card-text)" }}>
         Var ditt tåg försenat? Sök din sträcka så ser du direkt om du har rätt till ersättning.
       </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: ".6rem" }}>
-        <Link to="/" className="btn btn--accent">
-          Hitta din försening
-        </Link>
-        {guide.officialUrl && (
-          <a href={guide.officialUrl} target="_blank" rel="noopener noreferrer" className="btn">
-            {guide.officialLabel ?? "Operatörens formulär"}
-          </a>
-        )}
-      </div>
+      <GuideCtaButtons guide={guide} />
     </div>
   );
 }

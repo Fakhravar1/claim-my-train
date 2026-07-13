@@ -8,6 +8,20 @@
  */
 import raw from "./stationStats.json";
 
+/** One day in the "Senaste dagarna" table (compact keys — ships in the JS bundle). */
+export type StationDayStat = {
+  /** ISO service date. */
+  d: string;
+  /** Departures that day. */
+  dep: number;
+  /** Departures >= 20 min late. */
+  l20: number;
+  /** Cancelled departures. */
+  canc: number;
+  /** Largest delay that day, seconds. */
+  mx: number;
+};
+
 export type StationStat = {
   slug: string;
   station_id: string;
@@ -22,6 +36,8 @@ export type StationStat = {
   avg_delay_seconds: number;
   max_delay_seconds: number;
   operator_label: string | null;
+  /** Latest-first per-day rows. Absent until the first refresh after 2026-07-12. */
+  days?: StationDayStat[];
 };
 
 export const STATION_STATS_GENERATED: string = (raw as { generated: string }).generated;
@@ -38,6 +54,10 @@ export const stationBySlug = (slug: string): StationStat | undefined => BY_SLUG.
 
 export const stationPath = (s: StationStat) => `/forseningar/${s.slug}`;
 export const stationUrl = (s: StationStat) => `https://qvitta.nu/forseningar/${s.slug}`;
+
+/** Board deep-link: `/` with this station prefilled in the search box. */
+export const stationLiveHref = (s: StationStat) =>
+  `/?station=${encodeURIComponent(s.station_name)}#board`;
 
 /* ------------------------------------------------------------------ */
 /* Display helpers                                                     */
@@ -56,6 +76,16 @@ export const pctLate20 = (s: StationStat): string =>
 
 export const minutes = (seconds: number): string =>
   (seconds / 60).toFixed(1).replace(".", ",");
+
+const WEEKDAYS = ["sön", "mån", "tis", "ons", "tors", "fre", "lör"];
+const MONTHS_SHORT = ["jan", "feb", "mars", "april", "maj", "juni", "juli", "aug", "sep", "okt", "nov", "dec"];
+
+/** Swedish short day label for a per-day row: "fre 11 juli". */
+export function dayLabel(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (isNaN(d.getTime())) return iso;
+  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+}
 
 /** Swedish date range "3–7 juli 2026" (falls back to ISO on odd input). */
 export function periodLabel(s: StationStat): string {

@@ -35,11 +35,13 @@ import {
   type StationStat,
   stationPath,
   stationUrl,
+  stationLiveHref,
   pctOnTime,
   pctLate5,
   pctLate20,
   minutes,
   periodLabel,
+  dayLabel,
   operatorDisplay,
   operatorGuideSlug,
 } from "../src/content/stationStats";
@@ -62,6 +64,8 @@ const PRERENDER_CSS = `
 .qv-prerender .qv-nav a{text-decoration:none;font-weight:700}
 .qv-prerender ul{padding-left:1.2rem}
 .qv-prerender li{margin:.3rem 0}
+.qv-prerender .qv-btn{display:inline-block;padding:.6rem 1.1rem;border:1px solid #0E8C7E;border-radius:.6rem;text-decoration:none;font-weight:700;margin:0 .5rem .5rem 0}
+.qv-prerender .qv-btn--accent{background:#0E8C7E;color:#fff}
 `;
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +199,33 @@ function blockHtml(b: GuideBlock): string {
   }
 }
 
+/**
+ * The "Ansök här" button pair — mirrors GuideCtaButtons in
+ * src/components/daylight/GuideContent.tsx (keep the two in sync).
+ */
+function guideCtaHtml(g: Guide): string {
+  const qvitta = (primary: boolean) =>
+    `<a class="qv-btn${primary ? " qv-btn--accent" : ""}" href="/">${
+      primary
+        ? g.inAppFiling
+          ? "Ansök via Qvitta — vi skickar in åt dig"
+          : "Sök din försenade avgång — ansök direkt"
+        : "Hitta din försening på Qvitta"
+    }</a>`;
+  const official = (primary: boolean) =>
+    g.officialUrl
+      ? `<a class="qv-btn${primary ? " qv-btn--accent" : ""}" href="${esc(g.officialUrl)}" rel="noopener noreferrer">${
+          primary ? esc(`Ansök här — hos ${g.operator}`) : esc(g.officialLabel ?? "Operatörens formulär")
+        }</a>`
+      : "";
+  const pair = g.inAppFiling
+    ? qvitta(true) + official(false)
+    : g.officialUrl
+      ? official(true) + qvitta(false)
+      : qvitta(true);
+  return `<p>${pair}</p>`;
+}
+
 function guideMainHtml(g: Guide): string {
   const crumbs = g.slug
     ? `<nav aria-label="Brödsmulor"><a href="/ersattning">Förseningsersättning</a> / ${esc(g.operator)}</nav>`
@@ -207,18 +238,18 @@ function guideMainHtml(g: Guide): string {
       ? ""
       : `<h2>Vanliga frågor</h2>` +
         g.faq.map((f) => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join("");
-  const official = g.officialUrl
-    ? ` · <a href="${esc(g.officialUrl)}" rel="noopener noreferrer">${esc(g.officialLabel ?? "Operatörens formulär")}</a>`
-    : "";
 
   return (
     crumbs +
     `<h1>${esc(g.h1)}</h1>` +
     `<p>${esc(g.lead)}</p>` +
     `<p class="qv-muted">Uppdaterad ${esc(g.updated)}</p>` +
+    guideCtaHtml(g) +
     g.blocks.map(blockHtml).join("") +
     faq +
-    `<p><a href="/"><strong>Var ditt tåg försenat? Hitta din avgång på Qvitta</strong></a>${official}</p>` +
+    `<h2>Ansök om ersättning</h2>` +
+    `<p>Var ditt tåg försenat? Sök din sträcka så ser du direkt om du har rätt till ersättning.</p>` +
+    guideCtaHtml(g) +
     `<p class="qv-muted">Fler guider: ${linkList}</p>`
   );
 }
@@ -264,16 +295,31 @@ function stationMainHtml(s: StationStat): string {
     ["Största försening", `${minutes(s.max_delay_seconds)} min`],
   ];
 
+  const daysTable =
+    s.days && s.days.length > 0
+      ? `<h2>Senaste dagarna</h2>` +
+        `<table><thead><tr><th>Dag</th><th>Avgångar</th><th>≥ 20 min sena</th><th>Inställda</th><th>Största försening</th></tr></thead>` +
+        `<tbody>${s.days
+          .map(
+            (d) =>
+              `<tr><td>${esc(dayLabel(d.d))}</td><td>${d.dep}</td><td>${d.l20}</td><td>${d.canc}</td><td>${esc(minutes(d.mx))} min</td></tr>`
+          )
+          .join("")}</tbody></table>` +
+        `<h2>Hela perioden</h2>`
+      : "";
+
   return (
     `<nav aria-label="Brödsmulor"><a href="/forseningar">Tågförseningar</a> / ${esc(s.station_name)}</nav>` +
     `<h1>Tågförseningar ${esc(s.station_name)}</h1>` +
     `<p>Under perioden ${esc(period)} avgick ${s.n_departures} tåg från ${esc(s.station_name)}` +
     (operator ? ` (främst ${esc(operator)})` : "") +
     `. ${pctOnTime(s)} % gick i tid, ${s.n_late_20} avgångar var minst 20 minuter försenade och ${s.n_cancelled} ställdes in.</p>` +
+    `<p><a class="qv-btn qv-btn--accent" href="${esc(stationLiveHref(s))}">Se dagens avgångar från ${esc(s.station_name)} — live</a></p>` +
+    daysTable +
     `<table><tbody>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>` +
     `<h2>Försenad från ${esc(s.station_name)}? Så får du ersättning</h2>` +
     `<p>En försening på 20 minuter ger i de flesta fall rätt till 50 % av biljettpriset tillbaka — 100 % vid en timme. ` +
-    `<a href="/"><strong>Sök din avgång på Qvitta</strong></a> så ser du direkt om den ger rätt till ersättning. ` +
+    `<a href="${esc(stationLiveHref(s))}"><strong>Sök din avgång på Qvitta</strong></a> så ser du direkt om den ger rätt till ersättning. ` +
     `Läs mer i <a href="/ersattning">ersättningsguiden</a>` +
     (guideSlug && operator ? ` eller guiden för <a href="/ersattning/${guideSlug}">${esc(operator)}</a>` : "") +
     `.</p>` +
@@ -353,9 +399,9 @@ function homePage(): SeoPage {
     routePath: "/",
     url: `${SITE}/`,
     // Same title/meta as the template — the swap is a no-op, but keeps one code path.
-    metaTitle: "Qvitta — Ersättning för tågförseningar",
+    metaTitle: "Ersättning för försenade tåg — Qvitta",
     metaDescription:
-      "En samlad plats för att ansöka om förseningsersättning – pendlare, nattåg och allt däremellan.",
+      "Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis.",
     jsonld: [],
     mainHtml:
       `<h1>En samlad plats för alla tågförseningar och ersättningsanspråk — gratis</h1>` +

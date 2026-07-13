@@ -33,7 +33,10 @@ OUT_PATH = REPO_ROOT / "src" / "content" / "stationStats.json"
 # later), the union below still yields the widest window available.
 WINDOW_DAYS = 30
 MIN_MEASURED = 50  # departures with a realtime signal — below this the page is too thin
+DAY_ROWS = 7  # per-day rows published per station ("Senaste dagarna" table)
 
+# Day-grain rows; period totals AND the per-day tail are aggregated in Python
+# from this one result set (keeps the agg/int fallback union in one place).
 SQL = f"""
 with base as (
     select station_id, station_name, service_date,
@@ -62,39 +65,33 @@ with base as (
           select distinct service_date from dbt_dev.agg_station_delays_daily
       )
     group by station_id, station_name, service_date
-),
-
-operators as (
-    -- dominant brand label per station, for the page copy
-    select distinct on (station_id)
-           station_id,
-           coalesce(operator, train_owner) as operator_label
-    from dbt_dev.int_stop_events
-    where event_type = 'departure'
-      and coalesce(operator, train_owner) is not null
-      and service_date >= current_date - interval '{WINDOW_DAYS} days'
-    group by station_id, coalesce(operator, train_owner)
-    order by station_id, count(*) desc
 )
 
-select b.station_id,
-       max(b.station_name)                        as station_name,
-       min(b.service_date)::text                  as from_date,
-       max(b.service_date)::text                  as to_date,
-       sum(b.n_departures)::int                   as n_departures,
-       sum(b.n_measured)::int                     as n_measured,
-       sum(b.n_late_5)::int                       as n_late_5,
-       sum(b.n_late_20)::int                      as n_late_20,
-       sum(b.n_cancelled)::int                    as n_cancelled,
-       coalesce(round(sum(b.sum_delay_seconds)::numeric
-                      / nullif(sum(b.n_measured), 0))::int, 0) as avg_delay_seconds,
-       coalesce(max(b.max_delay_seconds), 0)::int as max_delay_seconds,
-       max(o.operator_label)                      as operator_label
-from base b
-left join operators o using (station_id)
-group by b.station_id
-having sum(b.n_measured) >= {MIN_MEASURED}
-order by station_name
+select station_id,
+       max(station_name)                          as station_name,
+       service_date::text                         as service_date,
+       sum(n_departures)::int                     as n_departures,
+       sum(n_measured)::int                       as n_measured,
+       sum(n_late_5)::int                         as n_late_5,
+       sum(n_late_20)::int                        as n_late_20,
+       sum(n_cancelled)::int                      as n_cancelled,
+       coalesce(sum(sum_delay_seconds), 0)::bigint as sum_delay_seconds,
+       coalesce(max(max_delay_seconds), 0)::int   as max_delay_seconds
+from base
+group by station_id, service_date
+order by station_id, service_date
+"""
+
+SQL_OPERATORS = f"""
+select distinct on (station_id)
+       station_id,
+       coalesce(operator, train_owner) as operator_label
+from dbt_dev.int_stop_events
+where event_type = 'departure'
+  and coalesce(operator, train_owner) is not null
+  and service_date >= current_date - interval '{WINDOW_DAYS} days'
+group by station_id, coalesce(operator, train_owner)
+order by station_id, count(*) desc
 """
 
 
@@ -140,9 +137,51 @@ def main() -> None:
         with conn.cursor() as cur:
             cur.execute(SQL)
             cols = [d[0] for d in cur.description]
-            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            day_rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            cur.execute(SQL_OPERATORS)
+            operator_label = {sid: label for sid, label in cur.fetchall()}
     finally:
         conn.close()
+
+    # Aggregate the day-grain rows per station: period totals over the whole
+    # window + the last DAY_ROWS days for the "Senaste dagarna" table.
+    by_station: dict[str, list[dict]] = {}
+    for r in day_rows:
+        by_station.setdefault(r["station_id"], []).append(r)
+
+    rows = []
+    for sid, days in by_station.items():
+        days.sort(key=lambda d: d["service_date"])  # SQL orders too; belt and braces
+        n_measured = sum(d["n_measured"] for d in days)
+        if n_measured < MIN_MEASURED:
+            continue
+        sum_delay = sum(d["sum_delay_seconds"] for d in days)
+        rows.append({
+            "station_id": sid,
+            "station_name": days[-1]["station_name"],
+            "from_date": days[0]["service_date"],
+            "to_date": days[-1]["service_date"],
+            "n_departures": sum(d["n_departures"] for d in days),
+            "n_measured": n_measured,
+            "n_late_5": sum(d["n_late_5"] for d in days),
+            "n_late_20": sum(d["n_late_20"] for d in days),
+            "n_cancelled": sum(d["n_cancelled"] for d in days),
+            "avg_delay_seconds": round(sum_delay / n_measured) if n_measured else 0,
+            "max_delay_seconds": max(d["max_delay_seconds"] for d in days),
+            "operator_label": operator_label.get(sid),
+            # latest day first; compact keys — this array ships in the JS bundle
+            "days": [
+                {
+                    "d": d["service_date"],
+                    "dep": d["n_departures"],
+                    "l20": d["n_late_20"],
+                    "canc": d["n_cancelled"],
+                    "mx": d["max_delay_seconds"],
+                }
+                for d in reversed(days[-DAY_ROWS:])
+            ],
+        })
+    rows.sort(key=lambda r: r["station_name"])
 
     slugs: dict[str, str] = {}
     stations = []
