@@ -3,7 +3,7 @@ import type * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ADMIN_USER_ID } from "@/lib/admin";
-import { ArrowIcon, SearchIcon } from "./icons";
+import { ArrowIcon } from "./icons";
 import { CoverageButton } from "./CoverageModal";
 
 /**
@@ -103,7 +103,7 @@ function AccountMenu({ label, onSignOut }: { label: string; onSignOut: () => voi
   );
 }
 
-export function Hero({ onSearch }: { onSearch: () => void }) {
+export function Hero() {
   return (
     <header className="hero">
       <div className="hero__glow" aria-hidden="true" />
@@ -114,13 +114,9 @@ export function Hero({ onSearch }: { onSearch: () => void }) {
           och ersättningsanspråk – gratis.
         </h1>
         <p className="hero__lead">
-          Sök station, välj avgång, gör anspråk. Enkelt, gratis och direkt.
+          Sök station, välj avgång, gör anspråk. Helt gratis — ingen provision,
+          hela ersättningen går till dig.
         </p>
-        <div className="hero__cta">
-          <button className="btn btn--accent btn--lg" onClick={onSearch}>
-            Sök din resa <SearchIcon width={17} height={17} />
-          </button>
-        </div>
       </div>
     </header>
   );
@@ -136,8 +132,8 @@ export function ValueProps({ onUnknown, onSearch, onHabits }: ValuePropsHandlers
   const items: { h: string; p: string; a: string; on: () => void }[] = [
     { h: "Du vet inte vilket tåg", p: "Du var sen men minns inte avgången. Ange sträcka och tid — vi matchar mot trafikdatan och hittar rätt tåg.", a: "Hitta min avgång", on: onUnknown },
     { h: "Du är osäker på din rätt", p: "Precis under gränsen, eller bara osäker? Vi visar vad våra uppgifter säger och hur nära gränsen du ligger.", a: "Sök din resa", on: onSearch },
-    { h: "Vi håller koll åt dig", p: "Ange dina pendlarvanor så mejlar vi dig så fort tågen du brukar ta är försenade — du missar aldrig en ersättning du kan ha rätt till.", a: "Ställ in pendlarvanor", on: onHabits },
-    { h: "Vi rör aldrig dina pengar", p: "Ersättningen betalas ut direkt från operatören till din valda mottagningsmetod — Swish eller bankkonto. Pengarna passerar aldrig oss.", a: "Så funkar utbetalningen", on: onSearch },
+    { h: "Vi upptäcker förseningarna åt dig", p: "Ange din pendling en gång så bevakar vi den automatiskt och mejlar dig så fort ett tåg du brukar ta ger rätt till ersättning — du behöver aldrig kolla själv.", a: "Ställ in pendlarvanor", on: onHabits },
+    { h: "Gratis — vi rör aldrig dina pengar", p: "Qvitta tar ingen provision och ingen avgift. Ersättningen betalas ut direkt från operatören till dig — Swish eller bankkonto. Pengarna passerar aldrig oss.", a: "Så funkar utbetalningen", on: onSearch },
   ];
   return (
     <section className="vprops" id="how">

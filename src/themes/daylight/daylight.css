@@ -370,6 +370,7 @@
 
 /* "Visa tidigare avgångar" pager */
 .cmt-daylight .board__more{display:flex;justify-content:center;padding:.9rem 0 .1rem;}
+.cmt-daylight .board__more--top{padding:.1rem 0 .7rem;border-bottom:var(--board-bw) solid var(--board-line);margin-bottom:.3rem;}
 
 /* align stations on a fixed column line: origin | arrow | destination.
    A FIXED origin track (not 1fr) keeps the arrow and the destination at the

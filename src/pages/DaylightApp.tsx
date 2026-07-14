@@ -24,6 +24,9 @@ import { usePendingClaimCompletion } from "@/hooks/usePendingClaimCompletion";
 import { InstallBanner } from "@/components/daylight/InstallBanner";
 import { useAppBadge } from "@/hooks/useAppBadge";
 
+/** Route mode reveals departures a dozen at a time, expandable both directions. */
+const ROUTE_PAGE = 12;
+
 /**
  * Merged "Daylight" app page at `/` — the design handoff's single scroll page:
  * Nav → Hero → live network board → value props → Footer, plus the claim and
@@ -41,7 +44,6 @@ export default function DaylightApp() {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const [date, setDate] = useState(today);
-  const [query, setQuery] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [onlyDelayed, setOnlyDelayed] = useState(false);
@@ -56,8 +58,14 @@ export default function DaylightApp() {
     d.setUTCDate(d.getUTCDate() - (onlyClaimable ? 90 : 14));
     return d.toISOString().slice(0, 10);
   }, [onlyClaimable]);
-  const PAGE = 10;
-  const [visibleCount, setVisibleCount] = useState(PAGE);
+  // Station deep-link filter (/?station=X, from the /forseningar SEO pages):
+  // show every train touching one station. Set from the URL param, cleared via
+  // the board chip. There's no visible search box — Från/Till is the on-page
+  // search — so this is driven purely by the deep-link.
+  const [stationQuery, setStationQuery] = useState("");
+  // Windowed views hold a [winStart, winEnd) slice of the day's departures.
+  const [winStart, setWinStart] = useState(0);
+  const [winEnd, setWinEnd] = useState(ROUTE_PAGE);
   const [claim, setClaim] = useState<ClaimInitial | null>(null);
   // Öresundståg: when the user overrides the derived authority to Skånetrafiken (in-app),
   // hand off from RegionalClaimModal to the standard ClaimModal. Reset whenever the claim
@@ -86,22 +94,21 @@ export default function DaylightApp() {
   const stationName = (id: string) =>
     stationOptions.find((s) => s.id === id)?.name ?? id;
 
-  // The free-text box resolves to the station ids whose name matches the query,
-  // so "Malmö" pulls every train touching a Malmö station (origin OR dest),
-  // not a substring filter of the network sample. Capped so a 1-char query
-  // doesn't build a giant id list.
+  // The station deep-link resolves the station name to the ids whose name
+  // matches (origin OR dest), capped so a stray short value can't build a giant
+  // id list.
   const matchedStationIds = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = stationQuery.trim().toLowerCase();
     if (q.length < 2) return [];
     return stationOptions
       .filter((s) => s.name.toLowerCase().includes(q))
       .slice(0, 25)
       .map((s) => s.id);
-  }, [query, stationOptions]);
+  }, [stationQuery, stationOptions]);
 
-  // Three mutually-exclusive board sources, in priority order:
+  // Three board sources, in priority order:
   //   1. routeMode    — an exact O-D pair is selected (anyone, incl. logged out)
-  //   2. stationMode  — the search box resolved to one or more stations
+  //   2. stationMode  — a /?station= deep-link resolved to one or more stations
   //   3. network      — the representative tier sample (default)
   const routeMode = Boolean(from && to);
   const stationMode = !routeMode && matchedStationIds.length > 0;
@@ -119,22 +126,10 @@ export default function DaylightApp() {
   const allRows = routeMode ? route.data ?? [] : stationMode ? station.data ?? [] : network.data ?? [];
   const isLoading = routeMode ? route.isLoading : stationMode ? station.isLoading : network.isLoading;
 
-  // Full filtered set (before pagination): text filter for the network sample,
-  // then the delayed/cancelled checkboxes, then station-search ordering.
+  // Full filtered set (before windowing): the delayed / cancelled / claimable
+  // checkboxes. Chronological order (earliest first) is preserved from the query.
   const filteredRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
     let r = allRows;
-
-    // routeMode / stationMode already queried narrowly; only the network sample
-    // needs the client-side text filter (station names only, so a line's
-    // terminus string can't surface unrelated rows).
-    if (!routeMode && !stationMode && q) {
-      r = r.filter(
-        (d) =>
-          (d.origin_stop_name ?? "").toLowerCase().includes(q) ||
-          (d.destination_stop_name ?? "").toLowerCase().includes(q)
-      );
-    }
 
     if (onlyDelayed || onlyCancelled) {
       r = r.filter((d) => {
@@ -148,21 +143,29 @@ export default function DaylightApp() {
       r = r.filter((d) => statusMeta(d.destination_delay_minutes, Boolean(d.canceled), d.route_distance_km).eligible);
     }
 
-    // All modes stay in chronological order (earliest at top, later further
-    // down — the station query already orders ascending). Station search is
-    // paged: the first 10 show, then "Visa fler avgångar" reveals later ones.
     return r;
-  }, [allRows, query, routeMode, stationMode, onlyDelayed, onlyCancelled, onlyClaimable]);
+  }, [allRows, onlyDelayed, onlyCancelled, onlyClaimable]);
 
-  // Paginate only the station search; everything else shows its full (small) set.
-  const paginated = stationMode;
-  const rows = paginated ? filteredRows.slice(0, visibleCount) : filteredRows;
-  const hasMore = paginated && filteredRows.length > visibleCount;
-
-  // Reset the page size whenever the query that produced the list changes.
+  // Route + station views window a dozen departures anchored on the first one
+  // within the last hour (so a live board opens near "now", not at 00:00). A
+  // past day — nothing after the cutoff — opens on its tail instead. "Visa
+  // tidigare" / "Visa senare" widen the window in each direction. Re-anchors
+  // whenever the list changes (new route/station, date, or filters).
+  const windowed = routeMode || stationMode;
   useEffect(() => {
-    setVisibleCount(PAGE);
-  }, [query, date, from, to, onlyDelayed, onlyCancelled, onlyClaimable]);
+    if (!windowed) return;
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    let anchor = filteredRows.findIndex(
+      (d) => d.origin_scheduled && new Date(d.origin_scheduled).getTime() >= cutoff
+    );
+    if (anchor < 0) anchor = Math.max(0, filteredRows.length - ROUTE_PAGE);
+    setWinStart(anchor);
+    setWinEnd(anchor + ROUTE_PAGE);
+  }, [windowed, filteredRows]);
+
+  const rows = windowed ? filteredRows.slice(winStart, winEnd) : filteredRows;
+  const hasEarlier = windowed && winStart > 0;
+  const hasLater = windowed && winEnd < filteredRows.length;
 
   // Station deep-link (/?station=Göteborg+C#board, used by the /forseningar
   // pages' "Se dagens avgångar — live" buttons): seed the search box with the
@@ -171,7 +174,7 @@ export default function DaylightApp() {
   useEffect(() => {
     const station = searchParams.get("station");
     if (!station) return;
-    setQuery(station);
+    setStationQuery(station);
     boardRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
     const next = new URLSearchParams(searchParams);
     next.delete("station");
@@ -315,7 +318,7 @@ export default function DaylightApp() {
         onLogin={() => setClaim({ blank: true, loginOnly: true })}
       />
       <main>
-        <Hero onSearch={focusSearch} />
+        <Hero />
         <div className="wrap">
           <InstallBanner />
         </div>
@@ -323,8 +326,6 @@ export default function DaylightApp() {
           ref={boardRef}
           rows={rows}
           loading={isLoading}
-          query={query}
-          setQuery={setQuery}
           date={date}
           setDate={setDate}
           minDate={minDate}
@@ -334,14 +335,18 @@ export default function DaylightApp() {
           setFrom={setFrom}
           setTo={setTo}
           stationOptions={stationOptions}
+          stationLabel={stationMode ? stationQuery : null}
+          onClearStation={() => setStationQuery("")}
           onlyDelayed={onlyDelayed}
           onlyCancelled={onlyCancelled}
           onlyClaimable={onlyClaimable}
           setOnlyDelayed={setOnlyDelayed}
           setOnlyCancelled={setOnlyCancelled}
           setOnlyClaimable={setOnlyClaimable}
-          hasMore={hasMore}
-          onShowMore={() => setVisibleCount((c) => c + PAGE)}
+          hasEarlier={hasEarlier}
+          hasMore={hasLater}
+          onShowEarlier={() => setWinStart((s) => Math.max(0, s - ROUTE_PAGE))}
+          onShowMore={() => setWinEnd((e) => Math.min(filteredRows.length, e + ROUTE_PAGE))}
           onClaim={(d) => setClaim(d)}
           onInfo={(d) => setInfo(d)}
           onWatch={(d) => (user ? setWatch(d) : setClaim({ blank: true, loginOnly: true }))}

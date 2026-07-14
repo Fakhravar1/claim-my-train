@@ -2,7 +2,7 @@ import { forwardRef, useMemo } from "react";
 import type { Journey } from "@/hooks/useJourneys";
 import { statusMeta } from "@/lib/daylightStatus";
 import { resolveOperatorFromJourney, purchasingOperatorLabel } from "@/lib/claimProfileValidation";
-import { ArrowIcon, BellIcon, CloseIcon, SearchIcon } from "./icons";
+import { ArrowIcon, BellIcon } from "./icons";
 import { StationField } from "./StationField";
 
 /** HH:MM in Stockholm local time from an ISO timestamp. */
@@ -86,8 +86,6 @@ export type StationOption = { id: string; name: string };
 type BoardProps = {
   rows: Journey[];
   loading: boolean;
-  query: string;
-  setQuery: (q: string) => void;
   date: string;
   setDate: (d: string) => void;
   maxDate: string;
@@ -97,6 +95,9 @@ type BoardProps = {
   setFrom: (id: string) => void;
   setTo: (id: string) => void;
   stationOptions: StationOption[];
+  /** Station deep-link filter — when set, the board is scoped to one station. */
+  stationLabel?: string | null;
+  onClearStation?: () => void;
   /** Filter checkboxes (delayed / cancelled / claimable). */
   onlyDelayed: boolean;
   onlyCancelled: boolean;
@@ -104,8 +105,10 @@ type BoardProps = {
   setOnlyDelayed: (v: boolean) => void;
   setOnlyCancelled: (v: boolean) => void;
   setOnlyClaimable: (v: boolean) => void;
-  /** Pagination — station search reveals rows in batches of 10. */
+  /** Route-mode window expanders — reveal a dozen earlier / later departures. */
+  hasEarlier: boolean;
   hasMore: boolean;
+  onShowEarlier: () => void;
   onShowMore: () => void;
   onClaim: (j: Journey) => void;
   onInfo: (j: Journey) => void;
@@ -118,8 +121,6 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
   {
     rows,
     loading,
-    query,
-    setQuery,
     date,
     setDate,
     maxDate,
@@ -129,13 +130,17 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
     setFrom,
     setTo,
     stationOptions,
+    stationLabel,
+    onClearStation,
     onlyDelayed,
     onlyCancelled,
     onlyClaimable,
     setOnlyDelayed,
     setOnlyCancelled,
     setOnlyClaimable,
+    hasEarlier,
     hasMore,
+    onShowEarlier,
     onShowMore,
     onClaim,
     onInfo,
@@ -158,26 +163,21 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
               <span className="live"><span className="live__dot" />LIVE</span>
               <span className="board__h">Förseningar i nätet</span>
             </div>
-            <div className="search">
-              <SearchIcon width={16} height={16} className="search__icon" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Sök station – t.ex. Lund C, Ystad, Helsingborg…"
-                aria-label="Sök station"
-              />
-              {query && (
-                <button className="search__clear" onClick={() => setQuery("")} aria-label="Rensa">
-                  <CloseIcon width={14} height={14} />
-                </button>
-              )}
-            </div>
           </div>
 
-          <p className="board__cap">
-            <b>Sök station</b> visar alla tåg som rör en station. Vill du se en specifik avgång?
-            Välj <b>från</b> och <b>till</b> nedan.
-          </p>
+          {stationLabel ? (
+            <p className="board__cap board__cap--station">
+              Visar avgångar som rör <b>{stationLabel}</b>.{" "}
+              <button type="button" className="linkbtn" onClick={onClearStation}>
+                Visa hela nätet
+              </button>
+            </p>
+          ) : (
+            <p className="board__cap">
+              Välj <b>från</b> och <b>till</b> för att se en specifik sträcka — börja skriva
+              stationsnamnet så söker vi direkt.
+            </p>
+          )}
 
           <div className="board__controls">
             <StationField label="Från" value={from} onChange={setFrom} options={stationOptions} />
@@ -216,20 +216,21 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
           </div>
 
           <div className="board__sub">
-            <span>
-              {rows.length} avgångar{query ? " · filtrerat på “" + query + "”" : ""}
-            </span>
+            <span>{rows.length} avgångar</span>
             <span className="board__elig">{elig} kan ge ersättning</span>
           </div>
 
+          {!loading && hasEarlier && (
+            <div className="board__more board__more--top">
+              <button className="btn btn--quiet btn--sm" onClick={onShowEarlier}>
+                Visa tidigare avgångar
+              </button>
+            </div>
+          )}
+
           <div className="rows">
             {loading && <div className="empty">Hämtar avgångar…</div>}
-            {!loading && rows.length === 0 && query && (
-              <div className="empty">
-                Inga avgångar matchar <b>{query}</b>. Prova ett annat stationsnamn.
-              </div>
-            )}
-            {!loading && rows.length === 0 && !query && (
+            {!loading && rows.length === 0 && (
               <div className="empty">Inga avgångar att visa för {date}.</div>
             )}
             {!loading && rows.map((d) => (
@@ -240,7 +241,7 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
           {!loading && hasMore && (
             <div className="board__more">
               <button className="btn btn--quiet btn--sm" onClick={onShowMore}>
-                Visa fler avgångar
+                Visa senare avgångar
               </button>
             </div>
           )}
