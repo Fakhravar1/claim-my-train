@@ -63,15 +63,18 @@ export const stationLiveHref = (s: StationStat) =>
 /* Display helpers                                                     */
 /* ------------------------------------------------------------------ */
 
+/* Structural param types so the same helpers serve StationStat AND the
+   operator stats (src/content/operatorStats.ts) — same math, same fields. */
+
 /** Share (%) of measured departures less than 5 min late — "i tid". */
-export const pctOnTime = (s: StationStat): number =>
+export const pctOnTime = (s: { n_measured: number; n_late_5: number }): number =>
   s.n_measured > 0 ? Math.round(((s.n_measured - s.n_late_5) / s.n_measured) * 100) : 0;
 
-export const pctLate5 = (s: StationStat): number =>
+export const pctLate5 = (s: { n_measured: number; n_late_5: number }): number =>
   s.n_measured > 0 ? Math.round((s.n_late_5 / s.n_measured) * 100) : 0;
 
 /** One decimal, Swedish comma. */
-export const pctLate20 = (s: StationStat): string =>
+export const pctLate20 = (s: { n_measured: number; n_late_20: number }): string =>
   s.n_measured > 0 ? ((s.n_late_20 / s.n_measured) * 100).toFixed(1).replace(".", ",") : "0";
 
 export const minutes = (seconds: number): string =>
@@ -88,7 +91,7 @@ export function dayLabel(iso: string): string {
 }
 
 /** Swedish date range "3–7 juli 2026" (falls back to ISO on odd input). */
-export function periodLabel(s: StationStat): string {
+export function periodLabel(s: { from_date: string; to_date: string }): string {
   const MONTHS = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
   const f = new Date(`${s.from_date}T00:00:00`);
   const t = new Date(`${s.to_date}T00:00:00`);

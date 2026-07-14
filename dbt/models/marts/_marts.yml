@@ -113,6 +113,28 @@ models:
                 - operator
                 - service_date
 
+  - name: agg_operator_delays_daily
+    description: >
+        Per-operator-label daily TRAIN-delay aggregate (NOT a claim model). One row per
+        (operator_label, service_date); a train's label is the mode() of
+        coalesce(operator, train_owner) across its stop events, its delay the max over
+        measured stops. Labels stay raw (the brand merge lives in
+        src/content/operatorStats.ts). Accumulates past the ~5 d int prune (§13 pattern,
+        400 d cap) — powers the /forseningar/tag/<operator> SEO pages via
+        scripts/refresh_station_stats.py. NEVER --full-refresh expecting long history back.
+    columns:
+        - name: operator_day_key
+          description: Surrogate key; hash of (operator_label, service_date).
+          data_tests:
+            - not_null
+            - unique
+    data_tests:
+        - dbt_utils.unique_combination_of_columns:
+            arguments:
+              combination_of_columns:
+                - operator_label
+                - service_date
+
   - name: agg_station_delays_daily
     description: >
         Per-station daily departure-delay aggregate (NOT a claim model). One row per

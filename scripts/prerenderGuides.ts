@@ -45,6 +45,15 @@ import {
   operatorDisplay,
   operatorGuideSlug,
 } from "../src/content/stationStats";
+import {
+  OPERATORS,
+  OPERATORS_WORST_FIRST,
+  OPERATOR_STATS_GENERATED,
+  type OperatorStat,
+  operatorBySlug,
+  operatorPath,
+  operatorUrl,
+} from "../src/content/operatorStats";
 import { FAQ_ITEMS, faqPageJsonLd } from "../src/content/faq";
 
 const esc = (s: string) =>
@@ -245,6 +254,9 @@ function guideMainHtml(g: Guide): string {
     `<p>${esc(g.lead)}</p>` +
     `<p class="qv-muted">Uppdaterad ${esc(g.updated)}</p>` +
     guideCtaHtml(g) +
+    (operatorBySlug(g.slug)
+      ? `<p><a href="/forseningar/tag/${g.slug}">Hur försenade är ${esc(g.operator)}s tåg just nu? Se statistiken →</a></p>`
+      : "") +
     g.blocks.map(blockHtml).join("") +
     faq +
     `<h2>Ansök om ersättning</h2>` +
@@ -338,6 +350,85 @@ const stationPage = (s: StationStat): SeoPage => ({
   mainHtml: stationMainHtml(s),
 });
 
+/* ------------------------------------------------------------------ */
+/* /forseningar/tag/<operator> pages                                    */
+/* ------------------------------------------------------------------ */
+
+function operatorBreadcrumbJsonLd(o: OperatorStat): object {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Qvitta", item: `${SITE}/` },
+      { "@type": "ListItem", position: 2, name: "Tågförseningar", item: `${SITE}/forseningar` },
+      { "@type": "ListItem", position: 3, name: o.name, item: operatorUrl(o) },
+    ],
+  };
+}
+
+function operatorMainHtml(o: OperatorStat): string {
+  const period = periodLabel(o);
+  const worstStations = STATIONS.filter((s) => operatorGuideSlug(s) === o.slug)
+    .sort((a, b) => b.n_late_20 - a.n_late_20)
+    .slice(0, 8);
+  const others = OPERATORS_WORST_FIRST.filter((x) => x.slug !== o.slug).slice(0, 8);
+
+  const rows: [string, string][] = [
+    ["Tåg under perioden", String(o.n_trains)],
+    ["I tid (aldrig mer än 5 min sena)", `${pctOnTime(o)} %`],
+    ["Försenade ≥ 5 minuter", `${o.n_late_5} (${pctLate5(o)} %)`],
+    ["Försenade ≥ 20 minuter (kan ge ersättning)", `${o.n_late_20} (${pctLate20(o)} %)`],
+    ["Inställda tåg", String(o.n_cancelled)],
+    ["Genomsnittlig försening per uppmätt tåg", `${minutes(o.avg_delay_seconds)} min`],
+    ["Största försening", `${minutes(o.max_delay_seconds)} min`],
+  ];
+
+  const daysTable =
+    o.days.length > 0
+      ? `<h2>Senaste dagarna</h2>` +
+        `<table><thead><tr><th>Dag</th><th>Tåg</th><th>≥ 20 min sena</th><th>Inställda</th><th>Största försening</th></tr></thead>` +
+        `<tbody>${o.days
+          .map(
+            (d) =>
+              `<tr><td>${esc(dayLabel(d.d))}</td><td>${d.tr}</td><td>${d.l20}</td><td>${d.canc}</td><td>${esc(minutes(d.mx))} min</td></tr>`
+          )
+          .join("")}</tbody></table>` +
+        `<h2>Hela perioden</h2>`
+      : "";
+
+  return (
+    `<nav aria-label="Brödsmulor"><a href="/forseningar">Tågförseningar</a> / ${esc(o.name)}</nav>` +
+    `<h1>${esc(o.name)} förseningar — så sena är tågen</h1>` +
+    `<p>Under perioden ${esc(period)} körde ${esc(o.name)} ${o.n_trains} tåg i vår mätning. ` +
+    `${pctOnTime(o)} % gick i tid hela vägen, ${o.n_late_20} tåg var minst 20 minuter försenade ` +
+    `någonstans längs rutten och ${o.n_cancelled} ställdes in.</p>` +
+    `<p><a class="qv-btn qv-btn--accent" href="/#board">Se dagens avgångar live</a></p>` +
+    daysTable +
+    `<table><tbody>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>` +
+    `<h2>Försenad med ${esc(o.name)}? Så får du ersättning</h2>` +
+    `<p>En försening på 20 minuter ger i de flesta fall rätt till 50 % av biljettpriset tillbaka — 100 % vid en timme. ` +
+    `<a href="/#board"><strong>Sök din avgång på Qvitta</strong></a> så ser du direkt om den ger rätt till ersättning. ` +
+    `Helt gratis — ingen provision, hela ersättningen går till dig. ` +
+    `Läs mer i <a href="/ersattning/${o.slug}">guiden för ersättning hos ${esc(o.name)}</a>.</p>` +
+    (worstStations.length > 0
+      ? `<h2>Mest försenade stationerna där ${esc(o.name)} dominerar</h2>` +
+        `<p>${worstStations.map((s) => `<a href="${stationPath(s)}">${esc(s.station_name)}</a>`).join(" · ")}</p>`
+      : "") +
+    `<h2>Fler tågbolag</h2>` +
+    `<p>${others.map((x) => `<a href="${operatorPath(x)}">${esc(x.name)}</a>`).join(" · ")} · <a href="/forseningar">Alla stationer</a></p>` +
+    `<p class="qv-muted">Statistiken bygger på Trafikverkets realtidsdata. Ett tåg räknas som försenat om det var minst 5 (respektive 20) minuter sent vid någon uppmätt station längs rutten, och räknas till det bolag som Trafikverket märkt tåget med — märkningen kan skifta där bolag delar spår. Period: ${esc(period)}.</p>`
+  );
+}
+
+const operatorPage = (o: OperatorStat): SeoPage => ({
+  routePath: operatorPath(o),
+  url: operatorUrl(o),
+  metaTitle: `${o.name} förseningar — statistik & ersättning | Qvitta`,
+  metaDescription: `Hur försenade är ${o.name}s tåg? ${periodLabel(o)}: ${o.n_late_20} av ${o.n_measured} uppmätta tåg var minst 20 minuter sena och ${o.n_cancelled} ställdes in. Se statistiken och ansök om ersättning gratis.`,
+  jsonld: [operatorBreadcrumbJsonLd(o)],
+  mainHtml: operatorMainHtml(o),
+});
+
 function stationIndexPage(): SeoPage {
   const period = STATIONS[0] ? periodLabel(STATIONS[0]) : "";
   const rows = STATIONS_WORST_FIRST.map(
@@ -358,6 +449,10 @@ function stationIndexPage(): SeoPage {
       `Här ser du hur ofta tågen faktiskt är sena från din station — och en försening på 20 minuter ger ofta ` +
       `<a href="/ersattning">rätt till ersättning</a>.</p>` +
       `<p class="qv-muted">Period: ${esc(period)}. Sorterat efter antal ersättningsgrundande förseningar (≥ 20 min).</p>` +
+      (OPERATORS_WORST_FIRST.length > 0
+        ? `<h2>Förseningar per tågbolag</h2>` +
+          `<p>${OPERATORS_WORST_FIRST.map((o) => `<a href="${operatorPath(o)}">${esc(o.name)}</a>`).join(" · ")}</p>`
+        : "") +
       `<table><thead><tr><th>Station</th><th>Avgångar</th><th>≥ 20 min sena</th><th>Andel ≥ 20 min</th><th>Inställda</th></tr></thead>` +
       `<tbody>${rows}</tbody></table>`,
   };
@@ -435,6 +530,7 @@ function sitemapXml(): string {
     { loc: `${SITE}/ersattning`, changefreq: "monthly", priority: "0.9", lastmod: pillarLastmod },
     ...GUIDES.map((g) => ({ loc: guideUrl(g.slug), changefreq: "monthly", priority: "0.8", lastmod: g.updated })),
     { loc: `${SITE}/forseningar`, changefreq: "daily", priority: "0.8", lastmod: STATION_STATS_GENERATED },
+    ...OPERATORS.map((o) => ({ loc: operatorUrl(o), changefreq: "weekly", priority: "0.7", lastmod: OPERATOR_STATS_GENERATED })),
     ...STATIONS.map((s) => ({ loc: stationUrl(s), changefreq: "weekly", priority: "0.6", lastmod: STATION_STATS_GENERATED })),
     { loc: `${SITE}/faq`, changefreq: "monthly", priority: "0.7" },
     { loc: `${SITE}/genvag`, changefreq: "monthly", priority: "0.6" },
@@ -469,6 +565,7 @@ export function prerenderSeoPages(distDir: string): void {
   const pages: SeoPage[] = [
     ...ALL_GUIDE_PAGES.map(guidePage),
     stationIndexPage(),
+    ...OPERATORS.map(operatorPage),
     ...STATIONS.map(stationPage),
     faqPage(),
   ];
@@ -488,6 +585,6 @@ export function prerenderSeoPages(distDir: string): void {
 
   // eslint-disable-next-line no-console
   console.log(
-    `prerenderGuides: wrote ${pages.length} static pages (${ALL_GUIDE_PAGES.length} guides, ${STATIONS.length + 1} station pages) + sitemap.xml`
+    `prerenderGuides: wrote ${pages.length} static pages (${ALL_GUIDE_PAGES.length} guides, ${OPERATORS.length} operator pages, ${STATIONS.length + 1} station pages) + sitemap.xml`
   );
 }

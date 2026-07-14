@@ -1,18 +1,25 @@
-"""Regenerate src/content/stationStats.json — the build-time data snapshot
-behind the /forseningar station pages.
+"""Regenerate src/content/stationStats.json AND src/content/operatorStats.json
+— the build-time data snapshots behind the /forseningar station pages and the
+/forseningar/tag/<operator> pages.
 
 Reads the Supabase connection from the local dbt profile (~/.dbt/profiles.yml,
 same session-pooler creds dbt uses) and aggregates departure delays per station
-from dbt_dev.agg_station_delays_daily (falling back to int_stop_events while
-the agg is still empty/new). Stations with fewer than MIN_MEASURED measured
-departures in the window are dropped so we never publish thin pages.
+from dbt_dev.agg_station_delays_daily plus per-train delays per operator label
+from dbt_dev.agg_operator_delays_daily (each falling back to int_stop_events
+for days the agg doesn't hold yet). Stations with fewer than MIN_MEASURED
+measured departures in the window are dropped so we never publish thin pages.
+
+The operator snapshot stays at RAW-label day grain ('Ö-TÅG', 'SKANE',
+'Mälardalstrafik AB', ...): the brand merge (which labels are one operator,
+and which get a page) lives in src/content/operatorStats.ts next to the
+display mapping it must agree with.
 
 Run from the repo root with the dbt venv's python:
 
     dbt\\.venv\\Scripts\\python.exe scripts\\refresh_station_stats.py
 
 Then rebuild + commit the JSON. The prerender step (scripts/prerenderGuides.ts)
-turns each row into a static /forseningar/<slug> page at build time.
+turns each row into a static page at build time.
 """
 from __future__ import annotations
 
@@ -27,6 +34,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT_PATH = REPO_ROOT / "src" / "content" / "stationStats.json"
+OUT_PATH_OPERATORS = REPO_ROOT / "src" / "content" / "operatorStats.json"
 
 # Prefer the accumulating agg (grows past the int prune); cap the window at 30
 # full days. While the agg holds fewer days than int_stop_events (it was added
@@ -80,6 +88,61 @@ select station_id,
 from base
 group by station_id, service_date
 order by station_id, service_date
+"""
+
+# Operator day-grain rows for operatorStats.json. Same agg-plus-int-fallback
+# union as SQL above, but at (raw operator label, service_date) TRAIN grain —
+# the fallback replicates agg_operator_delays_daily's logic: a train's label is
+# the mode() of coalesce(operator, train_owner) over its stop events, its delay
+# the max over measured stops.
+SQL_OPERATOR_DAYS = f"""
+with base as (
+    select operator_label, service_date,
+           n_trains, n_measured, n_late_5, n_late_20, n_cancelled,
+           sum_delay_seconds, max_delay_seconds
+    from dbt_dev.agg_operator_delays_daily
+    where service_date >= current_date - interval '{WINDOW_DAYS} days'
+      and service_date < current_date
+
+    union all
+
+    select t.operator_label, t.service_date,
+           count(*),
+           count(*) filter (where t.is_measured),
+           count(*) filter (where t.max_delay_seconds >= 300),
+           count(*) filter (where t.max_delay_seconds >= 1200),
+           count(*) filter (where t.canceled),
+           sum(greatest(t.max_delay_seconds, 0)) filter (where t.is_measured),
+           max(t.max_delay_seconds)
+    from (
+        select service_number, service_date,
+               mode() within group (order by coalesce(operator, train_owner)) as operator_label,
+               max(delay_seconds)                 as max_delay_seconds,
+               count(delay_seconds) > 0           as is_measured,
+               bool_or(coalesce(canceled, false)) as canceled
+        from dbt_dev.int_stop_events
+        where service_date >= current_date - interval '{WINDOW_DAYS} days'
+          and service_date < current_date
+          and service_date not in (
+              select distinct service_date from dbt_dev.agg_operator_delays_daily
+          )
+        group by service_number, service_date
+    ) t
+    where t.operator_label is not null
+    group by t.operator_label, t.service_date
+)
+
+select operator_label,
+       service_date::text                          as service_date,
+       n_trains::int                               as n_trains,
+       n_measured::int                             as n_measured,
+       n_late_5::int                               as n_late_5,
+       n_late_20::int                              as n_late_20,
+       n_cancelled::int                            as n_cancelled,
+       coalesce(sum_delay_seconds, 0)::bigint      as sum_delay_seconds,
+       coalesce(max_delay_seconds, 0)::int         as max_delay_seconds
+from base
+order by operator_label, service_date
 """
 
 SQL_OPERATORS = f"""
@@ -140,6 +203,9 @@ def main() -> None:
             day_rows = [dict(zip(cols, r)) for r in cur.fetchall()]
             cur.execute(SQL_OPERATORS)
             operator_label = {sid: label for sid, label in cur.fetchall()}
+            cur.execute(SQL_OPERATOR_DAYS)
+            op_cols = [d[0] for d in cur.description]
+            operator_days = [dict(zip(op_cols, r)) for r in cur.fetchall()]
     finally:
         conn.close()
 
@@ -197,9 +263,32 @@ def main() -> None:
         "stations": stations,
     }
     OUT_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    # Operator snapshot: raw-label day grain, compact keys (ships in the JS
+    # bundle); brand merge + page selection happen in src/content/operatorStats.ts.
+    op_payload = {
+        "generated": date.today().isoformat(),
+        "rows": [
+            {
+                "label": r["operator_label"],
+                "d": r["service_date"],
+                "tr": r["n_trains"],
+                "ms": r["n_measured"],
+                "l5": r["n_late_5"],
+                "l20": r["n_late_20"],
+                "canc": r["n_cancelled"],
+                "sd": r["sum_delay_seconds"],
+                "mx": r["max_delay_seconds"],
+            }
+            for r in operator_days
+        ],
+    }
+    OUT_PATH_OPERATORS.write_text(json.dumps(op_payload, ensure_ascii=False, indent=1), encoding="utf-8")
+
     # ASCII-only: the Windows console is cp1252 and chokes on em-dash/arrow
     print(f"wrote {OUT_PATH}: {len(stations)} stations, window "
           f"{min(s['from_date'] for s in stations)} to {max(s['to_date'] for s in stations)}")
+    print(f"wrote {OUT_PATH_OPERATORS}: {len(op_payload['rows'])} operator-day rows")
 
 
 if __name__ == "__main__":

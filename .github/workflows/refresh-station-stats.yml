@@ -53,14 +53,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet src/content/stationStats.json; then
-            echo "stationStats.json unchanged — nothing to publish."
+          if git diff --quiet src/content/stationStats.json src/content/operatorStats.json; then
+            echo "stationStats.json + operatorStats.json unchanged — nothing to publish."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/content/stationStats.json
-          git commit -m "Refresh station delay stats snapshot (daily cron)"
+          git add src/content/stationStats.json src/content/operatorStats.json
+          git commit -m "Refresh station + operator delay stats snapshot (daily cron)"
           git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 

@@ -4,6 +4,7 @@ import { useDaylightStyles } from "@/hooks/useDaylightStyles";
 import { Nav, Footer } from "@/components/daylight/shell";
 import { GUIDES, faqJsonLd, articleJsonLd, breadcrumbJsonLd, guideUrl } from "@/content/ersattningGuides";
 import { GuideBlocks, GuideFaqList, GuideLinkList, GuideCta, GuideCtaButtons } from "@/components/daylight/GuideContent";
+import { operatorBySlug, operatorPath } from "@/content/operatorStats";
 
 /**
  * /ersattning/:slug — per-operator förseningsersättning guide (SJ, SL,
@@ -16,6 +17,10 @@ export default function ErsattningGuide() {
   const g = GUIDES.find((guide) => guide.slug === slug);
 
   if (!g) return <Navigate to="/ersattning" replace />;
+
+  // Stats cross-link: only when the operator has a /forseningar/tag page
+  // (mirrors the prerendered link in scripts/prerenderGuides.ts guideMainHtml).
+  const stats = operatorBySlug(g.slug);
 
   return (
     <div className="cmt-daylight">
@@ -51,6 +56,13 @@ export default function ErsattningGuide() {
 
         <div style={{ margin: "0 0 2rem" }}>
           <GuideCtaButtons guide={g} />
+          {stats && (
+            <p style={{ margin: ".9rem 0 0", fontSize: ".95rem" }}>
+              <Link to={operatorPath(stats)} style={{ color: "var(--accent)" }}>
+                Hur försenade är {g.operator}s tåg just nu? Se statistiken →
+              </Link>
+            </p>
+          )}
         </div>
 
         <GuideBlocks blocks={g.blocks} />

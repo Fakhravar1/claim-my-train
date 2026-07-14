@@ -9,6 +9,7 @@ import {
   pctLate20,
   periodLabel,
 } from "@/content/stationStats";
+import { OPERATORS_WORST_FIRST, operatorPath } from "@/content/operatorStats";
 
 /**
  * /forseningar — station-statistics hub. Lists every station with enough
@@ -45,6 +46,21 @@ export default function Forseningar() {
         <p style={{ margin: "0 0 1.8rem", fontSize: ".85rem", color: "var(--muted)" }}>
           Period: {period}. Stationerna är sorterade efter antal ersättningsgrundande förseningar (≥ 20 min).
         </p>
+
+        {OPERATORS_WORST_FIRST.length > 0 && (
+          <>
+            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, margin: "0 0 .6rem" }}>
+              Förseningar per tågbolag
+            </h2>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: ".5rem", marginBottom: "1.8rem" }}>
+              {OPERATORS_WORST_FIRST.map((o) => (
+                <Link key={o.slug} to={operatorPath(o)} className="btn" style={{ fontSize: ".92rem" }}>
+                  {o.name}
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
 
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", background: "var(--card-bg)", fontSize: ".93rem" }}>

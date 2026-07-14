@@ -22,6 +22,7 @@ const Ersattning = lazy(() => import("./pages/Ersattning"));
 const ErsattningGuide = lazy(() => import("./pages/ErsattningGuide"));
 const Forseningar = lazy(() => import("./pages/Forseningar"));
 const ForseningarStation = lazy(() => import("./pages/ForseningarStation"));
+const ForseningarOperator = lazy(() => import("./pages/ForseningarOperator"));
 
 // The region pages (/regions/skanetrafiken/*) were retired — their function
 // moved onto `/` and `/claim-review`. This preserves links in digest emails
@@ -58,6 +59,8 @@ const App = () => (
               <Route path="/ersattning" element={<Ersattning />} />
               <Route path="/ersattning/:slug" element={<ErsattningGuide />} />
               <Route path="/forseningar" element={<Forseningar />} />
+              {/* Static "tag" segment outranks the :slug station route in v6 matching. */}
+              <Route path="/forseningar/tag/:slug" element={<ForseningarOperator />} />
               <Route path="/forseningar/:slug" element={<ForseningarStation />} />
               <Route path="/settings" element={<Settings />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
