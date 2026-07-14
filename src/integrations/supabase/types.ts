@@ -245,6 +245,21 @@ export type Database = {
         }
         Relationships: []
       }
+      investigator_fire_state: {
+        Row: {
+          fire_key: string
+          last_fired_at: string
+        }
+        Insert: {
+          fire_key: string
+          last_fired_at: string
+        }
+        Update: {
+          fire_key?: string
+          last_fired_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_number: string | null
@@ -514,6 +529,7 @@ export type Database = {
           advertised_train_ident: string | null
           canceled: boolean | null
           deleted: boolean | null
+          deviation: string[] | null
           estimated_time: string | null
           from_location: string | null
           information_owner: string | null
@@ -521,6 +537,7 @@ export type Database = {
           location_signature: string
           modified_time: string | null
           operator: string | null
+          planned_estimated_time: string | null
           raw: Json | null
           scheduled_time: string | null
           to_location: string | null
@@ -535,6 +552,7 @@ export type Database = {
           advertised_train_ident?: string | null
           canceled?: boolean | null
           deleted?: boolean | null
+          deviation?: string[] | null
           estimated_time?: string | null
           from_location?: string | null
           information_owner?: string | null
@@ -542,6 +560,7 @@ export type Database = {
           location_signature: string
           modified_time?: string | null
           operator?: string | null
+          planned_estimated_time?: string | null
           raw?: Json | null
           scheduled_time?: string | null
           to_location?: string | null
@@ -556,6 +575,7 @@ export type Database = {
           advertised_train_ident?: string | null
           canceled?: boolean | null
           deleted?: boolean | null
+          deviation?: string[] | null
           estimated_time?: string | null
           from_location?: string | null
           information_owner?: string | null
@@ -563,6 +583,7 @@ export type Database = {
           location_signature?: string
           modified_time?: string | null
           operator?: string | null
+          planned_estimated_time?: string | null
           raw?: Json | null
           scheduled_time?: string | null
           to_location?: string | null
@@ -614,6 +635,51 @@ export type Database = {
         }
         Relationships: []
       }
+      tmp_planned_announcements_spike: {
+        Row: {
+          activity_id: string
+          activity_type: string | null
+          advertised_train_ident: string | null
+          canceled: boolean | null
+          capture_date: string
+          captured_at: string
+          deviation: string[] | null
+          information_owner: string | null
+          location_signature: string | null
+          modified_time: string | null
+          planned_estimated_time: string | null
+          scheduled_time: string | null
+        }
+        Insert: {
+          activity_id: string
+          activity_type?: string | null
+          advertised_train_ident?: string | null
+          canceled?: boolean | null
+          capture_date: string
+          captured_at?: string
+          deviation?: string[] | null
+          information_owner?: string | null
+          location_signature?: string | null
+          modified_time?: string | null
+          planned_estimated_time?: string | null
+          scheduled_time?: string | null
+        }
+        Update: {
+          activity_id?: string
+          activity_type?: string | null
+          advertised_train_ident?: string | null
+          canceled?: boolean | null
+          capture_date?: string
+          captured_at?: string
+          deviation?: string[] | null
+          information_owner?: string | null
+          location_signature?: string | null
+          modified_time?: string | null
+          planned_estimated_time?: string | null
+          scheduled_time?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       v_active_stations: {
@@ -645,16 +711,19 @@ export type Database = {
           canceled: boolean | null
           destination_actual: string | null
           destination_delay_minutes: number | null
+          destination_deviation: string[] | null
           destination_scheduled: string | null
           destination_source: string | null
           destination_stop_id: string | null
           destination_stop_name: string | null
+          has_planned_delay: boolean | null
           is_claimable: boolean | null
           journey_key: string | null
           line_name: string | null
           line_terminus: string | null
           operator: string | null
           origin_actual: string | null
+          origin_deviation: string[] | null
           origin_local_date: string | null
           origin_scheduled: string | null
           origin_source: string | null
@@ -669,16 +738,19 @@ export type Database = {
           canceled?: boolean | null
           destination_actual?: string | null
           destination_delay_minutes?: number | null
+          destination_deviation?: string[] | null
           destination_scheduled?: string | null
           destination_source?: string | null
           destination_stop_id?: string | null
           destination_stop_name?: string | null
+          has_planned_delay?: boolean | null
           is_claimable?: never
           journey_key?: string | null
           line_name?: string | null
           line_terminus?: string | null
           operator?: string | null
           origin_actual?: string | null
+          origin_deviation?: string[] | null
           origin_local_date?: string | null
           origin_scheduled?: string | null
           origin_source?: string | null
@@ -693,16 +765,19 @@ export type Database = {
           canceled?: boolean | null
           destination_actual?: string | null
           destination_delay_minutes?: number | null
+          destination_deviation?: string[] | null
           destination_scheduled?: string | null
           destination_source?: string | null
           destination_stop_id?: string | null
           destination_stop_name?: string | null
+          has_planned_delay?: boolean | null
           is_claimable?: never
           journey_key?: string | null
           line_name?: string | null
           line_terminus?: string | null
           operator?: string | null
           origin_actual?: string | null
+          origin_deviation?: string[] | null
           origin_local_date?: string | null
           origin_scheduled?: string | null
           origin_source?: string | null
@@ -720,16 +795,19 @@ export type Database = {
           canceled: boolean | null
           destination_actual: string | null
           destination_delay_minutes: number | null
+          destination_deviation: string[] | null
           destination_scheduled: string | null
           destination_source: string | null
           destination_stop_id: string | null
           destination_stop_name: string | null
+          has_planned_delay: boolean | null
           is_claimable: boolean | null
           journey_key: string | null
           line_name: string | null
           line_terminus: string | null
           operator: string | null
           origin_actual: string | null
+          origin_deviation: string[] | null
           origin_local_date: string | null
           origin_scheduled: string | null
           origin_source: string | null
