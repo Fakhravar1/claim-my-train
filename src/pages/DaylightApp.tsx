@@ -243,6 +243,9 @@ export default function DaylightApp() {
   return (
     <div className="cmt-daylight">
       <Helmet>
+        {/* Same title as index.html — needed so SPA-navigating back to `/`
+            replaces the previous page's Helmet title instead of keeping it. */}
+        <title>Ersättning för försenade tåg — Qvitta</title>
         <link rel="canonical" href="https://qvitta.nu/" />
         <meta name="description" content="Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis." />
         <meta property="og:description" content="Försenat eller inställt tåg? Sök din avgång, se direkt om den ger rätt till förseningsersättning och ansök hos rätt operatör – gratis." />
