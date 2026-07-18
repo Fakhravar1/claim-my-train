@@ -61,6 +61,8 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
           <span className="brand__word">Qvitta</span>
         </Link>
         <div className="nav__right">
+          <Link to="/ersattning" className="nav__cta">Ersättningsguide</Link>
+          <Link to="/forseningar" className="nav__cta">Förseningsstatistik</Link>
           <Link to="/faq" className="nav__cta">FAQ</Link>
           <a href="#how" className="nav__cta" onClick={scrollToHow}>Så funkar det</a>
           {signedIn ? (

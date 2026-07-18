@@ -172,12 +172,7 @@ export const Board = forwardRef<HTMLDivElement, BoardProps>(function Board(
                 Visa hela nätet
               </button>
             </p>
-          ) : (
-            <p className="board__cap">
-              Välj <b>från</b> och <b>till</b> för att se en specifik sträcka — börja skriva
-              stationsnamnet så söker vi direkt.
-            </p>
-          )}
+          ) : null}
 
           <div className="board__controls">
             <StationField label="Från" value={from} onChange={setFrom} options={stationOptions} />
