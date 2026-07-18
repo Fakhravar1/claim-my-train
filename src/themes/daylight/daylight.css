@@ -379,9 +379,8 @@
 .cmt-daylight .row__stations{display:grid;grid-template-columns:clamp(9rem,34vw,17rem) 18px minmax(0,1fr);align-items:center;gap:.5rem;}
 .cmt-daylight .st{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .cmt-daylight .st__arrow{justify-self:center;}
-/* nudge the route block right of the time column for a cleaner spine
-   (min-width guard so it doesn't override the mobile stacked grid below) */
-@media(min-width:721px){.cmt-daylight .row{grid-template-columns:72px 1fr auto auto;}}
+/* (desktop 4-col row override removed — desktop now uses the same stacked
+   card layout as mobile; see the unified .row rule below.) */
 
 /* clearer, colour-filled status chips per tier */
 .cmt-daylight .tag{display:inline-flex;align-items:center;font-weight:700;border-width:1px;border-style:solid;}
