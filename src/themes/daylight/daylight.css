@@ -537,21 +537,15 @@
    truncated and the action button can't squeeze them. */
 @media(max-width:720px){
   .cmt-daylight .row{
-    grid-template-columns:1fr auto;
     grid-template-areas:
       "time   status"
       "route  route"
       "line   line"
       "action action";
-    align-items:center;
     gap:.45rem .6rem;
     padding:.7rem .85rem;
   }
-  .cmt-daylight .row__time{grid-area:time;}
-  .cmt-daylight .row__status{grid-area:status;justify-self:end;flex-direction:row;align-items:center;gap:.5rem;}
-  .cmt-daylight .row__route{grid-area:route;}
-  .cmt-daylight .row__line{grid-area:line;}
-  .cmt-daylight .row__action{grid-area:action;justify-self:stretch;gap:.5rem;}
+  .cmt-daylight .row__action{justify-self:stretch;gap:.5rem;}
   .cmt-daylight .row__action .btn{flex:1;}
   /* station names wrap to as many lines as needed — never abbreviated */
   .cmt-daylight .row__route .st{
