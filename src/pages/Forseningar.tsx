@@ -109,30 +109,49 @@ export default function Forseningar() {
           <table style={{ borderCollapse: "collapse", width: "100%", background: "var(--card-bg)", fontSize: ".93rem" }}>
             <thead>
               <tr>
-                {["Station", "Avgångar", "≥ 20 min sena", "Andel ≥ 20 min", "Inställda"].map((h) => (
-                  <th key={h} style={{ border: "1px solid var(--line)", padding: ".55rem .7rem", textAlign: "left", fontWeight: 700 }}>
-                    {h}
-                  </th>
-                ))}
+                {COLS.map((c) => {
+                  const active = c.key === sortKey;
+                  const arrow = active ? (sortDir === "asc" ? "▲" : "▼") : "";
+                  return (
+                    <th
+                      key={c.key}
+                      onClick={() => onSort(c.key)}
+                      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                      style={{
+                        border: "1px solid var(--line)",
+                        padding: ".55rem .7rem",
+                        textAlign: c.align,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        userSelect: "none",
+                        background: active ? "var(--surface-2, rgba(0,0,0,.03))" : undefined,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {c.label}{arrow ? ` ${arrow}` : ""}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {STATIONS_WORST_FIRST.map((s) => (
+              {sorted.map((s) => (
                 <tr key={s.slug}>
                   <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>
                     <Link to={stationPath(s)} style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>
                       {s.station_name}
                     </Link>
                   </td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{s.n_departures}</td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{s.n_late_20}</td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{pctLate20(s)} %</td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{s.n_cancelled}</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{s.n_departures}</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{s.n_late_20}</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{pctLate20(s)} %</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{s.n_cancelled}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
 
         <p style={{ marginTop: "1.5rem", fontSize: ".9rem", color: "var(--muted)", lineHeight: 1.6 }}>
           Statistiken bygger på uppmätta avgångar (tåg med realtidssignal) och uppdateras löpande.
