@@ -1,26 +1,32 @@
-## Changes
+## 1. Unify desktop card layout with mobile (`src/themes/daylight/daylight.css`)
 
-### 1. Brand logo + larger nav text (`src/components/daylight/shell.tsx`)
-- Replace the current `<span class="brand__mark" />` dot with a small SVG "Q" mark — a teal circle outline with a tail, sized ~28px, accent color matching the Daylight theme (`#0E8C7E`).
-- Bump the `.brand` text size (currently small). Add a CSS override scoped under `.cmt-daylight .brand` in `src/themes/daylight/daylight.css` to increase font-size (~1.25rem), weight, and align the SVG vertically with the wordmark.
+Currently `.row` on desktop (≥721px) is a 4‑column grid `72px 1fr auto auto` — time / route / status / action all on one line. Mobile (≤720px) uses the nicer stacked layout: **top** = time (left) + delay tag (right); **middle** = Från station ← arrow → Till station (right‑anchored); **bottom** = date · operator (left) + claim button + bell (right).
 
-### 2. "Så funkar det" nav button (`src/components/daylight/shell.tsx`)
-- The nav already has an anchor `<a href="#how">Så funkar det</a>` — the `ValueProps` section already has `id="how"`. Verify it works; if scroll isn't smooth, add `scroll-behavior: smooth` on `html` within the daylight scope, or convert to a click handler doing `scrollIntoView({behavior:"smooth"})`.
-- Likely the user wants this as a more visible **button** rather than a plain link. Restyle the existing `#how` link as a button (`btn btn--quiet` style) so it reads as a CTA, while keeping the anchor jump.
+Change: promote the mobile layout to be the **default** and drop the desktop‑only 4‑column override.
 
-### 3. Mobile horizontal scroll + clearer From/To (`src/themes/daylight/daylight.css`, possibly `Board.tsx`)
-- Root cause of horizontal scroll on phone is almost certainly the `.board__controls` grid or `.row` flex laying out wider than the viewport. Fix by:
-  - Adding `overflow-x: hidden` on `.cmt-daylight` body wrapper as a safety net.
-  - Making `.board__controls` stack vertically (`grid-template-columns: 1fr`) below ~640px so Från/Till/Datum each take full width.
-  - Making `.row` wrap (`flex-wrap: wrap`) on mobile and reducing min-widths; ensure `.row__stations` allows text to wrap instead of forcing overflow.
-- Clearer From/To on mobile: in `StationField` (label + select), ensure labels "Från"/"Till" sit above full-width inputs with strong visual separation, and add a subtle arrow/divider between them on mobile so the direction reads naturally.
+- Remove the `@media(min-width:721px){ .cmt-daylight .row{grid-template-columns:72px 1fr auto auto;} }` rule (around line 384).
+- Make `.row` a flex‑column card at all widths (already the mobile shape).
+- On desktop, keep it visually tighter: larger horizontal padding, bigger station text (`clamp(1rem,1.4vw,1.25rem)`), arrow sized ~18px, action row right‑aligned, claim button auto‑width (not full‑width — the mobile `.btn{width:100%}` rule only fires ≤720px, so no change needed).
+- Keep `.row__route` as `grid-template-columns: 1fr auto 1fr` so **Till** stays pinned right and the arrow stays centered (as it now does on mobile).
+
+No changes to `Board.tsx` markup — the row already emits `row__time / row__route / row__line / row__status / row__action` in the order the mobile grid expects.
+
+## 2. Remove the board caption (`src/components/daylight/Board.tsx`)
+
+Delete the `else` branch that renders `<p className="board__cap">Välj <b>från</b> och <b>till</b>…</p>` (the station‑scoped `board__cap--station` variant stays — it's only shown when a station deep‑link is active). Optionally also drop the now‑unused `.board__cap` rule; leaving it is harmless.
+
+## 3. Add nav buttons for the other sitemap pages (`src/components/daylight/shell.tsx`)
+
+The nav today has only **FAQ** and **Så funkar det**. Add sibling `nav__cta` links to the main indexable content routes that already exist in the sitemap and as routes in `App.tsx`:
+
+- **Ersättningsguide** → `/ersattning`
+- **Förseningsstatistik** → `/forseningar`
+
+Placed left of FAQ, same `nav__cta` style. This keeps the bar to 4 chips + auth button, which still fits on one mobile line at the current sizes (verified against the recent mobile‑tightening pass). Footer already links to `/integritet`, `/genvag`, Kontakt — leaving those footer‑only avoids nav overflow.
 
 ## Files touched
-- `src/components/daylight/shell.tsx` — new Q logo SVG, restyle "Så funkar det" as a button.
-- `src/themes/daylight/daylight.css` — larger brand text, mobile stack for `.board__controls`, fix row overflow, From/To clarity, smooth-scroll.
-- (Possibly) `src/components/daylight/Board.tsx` — minor markup tweak if needed for mobile From→To layout.
+- `src/themes/daylight/daylight.css` — unify row layout across breakpoints; drop the desktop 4‑column override; small desktop polish (padding / station font‑size / arrow size).
+- `src/components/daylight/Board.tsx` — remove the default board caption.
+- `src/components/daylight/shell.tsx` — two new nav links.
 
-No business logic / data changes.
-
-## Question before building
-For the Q logo — do you want (a) a simple geometric Q mark in the teal accent color matching the existing minimal aesthetic, or (b) something more distinctive (e.g. Q drawn as a train circle with a tail like a rail)?
+No business logic or data changes.
