@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { useDaylightStyles } from "@/hooks/useDaylightStyles";
@@ -8,18 +9,60 @@ import {
   stationPath,
   pctLate20,
   periodLabel,
+  type StationStat,
 } from "@/content/stationStats";
 import { OPERATORS_WORST_FIRST, operatorPath } from "@/content/operatorStats";
 
-/**
- * /forseningar — station-statistics hub. Lists every station with enough
- * measured departures in the snapshot (src/content/stationStats.json),
- * worst-first, linking each /forseningar/<slug> page. Prerendered to static
- * HTML at build time.
- */
+type SortKey = "station" | "departures" | "late20" | "pct" | "cancelled";
+type SortDir = "asc" | "desc";
+
+const COLS: { key: SortKey; label: string; align: "left" | "right" }[] = [
+  { key: "station", label: "Station", align: "left" },
+  { key: "departures", label: "Avgångar", align: "right" },
+  { key: "late20", label: "≥ 20 min sena", align: "right" },
+  { key: "pct", label: "Andel ≥ 20 min", align: "right" },
+  { key: "cancelled", label: "Inställda", align: "right" },
+];
+
+function sortValue(s: StationStat, key: SortKey): number | string {
+  switch (key) {
+    case "station": return s.station_name.toLocaleLowerCase("sv");
+    case "departures": return s.n_departures;
+    case "late20": return s.n_late_20;
+    case "pct": return s.n_departures > 0 ? s.n_late_20 / s.n_departures : 0;
+    case "cancelled": return s.n_cancelled;
+  }
+}
+
 export default function Forseningar() {
   useDaylightStyles();
   const period = STATIONS[0] ? periodLabel(STATIONS[0]) : "";
+  const [sortKey, setSortKey] = useState<SortKey>("late20");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const sorted = useMemo(() => {
+    const arr = [...STATIONS_WORST_FIRST];
+    arr.sort((a, b) => {
+      const va = sortValue(a, sortKey);
+      const vb = sortValue(b, sortKey);
+      let cmp: number;
+      if (typeof va === "number" && typeof vb === "number") cmp = va - vb;
+      else cmp = String(va).localeCompare(String(vb), "sv");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [sortKey, sortDir]);
+
+  const onSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // sensible default: text asc, numeric desc
+      setSortDir(key === "station" ? "asc" : "desc");
+    }
+  };
+
 
   return (
     <div className="cmt-daylight">
@@ -66,30 +109,49 @@ export default function Forseningar() {
           <table style={{ borderCollapse: "collapse", width: "100%", background: "var(--card-bg)", fontSize: ".93rem" }}>
             <thead>
               <tr>
-                {["Station", "Avgångar", "≥ 20 min sena", "Andel ≥ 20 min", "Inställda"].map((h) => (
-                  <th key={h} style={{ border: "1px solid var(--line)", padding: ".55rem .7rem", textAlign: "left", fontWeight: 700 }}>
-                    {h}
-                  </th>
-                ))}
+                {COLS.map((c) => {
+                  const active = c.key === sortKey;
+                  const arrow = active ? (sortDir === "asc" ? "▲" : "▼") : "";
+                  return (
+                    <th
+                      key={c.key}
+                      onClick={() => onSort(c.key)}
+                      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                      style={{
+                        border: "1px solid var(--line)",
+                        padding: ".55rem .7rem",
+                        textAlign: c.align,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        userSelect: "none",
+                        background: active ? "var(--surface-2, rgba(0,0,0,.03))" : undefined,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {c.label}{arrow ? ` ${arrow}` : ""}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {STATIONS_WORST_FIRST.map((s) => (
+              {sorted.map((s) => (
                 <tr key={s.slug}>
                   <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>
                     <Link to={stationPath(s)} style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>
                       {s.station_name}
                     </Link>
                   </td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{s.n_departures}</td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{s.n_late_20}</td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{pctLate20(s)} %</td>
-                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem" }}>{s.n_cancelled}</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{s.n_departures}</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{s.n_late_20}</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{pctLate20(s)} %</td>
+                  <td style={{ border: "1px solid var(--line)", padding: ".5rem .7rem", textAlign: "right" }}>{s.n_cancelled}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
 
         <p style={{ marginTop: "1.5rem", fontSize: ".9rem", color: "var(--muted)", lineHeight: 1.6 }}>
           Statistiken bygger på uppmätta avgångar (tåg med realtidssignal) och uppdateras löpande.
