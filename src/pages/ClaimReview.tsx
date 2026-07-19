@@ -54,15 +54,30 @@ export default function ClaimReview() {
     [searchParams]
   );
 
+  // Travel dates for the requested journeys (`d=2026-07-11,2026-07-12`, emitted by
+  // send-claim-digest v8+). v_claimable_journeys is a pairing VIEW since the
+  // 2026-07-19 storage rework: a bare journey_key filter can't prune its index
+  // scans (the key is a hash) and recomputes ~90 days of pairing (~6 s, close to
+  // the statement timeout), while an origin_local_date bound prunes it to the
+  // named days (sub-second). Legacy digest links without `d` still work — they
+  // just take the slow path.
+  const journeyDates = useMemo(
+    () => (searchParams.get("d") ?? "").split(",").map((d) => d.trim()).filter(Boolean),
+    [searchParams]
+  );
+
   const { data: journeys = [], isLoading } = useQuery<Journey[]>({
-    queryKey: ["claim-review", journeyKeys],
+    queryKey: ["claim-review", journeyKeys, journeyDates],
     enabled: journeyKeys.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("v_claimable_journeys")
         .select("*")
-        .in("journey_key", journeyKeys)
-        .order("origin_scheduled", { ascending: true });
+        .in("journey_key", journeyKeys);
+      if (journeyDates.length > 0) {
+        query = query.in("origin_local_date", journeyDates);
+      }
+      const { data, error } = await query.order("origin_scheduled", { ascending: true });
       if (error) throw error;
       return (data ?? []) as Journey[];
     },

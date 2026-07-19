@@ -1,17 +1,20 @@
 version: 2
 
 models:
-  - name: fct_claimable_journeys
+  - name: fct_claimable_stop_events
     description: >
-        Durable claim-retention layer: one row per claimable journey (destination 20+
-        min late or cancelled), captured from fct_journeys and KEPT 60 DAYS (pre_hook
-        prune) regardless of upstream raw pruning — the set a user may still file on.
-        Incremental delete+insert on journey_key, 6h lookback. NEVER --full-refresh
-        once it holds rows older than the raw horizon (collapses retention, see model
-        header). NOT the same as public.claims (filed claims).
+        The durable claim-retention layer at STOP-EVENT grain (2026-07-19 storage
+        rework): the linear generating set of all claimable legs — claimable
+        arrivals (>= floor or cancelled) plus every departure with a later claimable
+        arrival of the same service inside the 12h pairing window. Kept 91 days
+        (pre_hook prune) regardless of upstream pruning; ~3.2x smaller than the
+        leg-grain table it replaced. Incremental delete+insert on stop_event_key,
+        TRAIN-level 6h-lookback batches. NEVER --full-refresh once it holds events
+        older than the int_stop_events horizon (~5 d) — collapses the 90-day claim
+        window (see model header).
     columns:
-        - name: journey_key
-          description: Surrogate key; hash of (service_number, origin_local_date, origin_stop, destination_stop). Matches fct_journeys.
+        - name: stop_event_key
+          description: Carried from int_stop_events; hash of (service_number, station_id, event_type, service_date).
           data_tests:
             - not_null
             - unique
@@ -20,9 +23,45 @@ models:
             arguments:
               combination_of_columns:
                 - service_number
+                - station_id
+                - event_type
+                - service_date
+
+  - name: fct_claimable_journeys
+    description: >
+        The durable claimable-journey set — a VIEW since 2026-07-19 (was an
+        incremental leg-grain table): re-pairs fct_claimable_stop_events into the
+        exact legs the old table stored, same journey_key and columns, so
+        v_claimable_journeys and all consumers are unchanged. Pairing logic
+        deliberately mirrors fct_journeys (kept in sync by the singular test
+        assert_claimable_layer_covers_fct_journeys). Reads must carry an
+        origin_local_date or origin_stop_id predicate to prune the pairing scan —
+        a bare journey_key filter recomputes 90 days. NOT the same as
+        public.claims (filed claims).
+    columns:
+        - name: journey_key
+          description: Surrogate key; hash of (service_number, origin_local_date, origin_stop, destination_stop). Matches fct_journeys.
+          data_tests:
+            - not_null:
+                config:
+                  where: "origin_local_date >= current_date - 7"
+            - unique:
+                config:
+                  where: "origin_local_date >= current_date - 7"
+    data_tests:
+        # Grain test windowed to the last 7 days: the view's pairing over the full
+        # 90 d is the expensive quadratic fan-out (that's why it isn't a table);
+        # older rows derive from frozen events, so re-testing them hourly buys
+        # nothing. Widen the window if the events table is ever backfilled/edited.
+        - dbt_utils.unique_combination_of_columns:
+            arguments:
+              combination_of_columns:
+                - service_number
                 - origin_local_date
                 - origin_stop_id
                 - destination_stop_id
+            config:
+              where: "origin_local_date >= current_date - 7"
 
   - name: fct_journeys
     description: >

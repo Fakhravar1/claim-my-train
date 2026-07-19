@@ -1,0 +1,40 @@
+-- 2026-07-19 — Claimable-layer storage rework + bloat management (record of
+-- changes applied via MCP/dashboard; NOT replayed by CLI — see CLAUDE.md §11).
+--
+-- CONTEXT. The DB hit 455 MB / 500 MB free-tier ceiling (91%). Two causes:
+--   1. ~107 MB of index bloat on the churn tables (3-5 d prune + constant
+--      upserts rot their btrees; raw_departures had a 24 MB index over 36k rows).
+--      Reclaimed with REINDEX TABLE on raw_train_announcements, raw_departures,
+--      int_stop_events, fct_claimable_journeys (455 -> 348 MB).
+--   2. dbt_dev.fct_claimable_journeys (the 90 d durable claim-retention layer)
+--      stored the quadratic O-D leg fan-out (~65 legs per delayed train) and was
+--      heading for ~250-435 MB alone at steady state. Reworked to EVENT grain:
+--      new incremental table dbt_dev.fct_claimable_stop_events stores the linear
+--      generating set (claimable arrivals + departures with a later claimable
+--      arrival, ~3.2x smaller); fct_claimable_journeys is now a dbt VIEW pairing
+--      it back into identical legs (same journey_key). dbt-managed — see
+--      dbt/models/marts/fct_claimable_stop_events.sql. The old table's 48 d of
+--      legs were backfilled into the event table (both endpoints are embedded in
+--      each leg row); 176 of 418k legs (0.04%) did not reproduce — all of them
+--      the accepted §13-plan-B retraction-lingering class (canceled/re-timed
+--      runs whose latest event versions no longer support the pair).
+--
+-- Safety copy dbt_dev.fct_claimable_journeys_backup_20260719 (418,101 legs,
+-- 2026-06-01..2026-07-19, ~116 MB) kept until ~2026-07-26, then drop:
+--   drop table dbt_dev.fct_claimable_journeys_backup_20260719;
+--
+-- Recurring bloat guard: pg_cron jobid 17 'reindex-churn-tables-bimonthly'
+-- (04:30 on the 1st and 15th) reindexes the four churn tables. Brief exclusive
+-- locks at a quiet hour; collectors block a few seconds at worst.
+--
+-- select cron.schedule(
+--   'reindex-churn-tables-bimonthly',
+--   '30 4 1,15 * *',
+--   $$reindex table public.raw_train_announcements; reindex table public.raw_departures; reindex table dbt_dev.int_stop_events; reindex table dbt_dev.fct_claimable_stop_events;$$
+-- );
+--
+-- Also: send-claim-digest v8 (deploy + repo copy added) — review URLs now carry
+-- `d=<travel dates>` so /claim-review can bound the pairing-view scan (a bare
+-- journey_key filter on the new view recomputes ~90 d of pairing, ~6 s).
+
+select 1; -- documentation-only migration (objects already live)
