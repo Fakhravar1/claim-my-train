@@ -30,6 +30,11 @@ claimable_arrivals as (
     from {{ ref('int_stop_events') }} e
     cross join authority auth
     where e.event_type = 'arrival'
+      -- A null service_number can never pair into a leg (every pairing join —
+      -- fct_journeys and the claimable view alike — requires service_number
+      -- equality), so such an arrival generates zero claimable legs and the
+      -- durable layer's train-batched incremental rightly never captures it.
+      and e.service_number is not null
       and e.service_date between current_date - 3 and current_date - 1
       and (
             coalesce(e.delay_seconds, 0) >= auth.min_delay_seconds
