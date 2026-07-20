@@ -706,6 +706,120 @@ export type Database = {
         }
         Relationships: []
       }
+      v_claimable_journeys: {
+        Row: {
+          canceled: boolean | null
+          destination_actual: string | null
+          destination_delay_minutes: number | null
+          destination_deviation: string[] | null
+          destination_scheduled: string | null
+          destination_source: string | null
+          destination_stop_id: string | null
+          destination_stop_name: string | null
+          has_planned_delay: boolean | null
+          is_claimable: boolean | null
+          journey_key: string | null
+          line_name: string | null
+          line_terminus: string | null
+          operator: string | null
+          origin_actual: string | null
+          origin_deviation: string[] | null
+          origin_local_date: string | null
+          origin_scheduled: string | null
+          origin_source: string | null
+          origin_stop_id: string | null
+          origin_stop_name: string | null
+          route_distance_km: number | null
+          service_number: string | null
+          train_owner: string | null
+          transport_mode: string | null
+        }
+        Insert: {
+          canceled?: boolean | null
+          destination_actual?: string | null
+          destination_delay_minutes?: number | null
+          destination_deviation?: string[] | null
+          destination_scheduled?: string | null
+          destination_source?: string | null
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          has_planned_delay?: boolean | null
+          is_claimable?: never
+          journey_key?: string | null
+          line_name?: string | null
+          line_terminus?: string | null
+          operator?: string | null
+          origin_actual?: string | null
+          origin_deviation?: string[] | null
+          origin_local_date?: string | null
+          origin_scheduled?: string | null
+          origin_source?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          route_distance_km?: number | null
+          service_number?: string | null
+          train_owner?: string | null
+          transport_mode?: string | null
+        }
+        Update: {
+          canceled?: boolean | null
+          destination_actual?: string | null
+          destination_delay_minutes?: number | null
+          destination_deviation?: string[] | null
+          destination_scheduled?: string | null
+          destination_source?: string | null
+          destination_stop_id?: string | null
+          destination_stop_name?: string | null
+          has_planned_delay?: boolean | null
+          is_claimable?: never
+          journey_key?: string | null
+          line_name?: string | null
+          line_terminus?: string | null
+          operator?: string | null
+          origin_actual?: string | null
+          origin_deviation?: string[] | null
+          origin_local_date?: string | null
+          origin_scheduled?: string | null
+          origin_source?: string | null
+          origin_stop_id?: string | null
+          origin_stop_name?: string | null
+          route_distance_km?: number | null
+          service_number?: string | null
+          train_owner?: string | null
+          transport_mode?: string | null
+        }
+        Relationships: []
+      }
+      v_journeys: {
+        Row: {
+          canceled: boolean | null
+          destination_actual: string | null
+          destination_delay_minutes: number | null
+          destination_deviation: string[] | null
+          destination_scheduled: string | null
+          destination_source: string | null
+          destination_stop_id: string | null
+          destination_stop_name: string | null
+          has_planned_delay: boolean | null
+          is_claimable: boolean | null
+          journey_key: string | null
+          line_name: string | null
+          line_terminus: string | null
+          operator: string | null
+          origin_actual: string | null
+          origin_deviation: string[] | null
+          origin_local_date: string | null
+          origin_scheduled: string | null
+          origin_source: string | null
+          origin_stop_id: string | null
+          origin_stop_name: string | null
+          route_distance_km: number | null
+          service_number: string | null
+          train_owner: string | null
+          transport_mode: string | null
+        }
+        Relationships: []
+      }
       v_network_board: {
         Row: {
           canceled: boolean | null
