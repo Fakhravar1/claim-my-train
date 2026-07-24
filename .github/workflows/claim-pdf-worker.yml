@@ -11,6 +11,11 @@ on:
 jobs:
   generate-pdfs:
     runs-on: ubuntu-latest
+    # Fail fast if a runner stalls. A real run is ~12s (no-op preflight) to ~2 min
+    # (claim + Chromium install); without this cap a stuck runner burns up to the
+    # 360-min default before GitHub kills it (run 360 hung ~15 min on a no-op run,
+    # 2026-07-24). 10 min is a safe ceiling well above the worst legitimate run.
+    timeout-minutes: 10
     # Don't run on the mirrored Lovable companion repo — it has no secrets.
     if: github.repository == 'Fakhravar1/claim-my-train'
     steps:
