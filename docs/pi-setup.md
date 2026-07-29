@@ -83,6 +83,26 @@ never moves. Do this at the router rather than with netplan — it is easier to
 reason about, and AdGuard clients will point at this address. Note the IP down;
 call it `<PI_IP>` below.
 
+## 2b. Shortcut: run the bootstrap script
+
+Sections 3 to 7 below are collapsed into `scripts/pi-bootstrap.sh`. It is
+idempotent and deliberately stops short of anything needing a secret or a
+decision (runner registration, `profiles.yml`, the AdGuard install itself).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Fakhravar1/claim-my-train/main/scripts/pi-bootstrap.sh -o pi-bootstrap.sh
+less pi-bootstrap.sh          # read before running — it uses sudo
+bash pi-bootstrap.sh
+# optional: WITH_CLAUDE=1 bash pi-bootstrap.sh
+```
+
+Note the repo is private, so that raw URL needs a token — easier to just
+`git clone` the repo first (the script does this anyway) and run it from there,
+or paste the file over SSH.
+
+Read the sections below anyway for the reasoning; the script only automates the
+mechanical parts.
+
 ## 3. Baseline hardening
 
 ```bash
@@ -127,18 +147,28 @@ it back to `Storage=persistent` temporarily.
 
 ## 5. Python + dbt, and the Phase 1 verification
 
-`dbt-run.yml` pins Python 3.11; Ubuntu 24.04 ships 3.12. Both are fine for dbt —
-install 3.11 so the Pi matches the workflow.
+⚠️ **Correction (2026-07-29):** an earlier version of this section said
+`apt install python3.11`. That does not work — **Ubuntu 24.04 ships Python 3.12
+and does not package 3.11**, so the command fails. Use the system Python:
 
 ```bash
-sudo apt install -y python3.11 python3.11-venv python3-pip git
+sudo apt install -y python3 python3-venv python3-pip git
 
 sudo mkdir -p /opt/qvitta && sudo chown "$USER":"$USER" /opt/qvitta
-python3.11 -m venv /opt/qvitta/dbtvenv
+python3 -m venv /opt/qvitta/dbtvenv
 /opt/qvitta/dbtvenv/bin/pip install --upgrade pip
 /opt/qvitta/dbtvenv/bin/pip install 'dbt-core<2.0' 'dbt-postgres==1.10.0'
 /opt/qvitta/dbtvenv/bin/dbt --version
 ```
+
+dbt runs fine on 3.12, so this has no effect on the Phase 1 verification.
+
+**It does change Phase 2.** `dbt-run.yml` pins `python-version: '3.11'`, which the
+Pi cannot satisfy from apt. Rather than pulling 3.11 from the deadsnakes PPA and
+hand-seeding the runner tool cache, the clean fix is to **bump the workflow to
+3.12** — GitHub's `ubuntu-latest` provides it too, so both runners match and the
+tool-cache problem disappears entirely. That removes the one genuine unknown
+flagged in §6 and in `pi-runner-plan.md`.
 
 Those pins come from `.github/requirements/dbt.txt` — the `dbt-core<2.0` cap
 exists because `dbt-postgres==1.10.0` has no upper bound and pip will otherwise
