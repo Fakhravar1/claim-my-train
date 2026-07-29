@@ -259,6 +259,39 @@ sudo ufw allow 80/tcp
 Set it up at `http://<PI_IP>:3000`, then point your **router's DHCP DNS server**
 at `<PI_IP>` so every device uses it.
 
+### Decouple the Pi's own DNS from AdGuard — do not skip this
+
+Once the router hands out `<PI_IP>` as the DNS server, the Pi would normally
+resolve through **its own AdGuard instance**. That creates a real, non-obvious
+dependency: anything that breaks AdGuard also breaks the Pi's ability to resolve
+`*.pooler.supabase.com` and `github.com`, so **dbt and the runner fail with DNS
+errors caused by an unrelated service on the same box**.
+
+Concrete example: you add a stricter blocklist, it contains a wildcard that
+catches an AWS domain, and the next hourly build dies with
+`could not translate host name "aws-0-eu-west-1.pooler.supabase.com"`. Browsing
+looks fine, so you spend the evening in Supabase and the runner logs. Same class
+of failure from an AdGuard restart during upgrade, a bad upstream, or AdGuard
+simply not coming back after a reboot.
+
+Pin the Pi's own resolver to an upstream instead. Other devices still filter
+through AdGuard; only the Pi bypasses it.
+
+```bash
+sudo mkdir -p /etc/systemd/resolved.conf.d
+printf '[Resolve]\nDNS=1.1.1.1 9.9.9.9\nDomains=~.\nDNSStubListener=no\n' \
+  | sudo tee /etc/systemd/resolved.conf.d/99-bypass-adguard.conf
+sudo systemctl restart systemd-resolved
+
+# verify: should answer from 1.1.1.1, not from AdGuard
+resolvectl status | grep -A2 'Current DNS'
+getent hosts github.com
+```
+
+Trade-off, stated honestly: the Pi's own traffic is then unfiltered. That is the
+point — you do not want ad-blocking policy sitting in the path between your data
+pipeline and its database.
+
 ### Read this before pointing your router at it
 
 AdGuard turns the Pi into **network-critical infrastructure**. That is a real
@@ -318,7 +351,49 @@ If HA is on the roadmap, the clean split is: **Pi = dbt + AdGuard + light
 services; a second box for Home Assistant.** Mixing an appliance-style smart-home
 hub with your data pipeline's runner means one reboot takes down both.
 
-## 9. Where this leaves you
+## 9. Optional: Claude Code on the Pi
+
+Claude Code is a Node.js CLI and runs on Linux arm64, so a Pi 4 handles it fine
+(a few hundred MB while active, idle otherwise — check the current install
+command against the official docs, they change):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+npm install -g @anthropic-ai/claude-code
+claude          # first run walks through auth
+```
+
+**Be clear about what this does and does not give you.** It is *not* how you get
+access to an ongoing conversation — Claude Code on the web already runs in a
+cloud container with the repo attached, independent of any hardware you own, and
+a session on the Pi starts cold with no memory of it. What the Pi install adds is
+an agent with **shell access to the Pi itself and your home LAN** — useful for
+"why did the runner stop", "check AdGuard", "run dbt by hand" without you doing
+it manually.
+
+For access from outside the house, use **Tailscale** rather than forwarding SSH:
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --ssh
+```
+
+Free for personal use, no inbound ports, works behind CGNAT — the same reason the
+Actions runner needs no port forwarding.
+
+### Worth deciding deliberately
+
+By the end of this guide the Pi holds your **Supabase session-pooler password**
+(`~/.dbt/profiles.yml`, §5) and is your **network's DNS server**. Giving any
+agent persistent shell there is a real expansion of blast radius, and Tailscale
+SSH widens who can reach it. None of that is an argument against doing it on your
+own private box — just do it knowingly rather than by accident. Two cheap
+mitigations: delete `~/.dbt/profiles.yml` once the runner is live (workflows
+write their own from GitHub secrets at job time), and keep Tailscale ACLs to your
+own devices.
+
+## 10. Where this leaves you
 
 Done here: a hardened Pi with an idle `qvitta-pi` runner, a verified `dbt build`,
 and AdGuard serving the LAN.
