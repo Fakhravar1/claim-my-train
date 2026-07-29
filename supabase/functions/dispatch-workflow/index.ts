@@ -53,6 +53,18 @@ const FALLBACK_RUNNER = 'ubuntu-latest'
 const DEFAULT_WORKFLOW = 'dbt-run.yml'
 const DEFAULT_REF = 'main'
 
+// Only these may be dispatched. The PAT behind this function can fire ANY
+// workflow in the repo, so the allowlist is what stops a leaked DISPATCH_SECRET
+// (or an over-eager automated caller) from reaching the claim workers, the
+// Lovable mirror, or anything else that touches user money or production deploys.
+const ALLOWED_WORKFLOWS = new Set(['dbt-run.yml', 'pi-maintenance.yml'])
+
+// Workflows pinned to `runs-on: qvitta-pi` with no hosted equivalent. These are
+// REFUSED when the Pi is offline rather than dispatched, because dispatching
+// them would park a job in the 24 h silent queue — the exact failure this whole
+// function exists to prevent. Refusing gives the caller an answer it can act on.
+const PI_ONLY_WORKFLOWS = new Set(['pi-maintenance.yml'])
+
 // FALLBACK THROTTLE — added with Phase 3 (docs/pi-runner-plan.md §5).
 //
 // Phase 3 raises the cron to every 15 min, which is free while the Pi serves.
@@ -171,20 +183,85 @@ Deno.serve(async (req) => {
   let ref = DEFAULT_REF
   let dryRun = false
   let forced = ''
+  let passthrough: Record<string, string> | null = null
   try {
     const body = req.headers.get('Content-Type')?.includes('json') ? await req.json() : {}
     if (typeof body.workflow === 'string' && body.workflow) workflow = body.workflow
     if (typeof body.ref === 'string' && body.ref) ref = body.ref
     if (typeof body.runner === 'string' && body.runner) forced = body.runner
+    // Inputs for workflows that take something other than `runner` (currently
+    // pi-maintenance.yml's `action`). Coerced to strings — GitHub rejects a
+    // dispatch whose inputs do not match the workflow's declared ones, which is
+    // itself a useful guard against a malformed caller.
+    if (body.inputs && typeof body.inputs === 'object') {
+      passthrough = Object.fromEntries(
+        Object.entries(body.inputs as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+      )
+    }
     dryRun = body.dryRun === true
   } catch {
     // pg_cron POSTs with no body — that is the normal path, not an error.
+  }
+
+  if (!ALLOWED_WORKFLOWS.has(workflow)) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'workflow_not_allowed',
+        workflow,
+        allowed: [...ALLOWED_WORKFLOWS],
+      }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
   if (!GH_PAT) {
     return new Response(
       JSON.stringify({ success: false, error: 'GH_DISPATCH_PAT not set' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // Pi-only workflows have no hosted equivalent: probe and REFUSE when offline,
+  // rather than dispatching into the silent queue.
+  if (PI_ONLY_WORKFLOWS.has(workflow)) {
+    const probe = await selfHostedOnline()
+    if (!probe.online) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          dispatched: false,
+          skipped: 'pi_offline',
+          workflow,
+          detail: `${probe.detail} — refused rather than queued; this workflow only runs on the Pi, ` +
+            `and a dead Pi cannot be fixed remotely (needs physical access)`,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    if (dryRun) {
+      return new Response(
+        JSON.stringify({ success: true, dryRun: true, workflow, ref, inputs: passthrough, detail: probe.detail }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    const m = await gh(`/repos/${GH_REPO}/actions/workflows/${workflow}/dispatches`, {
+      method: 'POST',
+      body: JSON.stringify({ ref, inputs: passthrough ?? {} }),
+    })
+    const mOk = m.status === 204
+    if (!mOk) console.error('pi-maintenance dispatch failed', m.status, (await m.text()).slice(0, 300))
+    return new Response(
+      JSON.stringify({
+        success: mOk,
+        dispatched: mOk,
+        workflow,
+        ref,
+        inputs: passthrough,
+        detail: probe.detail,
+        status: m.status,
+      }),
+      { status: mOk ? 200 : 502, headers: { 'Content-Type': 'application/json' } },
     )
   }
 
