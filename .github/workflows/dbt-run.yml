@@ -11,19 +11,17 @@ on:
         description: Runner to execute on
         type: choice
         options: [qvitta-pi, ubuntu-latest]
-        # TRANSITIONAL DEFAULT — see docs/pi-runner-plan.md §3.
+        # The `dispatch-workflow` edge function (pg_cron `dispatch-dbt-run-hourly`)
+        # now owns this trigger and always passes an explicit `runner`, having
+        # probed whether the Pi is online. The cron-jobs.org job was retired
+        # 2026-07-29, so this default only applies to a human clicking "Run
+        # workflow" or to a re-run.
         #
-        # The end state is `qvitta-pi`, but the default must stay `ubuntu-latest`
-        # until the dispatch-workflow edge function is the thing triggering this
-        # workflow. Reason: cron-jobs.org still fires BARE workflow_dispatch calls
-        # that carry no inputs, so they inherit whatever this default is. Pointing
-        # those at the Pi before the router exists means an offline Pi silently
-        # QUEUES the job for up to 24 h (not fails — queues), with nothing to alert
-        # and the hourly triggers piling up behind it.
-        #
-        # Flip this to qvitta-pi ONLY once the router owns the trigger and the
-        # cron-jobs.org job for dbt has been retired.
-        default: ubuntu-latest
+        # ⚠️ If you dispatch by hand while the Pi is DOWN, pick ubuntu-latest from
+        # the dropdown. A job aimed at an offline self-hosted runner queues
+        # silently for up to 24 h rather than failing — the router protects the
+        # scheduled path from this, but it cannot protect a manual one.
+        default: qvitta-pi
 
 jobs:
   run:
@@ -33,10 +31,10 @@ jobs:
     # only executes on the working repo, even if someone re-enables the
     # workflow on the companion or fires it via workflow_dispatch there.
     if: github.repository == 'Fakhravar1/claim-my-train'
-    # `inputs` IS available in the runs-on context. The `|| 'ubuntu-latest'`
-    # fallback covers non-dispatch events; it tracks the transitional default
-    # above and flips to 'qvitta-pi' at the same time.
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    # `inputs` IS available in the runs-on context. The `|| 'qvitta-pi'` fallback
+    # covers non-dispatch events (there are none today — the in-repo `schedule:`
+    # was removed on purpose and must not come back).
+    runs-on: ${{ inputs.runner || 'qvitta-pi' }}
     concurrency:
       group: dbt-run          # prevents overlapping runs if one is slow
       cancel-in-progress: false

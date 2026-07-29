@@ -26,6 +26,51 @@ const RENOTIFY_HOURS = 6
 const CLAUDE_TRIGGER_URL = Deno.env.get('CLAUDE_TRIGGER_URL') ?? ''
 const CLAUDE_TRIGGER_TOKEN = Deno.env.get('CLAUDE_TRIGGER_TOKEN') ?? ''
 
+// ---------------------------------------------------------------- self-heal
+// SECOND LAYER of the Raspberry Pi runner failsafe (docs/pi-runner-plan.md §3).
+//
+// The `dispatch-workflow` router handles exactly one failure: "the Pi is offline
+// at dispatch time". It does NOT handle the Pi accepting a job and then dying
+// mid-run, nor the router itself failing, nor pg_cron not firing. In all of
+// those, dbt simply stops running and the board goes stale — which is precisely
+// what this watchdog already detects. So detection and recovery are wired
+// together here: on a breach, re-dispatch dbt-run.
+//
+// Forced to ubuntu-latest ON PURPOSE. If the Pi and the router were both healthy
+// we would not be breaching, so recovery must not be routed through either of
+// them. Burning a few billed minutes to un-stick the pipeline is the trade.
+//
+// Only `int_stop_events` triggers it: that is the dbt-gated check. tv_raw and
+// rest_raw are ingestion feeds that no dbt build can fix, and claim_canary_ran is
+// unrelated — dispatching for those would burn minutes for nothing.
+//
+// Fires on the SAME schedule as the notification (first breach, then every
+// RENOTIFY_HOURS), so a sustained outage costs ~4 hosted runs/day rather than one
+// every 30 minutes. It is a self-heal, not a retry loop: if dbt is failing for a
+// real reason, hammering it will not help and the emails are the escalation.
+const SELF_HEAL_CHECK = 'int_stop_events'
+
+const redispatchHosted = async (): Promise<{ ok: boolean; detail: string }> => {
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/dispatch-workflow`, {
+      method: 'POST',
+      headers: {
+        // dispatch-workflow accepts a service-level bearer (isServiceBearer);
+        // this function already holds the service-role key, so no new secret.
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ workflow: 'dbt-run.yml', runner: 'ubuntu-latest' }),
+    })
+    const detail = (await resp.text()).slice(0, 300)
+    if (!resp.ok) console.error('self-heal dispatch failed', resp.status, detail)
+    return { ok: resp.ok, detail }
+  } catch (e) {
+    console.error('self-heal dispatch threw', e)
+    return { ok: false, detail: String(e) }
+  }
+}
+
 const fireInvestigator = async (): Promise<boolean> => {
   if (!CLAUDE_TRIGGER_URL || !CLAUDE_TRIGGER_TOKEN) return false
   try {
@@ -97,6 +142,7 @@ Deno.serve(async () => {
   const upserts: State[] = []
   const nowIso = new Date().toISOString()
   let newBreach = false
+  let selfHealNeeded = false
 
   for (const c of (checks as Check[])) {
     const prev = stateMap.get(c.check_name)
@@ -112,6 +158,9 @@ Deno.serve(async () => {
         breachMsgs.push(
           `<li><b>${c.check_name}</b> — stale: ${age}; threshold ${c.threshold_minutes} min.</li>`,
         )
+        // Tied to `notify`, not to `breaching`, so the self-heal inherits the
+        // same first-breach-then-every-RENOTIFY_HOURS cadence as the email.
+        if (c.check_name === SELF_HEAL_CHECK) selfHealNeeded = true
       }
       upserts.push({
         check_name: c.check_name,
@@ -135,6 +184,10 @@ Deno.serve(async () => {
     if (upErr) console.error('state upsert error', upErr)
   }
 
+  // Attempt recovery BEFORE composing the email, so the alert can say whether
+  // a re-dispatch was kicked off and the reader is not left guessing.
+  const selfHeal = selfHealNeeded ? await redispatchHosted() : null
+
   let emailed = false
   if (breachMsgs.length > 0 || recoveryMsgs.length > 0) {
     const parts: string[] = []
@@ -145,6 +198,18 @@ Deno.serve(async () => {
         `Check the collector edge function + its pg_cron job — note pg_cron can report ` +
         `“succeeded” even when the function fails (dispatch ≠ response).</p>`,
       )
+      if (selfHeal) {
+        parts.push(
+          selfHeal.ok
+            ? `<p><b>Self-heal:</b> re-dispatched <code>dbt-run</code> on <code>ubuntu-latest</code> ` +
+              `(the hosted runner, deliberately bypassing the Pi and the dispatch router). ` +
+              `If that build succeeds this should clear within one cycle — no action needed unless ` +
+              `you get another reminder.</p>`
+            : `<p><b>Self-heal FAILED</b> — could not re-dispatch <code>dbt-run</code>: ` +
+              `<code>${selfHeal.detail}</code>. Run it by hand from the Actions tab, ` +
+              `picking <code>ubuntu-latest</code>.</p>`,
+        )
+      }
     }
     if (recoveryMsgs.length > 0) {
       parts.push(`<h3 style="color:#080">✓ Recovered</h3><ul>${recoveryMsgs.join('')}</ul>`)
@@ -167,6 +232,8 @@ Deno.serve(async () => {
       recovered: recoveryMsgs.length,
       emailed,
       investigatorFired,
+      selfHealDispatched: selfHeal?.ok ?? false,
+      selfHealDetail: selfHeal?.detail ?? null,
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   )
