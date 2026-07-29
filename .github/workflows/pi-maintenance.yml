@@ -1,0 +1,118 @@
+# Remote maintenance for the qvitta-pi self-hosted runner.
+#
+# WHY THIS SHAPE. The Pi is behind NAT with no inbound ports (see
+# docs/pi-runner-plan.md §4 — that is deliberate, and why the runner needs no
+# port forwarding). Nothing on the internet can reach into it. But the Pi already
+# long-polls GitHub OUTBOUND for jobs, so a workflow pinned to `runs-on:
+# qvitta-pi` is an existing, authenticated, fully audited channel for running
+# things on that box. This uses it instead of opening SSH to the world.
+#
+# ⚠️ HARD CEILING: this only works while the runner process is ONLINE. It can fix
+# a sick Pi (full disk, broken venv, wedged service). It cannot fix a dead one —
+# power cut, network down, SD card gone read-only. Those need physical presence.
+# The dbt failsafe is what covers that case: the dispatch-workflow router sends
+# builds to ubuntu-latest whenever the Pi is not online.
+#
+# SECURITY: actions are an ENUMERATED `choice`, never interpolated into a shell.
+# Do NOT add `run: ${{ inputs.something }}` — that turns this into arbitrary
+# remote code execution for anyone who can dispatch a workflow. Add new
+# capabilities as new `case` branches instead.
+
+name: Pi maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Maintenance action to run on the Pi
+        type: choice
+        options:
+          - diagnose            # read-only health dump
+          - clean-caches        # reclaim disk (pip/apt caches, old runner diag logs)
+          - rebuild-dbt-venv    # recreate /opt/qvitta/dbtvenv from the CI pins
+          - reboot              # LAST RESORT — see the note on that branch
+        default: diagnose
+
+jobs:
+  maintain:
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    runs-on: qvitta-pi
+    timeout-minutes: 15
+
+    steps:
+      - name: Run maintenance action
+        env:
+          # Quoted into the shell as data, never as code.
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -uo pipefail
+          echo "action: $ACTION"
+          case "$ACTION" in
+
+            diagnose)
+              echo "=== identity ==="
+              hostname; uname -srm; uptime -p
+              echo "=== disk ==="
+              df -h / /opt 2>/dev/null | grep -v tmpfs
+              echo "=== inode pressure ==="
+              df -i / | tail -1
+              echo "=== memory / swap ==="
+              free -h
+              echo "=== biggest consumers under /opt ==="
+              sudo -n du -xh --max-depth=2 /opt 2>/dev/null | sort -rh | head -12
+              echo "=== runner service ==="
+              systemctl is-enabled actions.runner.Fakhravar1-claim-my-train.qvitta-pi.service || true
+              systemctl is-active  actions.runner.Fakhravar1-claim-my-train.qvitta-pi.service || true
+              echo "=== dbt venv ==="
+              /opt/qvitta/dbtvenv/bin/dbt --version 2>&1 | head -5 || echo "dbt venv BROKEN or missing"
+              echo "=== DNS (must not depend on a local resolver) ==="
+              resolvectl status 2>/dev/null | sed -n '1,8p' || true
+              getent hosts aws-1-eu-west-1.pooler.supabase.com >/dev/null \
+                && echo "pooler DNS OK" || echo "pooler DNS FAILED"
+              echo "=== pooler reachability (TCP only, no credentials) ==="
+              timeout 10 bash -c 'cat < /dev/null > /dev/tcp/aws-1-eu-west-1.pooler.supabase.com/5432' \
+                && echo "pooler port 5432 reachable" || echo "pooler port 5432 UNREACHABLE"
+              echo "=== throttling / undervoltage ==="
+              vcgencmd get_throttled 2>/dev/null || echo "(vcgencmd unavailable)"
+              echo "=== recent service errors ==="
+              sudo -n journalctl -p err -n 25 --no-pager 2>/dev/null || echo "(journal is volatile; empty after reboot)"
+              ;;
+
+            clean-caches)
+              # Deliberately does NOT touch _work: this job is running from inside
+              # it, and deleting the tree under a live job breaks the run.
+              echo "before:"; df -h / | tail -1
+              rm -rf "$HOME/.cache/pip" || true
+              sudo -n apt-get clean || true
+              find /opt/actions-runner/_diag -name '*.log' -mtime +7 -delete 2>/dev/null || true
+              sudo -n journalctl --vacuum-time=1d 2>/dev/null || true
+              echo "after:";  df -h / | tail -1
+              ;;
+
+            rebuild-dbt-venv)
+              # Only affects MANUAL dbt runs on the Pi. The dbt-run workflow
+              # installs its own dbt via setup-python at job time and does not use
+              # this venv, so rebuilding it cannot break the pipeline.
+              rm -rf /opt/qvitta/dbtvenv
+              python3 -m venv /opt/qvitta/dbtvenv
+              /opt/qvitta/dbtvenv/bin/pip install -q --upgrade pip
+              /opt/qvitta/dbtvenv/bin/pip install -q -r "$GITHUB_WORKSPACE/.github/requirements/dbt.txt"
+              /opt/qvitta/dbtvenv/bin/dbt --version
+              ;;
+
+            reboot)
+              # LAST RESORT. If the Pi fails to come back this becomes a
+              # physical-presence problem — nobody can reach it remotely. That is
+              # survivable because the dispatch-workflow router will route dbt to
+              # ubuntu-latest while the Pi is offline, but it is still a one-way
+              # door until someone walks over to it.
+              #
+              # Detached with a delay so this job reports success before the box
+              # goes down; the runner service is `enabled`, so it returns on boot.
+              echo "rebooting in 10s; runner service is enabled and will return"
+              sudo -n nohup sh -c 'sleep 10; reboot' >/dev/null 2>&1 &
+              ;;
+
+            *)
+              echo "unknown action: $ACTION"; exit 1 ;;
+          esac
