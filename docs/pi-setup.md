@@ -7,6 +7,32 @@ AdGuard Home is included because it costs almost nothing and is genuinely useful
 **Exit criterion: a clean `dbt build` executed by hand on the Pi.** No workflow
 changes until that passes.
 
+> ## ✅ COMPLETED 2026-07-29
+>
+> Phase 1 is done. The Pi is `qvitta-pi` at **192.168.1.199**, Ubuntu 24.04.4
+> arm64, runner **2.336.0** registered as `qvitta-pi` (labels `qvitta-pi`,
+> `self-hosted`, `Linux`, `ARM64`) and Idle, installed as a systemd service and
+> verified to survive a reboot.
+>
+> **`dbt build`: PASS=59, WARN=0, ERROR=0, SKIP=0 in 2m02s.** That run also
+> unfroze the board — `int_stop_events` went from ~5 h stale to 11 min, and
+> `v_journeys` / `v_claimable_journeys` returned to the current date.
+>
+> Two measured results contradict what the plan assumed, both favourably:
+>
+> | | Planned | Measured |
+> |---|---|---|
+> | `dbt build` duration | "noticeably longer than GitHub's runners" | **122 s on the Pi vs 157–181 s billed on `ubuntu-latest`** — the Pi is *faster* |
+> | RAM | "4 GB is plenty"; board is actually **1 GB** | peak **413 MB used / 485 MB free**, zram untouched |
+>
+> The 1 GB variant is fine at dbt-only scope. It would not be if the browser
+> workflows (Phase 4) ever moved here — revisit then, not now.
+>
+> Sections 1–6 below are left as written, with corrections marked inline.
+> Outstanding: the **DHCP reservation** (§2, router-side, still not done) and the
+> optional AdGuard (§7) / Claude Code (§9) sections, neither of which blocks
+> Phase 2.
+
 ---
 
 ## 0. Hardware — what you need, and what not to buy
@@ -89,16 +115,45 @@ Sections 3 to 7 below are collapsed into `scripts/pi-bootstrap.sh`. It is
 idempotent and deliberately stops short of anything needing a secret or a
 decision (runner registration, `profiles.yml`, the AdGuard install itself).
 
+The repo is **private**, so the raw GitHub URL will not work unauthenticated and
+the script's own `git clone` cannot succeed either. Seed the repo from a machine
+that already has it checked out, then run the script from there:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Fakhravar1/claim-my-train/main/scripts/pi-bootstrap.sh -o pi-bootstrap.sh
-less pi-bootstrap.sh          # read before running — it uses sudo
-bash pi-bootstrap.sh
-# optional: WITH_CLAUDE=1 bash pi-bootstrap.sh
+# On the Pi: make the target directory writable by you
+sudo mkdir -p /opt/qvitta && sudo chown "$USER":"$USER" /opt/qvitta
+mkdir -p /opt/qvitta/repo && git init -q /opt/qvitta/repo
+
+# From your laptop — core.autocrlf=false is LOAD BEARING on Windows (see below)
+git -c core.autocrlf=false archive --format=tar HEAD \
+  | ssh <user>@<PI_IP> 'tar -x -C /opt/qvitta/repo'
+
+# Back on the Pi
+bash /opt/qvitta/repo/scripts/pi-bootstrap.sh
+# optional: WITH_CLAUDE=1 bash /opt/qvitta/repo/scripts/pi-bootstrap.sh
 ```
 
-Note the repo is private, so that raw URL needs a token — easier to just
-`git clone` the repo first (the script does this anyway) and run it from there,
-or paste the file over SSH.
+`git init` first means the script sees an existing `.git` and skips its clone
+entirely, rather than attempting one and warning.
+
+⚠️ **Line endings (hit for real 2026-07-29).** This repo was checked out on
+Windows with `core.autocrlf=true` and had **no `.gitattributes`**, so a plain
+`git archive` produced CRLF files. Bash will not run a CRLF script — it fails
+with `$'\r': command not found` and `set: pipefail: invalid option name`, and
+because that happens on the `set -euo pipefail` line the script does nothing at
+all while looking like it merely printed two odd warnings. A `.gitattributes`
+pinning `*.sh eol=lf` was added on 2026-07-29; `-c core.autocrlf=false` above is
+belt-and-braces for older checkouts. Check with `file` if in doubt:
+
+```bash
+file /opt/qvitta/repo/scripts/pi-bootstrap.sh   # must NOT say "CRLF line terminators"
+```
+
+⚠️ **Running it over a non-interactive SSH session.** The script originally
+called `sudo -v` in its preflight, which demands a tty even where `sudo -n true`
+succeeds — so driving it with `ssh host 'bash pi-bootstrap.sh'` aborted at the
+first step. Fixed 2026-07-29 (`sudo -n true || sudo -v`). Running it from an
+interactive shell after SSHing in, as this guide describes, was never affected.
 
 Read the sections below anyway for the reasoning; the script only automates the
 mechanical parts.
@@ -140,6 +195,24 @@ sudo systemctl restart zramswap
 # 3. Relax filesystem write-back timestamps
 sudo sed -i 's/\(errors=remount-ro\)/\1,noatime,commit=120/' /etc/fstab
 ```
+
+⚠️ **Correction (2026-07-29): step 3 as written above does nothing on this
+image.** The Ubuntu Server Pi root entry is `LABEL=writable / ext4 defaults 0 1`
+— there is no `errors=remount-ro` to match, so the `sed` is a no-op and the
+bootstrap's equivalent guard reported "no recognised root entry — skipped". The
+whole point of this section was silently lost. Match on the mount point instead:
+
+```bash
+sudo cp /etc/fstab /etc/fstab.bak
+sudo awk '!/^#/ && $2=="/" && $4 !~ /noatime/ { sub($4, $4",noatime") } { print }' \
+    /etc/fstab | sudo tee /etc/fstab.new >/dev/null
+sudo mv /etc/fstab.new /etc/fstab
+sudo findmnt --verify && sudo systemctl daemon-reload   # verify BEFORE rebooting
+```
+
+Confirm after reboot with `findmnt -no OPTIONS /` — it should include `noatime`.
+`scripts/pi-bootstrap.sh` now does this, including restoring the backup if
+`findmnt` rejects the result.
 
 `Storage=volatile` means logs live in RAM and vanish on reboot. That is usually
 the right trade for an appliance, but if you are actively debugging a crash, flip
@@ -204,11 +277,32 @@ trafiklab:
 ```bash
 chmod 600 ~/.dbt/profiles.yml
 cd /opt/qvitta/repo/dbt
+/opt/qvitta/dbtvenv/bin/dbt debug     # validates the connection in ~2 s — do this first
 /opt/qvitta/dbtvenv/bin/dbt deps
 /opt/qvitta/dbtvenv/bin/dbt build
 ```
 
 **A clean `dbt build` here is the Phase 1 exit criterion.**
+
+✅ **Passed 2026-07-29: `PASS=59 WARN=0 ERROR=0 SKIP=0` in 122 s.** Peak memory
+during the build was 413 MB used / 485 MB free on a **1 GB** Pi 4, with zram
+never touched — comfortable, though see the plan's §4 note about the browser
+workflows, which would change that.
+
+⚠️ **The host is `aws-1-…`, not `aws-0-…`.** The actual value is
+`aws-1-eu-west-1.pooler.supabase.com`. `aws-0-` appears in this repo's docs (the
+worked DNS example in §7) and is wrong — it will not resolve. If you do not have
+the password, it is the same value as the `SUPABASE_DB_PASSWORD` repo secret and
+is already in `~/.dbt/profiles.yml` on the laptop that runs dbt locally, under
+dbt's `pass:` alias. GitHub secrets are write-only, and resetting the Supabase
+database password would invalidate that secret and every other consumer of it —
+so read it from the local profile rather than rotating.
+
+Note also that dbt on the Pi resolves to **dbt-core 1.12.0** with
+dbt-postgres 1.10.0, because the pin is `dbt-core<2.0` rather than an exact
+version. CI installs from `.github/requirements/dbt.txt` and lands on ~1.10.x.
+That drift only affects manual runs — in Phase 2 the workflow installs its own
+pinned dbt on the runner, so the venv here is not what executes.
 
 Note this puts the DB password on the Pi's disk. The workflow writes its own
 `profiles.yml` at job time from GitHub secrets, so this file is only for manual
@@ -257,8 +351,27 @@ sudo ./svc.sh status
 The runner should now show **Idle** in the GitHub Runners page. Leave it idle —
 no workflow targets it until Phase 2.
 
+✅ **Done 2026-07-29.** Runner **2.336.0**, registered unattended with:
+
+```bash
+./config.sh --url https://github.com/Fakhravar1/claim-my-train \
+            --token <REGISTRATION_TOKEN> \
+            --name qvitta-pi --labels qvitta-pi \
+            --work _work --unattended --replace
+```
+
+Resulting labels: `qvitta-pi`, `self-hosted`, `Linux`, `ARM64`. Service installed
+via `sudo ./svc.sh install arian && sudo ./svc.sh start`, confirmed `enabled` +
+`active` after a deliberate reboot, and the listener log shows `Session created`
+/ `Listening for Jobs`. Idle RAM with the runner up: ~322 MB of 899 MB.
+
+⚠️ **`svc.sh` is not in the tarball.** For runner 2.336.0 it is *generated* by
+`config.sh` from `bin/systemd.svc.sh.template`, so it does not exist until after
+registration. The download block above implies otherwise; do not go looking for
+it before configuring.
+
 Make dbt available to jobs (the workflow uses `actions/setup-python`, but having
-a system Python 3.11 present is what lets the tool-cache fallback work):
+a system Python present is what lets the tool-cache fallback work):
 
 ```bash
 ls /opt/hostedtoolcache 2>/dev/null || sudo mkdir -p /opt/hostedtoolcache
@@ -266,9 +379,13 @@ sudo chown -R "$USER":"$USER" /opt/hostedtoolcache
 ```
 
 If `actions/setup-python` later fails to resolve arm64, pre-seed
-`/opt/hostedtoolcache/Python/3.11.<x>/arm64/` with a `.complete` marker file so
+`/opt/hostedtoolcache/Python/3.12.<x>/arm64/` with a `.complete` marker file so
 it resolves locally — that keeps the workflow YAML identical on both runners.
-This is the one genuine unknown in Phase 1.
+**This remains untested and is the one genuine unknown carried into Phase 2** —
+Phase 1 ran dbt from `/opt/qvitta/dbtvenv` directly and never exercised
+`actions/setup-python`. Bumping `dbt-run.yml` to `python-version: '3.12'` (per
+§5) is what makes the Pi and `ubuntu-latest` agree; do that before assuming the
+tool cache is a non-issue.
 
 ## 7. AdGuard Home
 
@@ -317,6 +434,47 @@ sudo systemctl restart systemd-resolved
 resolvectl status | grep -A2 'Current DNS'
 getent hosts github.com
 ```
+
+⚠️ **Correction (2026-07-29): the snippet above is NOT sufficient on its own.**
+After running it, the global scope does show `DNS Servers: 1.1.1.1 9.9.9.9` with
+`DNS Domain: ~.` — but `eth0` *still* carries the DHCP-supplied router DNS with
+`+DefaultRoute`:
+
+```
+Link 2 (eth0)
+       DNS Servers: 192.168.1.1 2001:…::1
+        DNS Domain: lan
+```
+
+A link with `+DefaultRoute` matches every query, so which scope answers is not
+guaranteed. Today that is harmless — the router forwards upstream and AdGuard is
+not installed. **The moment the router hands out the Pi's own address as DNS,
+`eth0`'s resolver becomes AdGuard on this same box, which is precisely the
+circular dependency this section exists to prevent.** Suppress the DHCP-supplied
+servers so only the pinned upstreams remain:
+
+```bash
+# netplan: stop eth0 accepting DNS from DHCP
+sudo tee /etc/netplan/99-no-dhcp-dns.yaml >/dev/null <<'YAML'
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      dhcp4-overrides:
+        use-dns: false
+YAML
+sudo chmod 600 /etc/netplan/99-no-dhcp-dns.yaml
+sudo netplan apply
+
+# verify eth0 now lists no DNS servers of its own
+resolvectl status eth0 | grep -E 'DNS Servers|Default Route'
+```
+
+Do this **before** pointing the router at the Pi, not after — debugging it from
+the other side means the box you need to SSH into is the one with broken DNS.
+`scripts/pi-bootstrap.sh` does not do this, because it is only needed if you
+actually install AdGuard.
 
 Trade-off, stated honestly: the Pi's own traffic is then unfiltered. That is the
 point — you do not want ad-blocking policy sitting in the path between your data

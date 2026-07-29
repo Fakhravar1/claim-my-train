@@ -31,7 +31,10 @@ warn() { printf '\033[1;33m    ! %s\033[0m\n' "$*"; }
 
 step "Preflight"
 [ "$(id -u)" -ne 0 ] || { echo "Run as your normal user, not root (it uses sudo)."; exit 1; }
-sudo -v
+# `sudo -v` insists on a tty even where NOPASSWD applies, so it aborts the whole
+# script when this is driven over a non-interactive SSH session (the usual way to
+# automate it). Try the passwordless path first, fall back to prompting.
+sudo -n true 2>/dev/null || sudo -v
 
 ARCH="$(uname -m)"
 info "arch: $ARCH"
@@ -73,13 +76,30 @@ sudo systemctl restart zramswap 2>/dev/null || warn "zramswap not restarted; che
 info "zram: compressed RAM swap enabled"
 
 # fstab is the one edit that can make the Pi unbootable, so: back up, only touch
-# a line we positively recognise, and verify afterwards.
-if ! grep -q 'noatime' /etc/fstab && grep -q 'errors=remount-ro' /etc/fstab; then
-    sudo cp /etc/fstab "/etc/fstab.bak.$(date +%Y%m%d%H%M%S)"
-    sudo sed -i 's/errors=remount-ro/errors=remount-ro,noatime/' /etc/fstab
-    info "fstab: added noatime (backup written alongside /etc/fstab)"
+# the root mount line, and verify with findmnt before leaving it in place.
+#
+# NOTE (2026-07-29): the previous version keyed on `errors=remount-ro`, which the
+# Ubuntu Server Pi image does NOT use — its root line is
+#   LABEL=writable  /  ext4  defaults  0 1
+# so the guard silently fell through to "skipped" and noatime was never applied,
+# quietly losing the entire point of this section. Match on the mount point.
+if awk '!/^#/ && $2=="/" && $4 ~ /noatime/ {found=1} END{exit !found}' /etc/fstab; then
+    info "fstab: root already mounted noatime — skipped"
+elif awk '!/^#/ && $2=="/" {found=1} END{exit !found}' /etc/fstab; then
+    FSTAB_BAK="/etc/fstab.bak.$(date +%Y%m%d%H%M%S)"
+    sudo cp /etc/fstab "$FSTAB_BAK"
+    awk '!/^#/ && $2=="/" && $4 !~ /noatime/ { sub($4, $4",noatime") } { print }' \
+        /etc/fstab | sudo tee /etc/fstab.new >/dev/null
+    sudo mv /etc/fstab.new /etc/fstab
+    if sudo findmnt --verify >/dev/null 2>&1; then
+        sudo systemctl daemon-reload
+        info "fstab: added noatime to / (backup at $FSTAB_BAK)"
+    else
+        sudo cp "$FSTAB_BAK" /etc/fstab
+        warn "fstab: findmnt rejected the edit — restored from $FSTAB_BAK, noatime NOT applied"
+    fi
 else
-    info "fstab: already has noatime, or no recognised root entry — skipped"
+    warn "fstab: no root ('/') entry recognised — noatime not applied, check /etc/fstab by hand"
 fi
 
 # ------------------------------------------------------------------- DNS
@@ -127,8 +147,19 @@ fi
 info "$("$QV_ROOT/dbtvenv/bin/dbt" --version 2>&1 | head -2 | tr '\n' ' ')"
 
 if [ ! -d "$QV_ROOT/repo/.git" ]; then
-    git clone -q "$REPO_URL" "$QV_ROOT/repo"
-    info "cloned repo to $QV_ROOT/repo"
+    # The repo is PRIVATE, so an unauthenticated clone fails. Under `set -e` that
+    # aborted the whole script at the last step, after all the real work — so it
+    # is explicitly non-fatal now, with the seeding recipe printed instead.
+    # GIT_TERMINAL_PROMPT=0 stops git blocking on a credential prompt.
+    if GIT_TERMINAL_PROMPT=0 git clone -q "$REPO_URL" "$QV_ROOT/repo" 2>/dev/null; then
+        info "cloned repo to $QV_ROOT/repo"
+    else
+        warn "clone failed — the repo is PRIVATE and this host has no credentials."
+        warn "Seed it from a machine that does have the repo checked out:"
+        warn "  git -c core.autocrlf=false archive --format=tar HEAD \\"
+        warn "    | ssh $USER@\$(hostname -I | awk '{print \$1}') 'mkdir -p $QV_ROOT/repo && tar -x -C $QV_ROOT/repo'"
+        warn "(core.autocrlf=false matters on Windows — CRLF shell scripts will not run here.)"
+    fi
 else
     info "repo already present at $QV_ROOT/repo"
 fi

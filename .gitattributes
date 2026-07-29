@@ -1,0 +1,33 @@
+# Normalise line endings.
+#
+# Added 2026-07-29 after `scripts/pi-bootstrap.sh`, exported from a Windows
+# checkout (core.autocrlf=true) to a Linux host, arrived with CRLF endings and
+# would not execute: bash reported `$'\r': command not found` and
+# `set: pipefail: invalid option name`.
+#
+# Without this file, every shell script that leaves a Windows working tree for a
+# Linux box is broken on arrival — including anything the Raspberry Pi runner or
+# the claim-worker executes.
+
+# Let git decide for ordinary text, but never store CRLF in the object database.
+* text=auto
+
+# Files that MUST be LF in the working tree, whatever the platform.
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.py        text eol=lf
+*.sql       text eol=lf
+Dockerfile  text eol=lf
+
+# Binary — never touch.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.lockb binary

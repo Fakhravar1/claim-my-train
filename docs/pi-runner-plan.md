@@ -1,7 +1,22 @@
 # Raspberry Pi self-hosted runner — plan
 
-Status: **PROPOSED** (nothing implemented). Written 2026-07-29, during the
-Actions-minutes outage described below.
+Status: **Phase 1 COMPLETE (2026-07-29). Phases 2–4 still proposed.** Written
+2026-07-29, during the Actions-minutes outage described below.
+
+> **Phase 1 outcome.** Pi standing at `192.168.1.199` as `qvitta-pi`, runner
+> 2.336.0 registered and Idle, `dbt build` verified by hand: `PASS=59 WARN=0
+> ERROR=0 SKIP=0` in 122 s. Details in `docs/pi-setup.md`. Two assumptions in
+> §4 below turned out wrong, both in our favour:
+>
+> - **The Pi is a 1 GB Pi 4 Rev 1.1, not 4 GB** — and it is still fine. Peak
+>   during the build was 413 MB used / 485 MB free, zram untouched; idle with the
+>   runner up is ~322 MB. The "4 GB is plenty" line below made 1 GB sound
+>   marginal; at dbt-only scope it is not. It *would* be marginal if Phase 4 ever
+>   moved Chromium here.
+> - **The Pi is FASTER than the hosted runner**, not slower: 122 s versus the
+>   157–181 s measured on `ubuntu-latest`. §4's "expect minutes, not seconds" and
+>   the latency caveat behind Phase 3 are both wrong — restoring a 15-minute
+>   cadence has more headroom than assumed.
 
 Goal: move the recurring GitHub Actions workloads onto a Raspberry Pi so they
 cost no Actions minutes and run from a Swedish IP, while keeping GitHub-hosted
@@ -207,16 +222,22 @@ down, GitHub fine), which is the failure mode the Pi introduces.
 ## 4. Build
 
 ### Hardware — **Raspberry Pi 4** (confirmed on hand, 2026-07-29)
-A Pi 4 is comfortably enough for this workload. Expect `dbt build` to take
-noticeably longer than GitHub's runners (minutes, not seconds) — irrelevant at
-hourly or 15-min cadence, since nothing downstream is latency-sensitive.
 
-- **4 GB is plenty at this scope.** With the browser workflows staying on GitHub
-  (§2), the only workload is dbt — a Postgres client, not a memory hog. 8 GB only
-  matters if Chromium is added later.
+**Measured, superseding the estimates that follow:** the board is a Pi 4 Model B
+**Rev 1.1 with 1 GB RAM**, and `dbt build` takes **122 s** on it — *faster* than
+the 157–181 s billed on `ubuntu-latest`, not "minutes, not seconds" slower.
+Peak memory 413 MB used / 485 MB free, zram untouched.
+
+- ~~**4 GB is plenty at this scope.**~~ Moot — it is 1 GB, and that is still
+  enough, with roughly 480 MB of headroom at peak. The reasoning holds: dbt is a
+  Postgres client, not a memory hog. **This is the constraint that would bite
+  first if Phase 4 moved Chromium here** — do not assume the browser workflows
+  fit on this board.
 - **Boot from a USB 3.0 SSD, not microSD.** The runner work dir churns constantly
   (checkouts, pip caches); SD cards die from this. The Pi 4 supports USB boot
-  with an up-to-date bootloader (no NVMe — that is Pi 5 + HAT).
+  with an up-to-date bootloader (no NVMe — that is Pi 5 + HAT). **Phase 1 ran on
+  the 32 GB microSD** (`pi-setup.md` §0's deliberate "do not let storage shopping
+  block Phase 1"), with journald→RAM, zram and noatime in place to limit churn.
 - **Active cooling.** A Pi 4 throttles hard without a heatsink/fan. An hourly dbt
   build is not sustained load, so this is less critical than it would be for
   browser work — but it is cheap insurance.
@@ -288,10 +309,23 @@ the CTE DELETE). Stage the batch into a table, then DELETE and INSERT inside an
 explicit transaction. `int_stop_events` has no unique index and tolerates the
 single-statement form.
 
-**Phase 1 — Pi standing, nothing moved.** Hardware, Ubuntu 24.04 arm64, runner
-registered as `qvitta-pi` and idle. Validate by hand on the Pi: `dbt build`
-against the session pooler, and the `setup-python` tool-cache question from §4.
-No workflow changes yet. **Exit criterion: a clean `dbt build` from the Pi.**
+**Phase 1 — Pi standing, nothing moved. ✅ DONE 2026-07-29.** Hardware, Ubuntu
+24.04.4 arm64, runner 2.336.0 registered as `qvitta-pi` and Idle as a
+reboot-surviving systemd service. `dbt build` against the session pooler:
+`PASS=59 WARN=0 ERROR=0 SKIP=0` in 122 s, which also served as the Phase 0 bridge
+— it took `int_stop_events` from ~5 h stale back to 11 min. No workflow changes
+made.
+
+⚠️ **The `setup-python` tool-cache question from §4 was NOT validated** and
+carries into Phase 2. Phase 1 ran dbt from `/opt/qvitta/dbtvenv` directly, so
+`actions/setup-python` never executed on this runner. It remains the one genuine
+unknown. Address it by bumping `dbt-run.yml` to `python-version: '3.12'` (Ubuntu
+24.04 ships 3.12 and does not package 3.11; `ubuntu-latest` has 3.12 too, so both
+runners agree) rather than by branching the YAML.
+
+Still outstanding from Phase 1, neither blocking: the **router DHCP reservation**
+for 192.168.1.199, and — only if AdGuard is ever installed — suppressing the
+DHCP-supplied link DNS so the Pi genuinely bypasses it (`pi-setup.md` §7).
 
 **Phase 2 — move `dbt-run`.** Add the `runner` input, build the
 `dispatch-workflow` edge function + PAT, point pg_cron at it, retire the
