@@ -53,6 +53,29 @@ const FALLBACK_RUNNER = 'ubuntu-latest'
 const DEFAULT_WORKFLOW = 'dbt-run.yml'
 const DEFAULT_REF = 'main'
 
+// FALLBACK THROTTLE — added with Phase 3 (docs/pi-runner-plan.md §5).
+//
+// Phase 3 raises the cron to every 15 min, which is free while the Pi serves.
+// But the plan's failsafe budget in §6 ("~72 billed min/day, roughly 20 days of
+// continuous fallback") was computed at HOURLY cadence and does not survive the
+// change: at */15 a sustained Pi outage would dispatch ~96 hosted runs/day
+// ≈ 288 billed min/day, burning a month's headroom in under a week — silently,
+// and precisely when nobody is watching. That is the §6 risk "the fallback burns
+// minutes exactly when you are not watching", made 4× worse.
+//
+// So: the Pi gets 15-min freshness, hosted fallback degrades to HOURLY. During a
+// Pi outage only the top-of-hour tick actually dispatches; the other three are
+// reported as skipped. Freshness during an outage is then no worse than what the
+// project ran on from 2026-07-07 until today.
+//
+// Stateless on purpose — no table, no clock skew, nothing to get out of sync.
+// Set to 60 to disable the throttle (every tick may fall back).
+//
+// NOT applied when the caller forces a runner: the freshness watchdog's
+// self-heal passes an explicit `runner`, and that is a breach response which
+// must never be throttled.
+const FALLBACK_MAX_MINUTE = 15
+
 async function authorized(req: Request): Promise<boolean> {
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
   if (!token) return false
@@ -176,9 +199,27 @@ Deno.serve(async (req) => {
     detail = probe.detail
   }
 
+  // See FALLBACK_MAX_MINUTE. Applies only to unforced hosted fallbacks.
+  const minute = new Date().getUTCMinutes()
+  const throttled = !forced && runner === FALLBACK_RUNNER && minute >= FALLBACK_MAX_MINUTE
+
   if (dryRun) {
     return new Response(
-      JSON.stringify({ success: true, dryRun: true, workflow, ref, runner, detail }),
+      JSON.stringify({ success: true, dryRun: true, workflow, ref, runner, detail, throttled }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  if (throttled) {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        dispatched: false,
+        skipped: 'fallback_throttled',
+        workflow,
+        runner,
+        detail: `${detail}; hosted fallback throttled to the top of the hour (minute ${minute})`,
+      }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
   }

@@ -646,13 +646,26 @@ GitHub secrets at job time), and keep Tailscale ACLs to your own devices.
 
 ## 10. Where this leaves you
 
-Done here: a hardened Pi with an idle `qvitta-pi` runner, a verified `dbt build`,
-and AdGuard serving the LAN.
+**Superseded 2026-07-29 — Phases 2 and 3 also landed the same day.** This section
+described the state at the end of Phase 1; it is kept for the sequence.
 
-Not done, and deliberately so: no workflow targets the Pi yet. Phase 2 (the
-`runner` input on `dbt-run.yml` plus the `dispatch-workflow` edge function that
-picks Pi-vs-hosted before dispatch) is what actually moves the work — see
-`docs/pi-runner-plan.md` §3.
+Current reality: `dbt-run` is dispatched **every 15 minutes** by pg_cron jobid 18
+→ the `dispatch-workflow` edge function → the Pi, falling back to
+`ubuntu-latest` when the Pi is offline. Self-hosted runs are unbilled, so the
+recurring cost of `dbt build` is now zero. See `docs/pi-runner-plan.md` §5 and
+CLAUDE.md §3.
 
-In the meantime, §5's manual `dbt build` is your bridge for the ongoing
-Actions-minutes outage.
+Operational notes that matter day to day:
+
+- **Change cadence with `cron.alter_job` on jobid 18** — not the repo, and no
+  longer the cron-jobs.org dashboard (retired for dbt).
+- **A manual dispatch is the one path the router cannot protect.** If you fire
+  `dbt-run` by hand while the Pi is down, pick `ubuntu-latest` from the dropdown,
+  or the job queues silently for up to 24 h.
+- **`~/.dbt/profiles.yml` on the Pi is no longer load-bearing.** The workflow
+  writes its own profile at job time from GitHub secrets. Keep the file if you
+  want to run `dbt build` by hand; delete it if you would rather the pooler
+  password not sit on the box (§9's "worth deciding deliberately").
+- Re-run the failover test whenever these workflows change materially
+  (`pi-runner-plan.md` §6). Stopping the runner service over SSH is enough —
+  `sudo ./svc.sh stop`, confirm the router picks `ubuntu-latest`, `svc.sh start`.

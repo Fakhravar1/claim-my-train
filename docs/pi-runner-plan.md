@@ -335,15 +335,59 @@ Still outstanding from Phase 1, neither blocking: the **router DHCP reservation*
 for 192.168.1.199, and — only if AdGuard is ever installed — suppressing the
 DHCP-supplied link DNS so the Pi genuinely bypasses it (`pi-setup.md` §7).
 
-**Phase 2 — move `dbt-run`.** Add the `runner` input, build the
-`dispatch-workflow` edge function + PAT, point pg_cron at it, retire the
-cron-jobs.org job for dbt (removing an external dependency — §3). Keep cadence
-hourly at first. Watch for a week: confirm zero minutes consumed, and force a
-fallback by powering the Pi off to prove the router flips to `ubuntu-latest`.
+**Phase 2 — move `dbt-run`. ✅ DONE 2026-07-29.** `runner` choice input added to
+`dbt-run.yml` (plus Python 3.11 → 3.12 so one file serves both runners);
+`dispatch-workflow` edge function deployed; pg_cron `dispatch-dbt-run-hourly`
+(jobid 18) points at it; the cron-jobs.org job for dbt was retired. Verified:
 
-**Phase 3 — spend the headroom.** Restore `dbt build` to 15 min, reverting the
-2026-07-07 cost cut and dropping freshness lag from ≤1 h to ≤15 min. This is free
-on the Pi. Update CLAUDE.md §3 and §10 to describe the new topology.
+| Test | Result |
+|---|---|
+| Probe, Pi online | → `qvitta-pi` |
+| Probe, Pi offline (runner service stopped) | → `ubuntu-latest`, reason logged |
+| Probe after recovery | → `qvitta-pi` |
+| Bad bearer / no bearer | 403 / 403 |
+| End-to-end dispatch | `204` → ran on `qvitta-pi`, `PASS=59`, **0 billable min** |
+| Watchdog self-heal (forced breach) | dispatched on `ubuntu-latest`, `PASS=59` |
+
+Two deviations from §3 as sketched, both deliberate:
+
+- **The function is authenticated**, unlike the sibling collectors pg_cron calls
+  headerless. Those are harmless to trigger; this one dispatches workflows and
+  cancels runs, so an open endpoint is a way for anyone to burn the account's
+  Actions minutes. It takes a narrow-privilege `DISPATCH_SECRET` (pg_cron's path,
+  stored in Vault so no key sits in plaintext in `cron.job` and the service-role
+  key never enters the database) or a service-level bearer (the watchdog's path).
+- **The workflow default was `ubuntu-latest` during the transition**, not
+  `qvitta-pi` as sketched, because cron-jobs.org was still firing bare dispatches
+  that inherit the default — pointing those at the Pi before the router existed
+  would have recreated the silent-queue failure the router exists to prevent. It
+  was flipped to `qvitta-pi` once cron-jobs.org was retired.
+
+Measured detail worth keeping: **GitHub takes ~20 s to mark a stopped runner
+offline** (~10 s to mark it back online). So the probe has a blind spot — a Pi
+that dies just after a probe can still queue one job. The queued-run cancellation
+and the watchdog layer are what close it.
+
+The failover test was done by **stopping the runner service over SSH**, not by
+powering the Pi off as this plan suggested — same code path, reversible in
+seconds, and it avoids taking down anything else the Pi might be serving. Prefer
+that method; keep the power-off test for when AdGuard or other services are
+actually on the box and you want to prove the whole-machine case.
+
+**Phase 3 — spend the headroom. ✅ DONE 2026-07-29.** `dbt build` restored to
+`*/15` (pg_cron jobid 18), reverting the 2026-07-07 cost cut; freshness lag drops
+from ≤1 h to ≤15 min, free on the Pi. CLAUDE.md §3 and §10 rewritten for the new
+topology.
+
+⚠️ **Phase 3 broke §6's fallback budget, so the router now throttles it.** The
+"~72 billed min/day ≈ 20 days of continuous fallback" figure in §6 was computed
+at HOURLY cadence. At `*/15`, a sustained Pi outage would be ~96 hosted runs/day
+≈ **288 billed min/day** — a month of headroom gone in under a week, silently,
+exactly when nobody is watching. `FALLBACK_MAX_MINUTE` in `dispatch-workflow`
+therefore limits *unforced hosted fallbacks* to the top of the hour: the Pi keeps
+15-min freshness, while a Pi outage degrades to the hourly cadence this project
+ran on until today. The watchdog's self-heal passes an explicit `runner` and is
+deliberately exempt — a breach response must never be throttled.
 
 **Phase 4 (OPTIONAL, deferred) — the browser workflows.** Only if the HLT
 geo-block becomes worth solving. Move `claim-pdf-worker` and `claim-canary`,
@@ -358,12 +402,15 @@ worker (§19) and retire `diag-hlt.yml`. Nothing in Phases 1–3 depends on this
 
 - **Home hardware becomes production infrastructure.** Power cuts, ISP outages,
   someone unplugging it. Mitigated by the router + watchdog, not eliminated.
-- **The fallback burns minutes exactly when you are not watching.** Bounded at
-  dbt-only scope: hosted `dbt-run` costs ~72 min/day, against ~1 475 min/month of
-  headroom once dbt moves off — roughly **20 days of continuous fallback** before
-  quota trouble. That is what makes the failsafe credible rather than theoretical.
-  Still: decide the spending limit deliberately rather than discovering it the way
-  the 2026-07-28 outage was discovered.
+- **The fallback burns minutes exactly when you are not watching.** ⚠️ **This
+  arithmetic assumed hourly cadence and was invalidated by Phase 3** — see the
+  throttle note in §5. At hourly, hosted `dbt-run` costs ~72 min/day against
+  ~1 475 min/month of headroom ≈ **20 days of continuous fallback**. At the `*/15`
+  cadence Phase 3 introduced it would have been ~288 min/day ≈ **5 days**, which
+  is not a credible failsafe. `FALLBACK_MAX_MINUTE` in `dispatch-workflow` pins
+  unforced hosted fallbacks back to hourly, restoring the ~20-day figure.
+  Spending limit was raised to **$13** on 2026-07-29 — decided deliberately,
+  rather than discovered the way the 2026-07-28 outage was.
 - **Secret exposure.** At dbt-only scope the Pi receives just the five
   `SUPABASE_DB_*` secrets (session-pooler credentials). It never sees
   `SUPABASE_SERVICE_ROLE_KEY` or `LOVABLE_MIRROR_PAT`, because the workflows
