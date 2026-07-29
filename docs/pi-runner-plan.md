@@ -168,10 +168,21 @@ down, GitHub fine), which is the failure mode the Pi introduces.
 
 ## 4. Build
 
-### Hardware
-- **Raspberry Pi 5, 8 GB.** 4 GB works but Chromium plus dbt is tight.
-- **Boot from SSD/NVMe, not microSD.** The runner work dir churns constantly
-  (checkouts, pip, Playwright); SD cards die from this.
+### Hardware — **Raspberry Pi 4** (confirmed on hand, 2026-07-29)
+A Pi 4 is comfortably enough for this workload. Expect `dbt build` to take
+noticeably longer than GitHub's runners (minutes, not seconds) — irrelevant at
+hourly or 15-min cadence, since nothing downstream is latency-sensitive.
+
+- **4 GB is workable, 8 GB is comfortable.** dbt is fine either way; Chromium for
+  the SJ/Vy/HLT paths is the memory consumer. On 4 GB, add swap (zram) before
+  concluding anything is broken.
+- **Boot from a USB 3.0 SSD, not microSD.** The runner work dir churns constantly
+  (checkouts, pip, Playwright); SD cards die from this. The Pi 4 supports USB
+  boot with an up-to-date bootloader (no NVMe — that is Pi 5 + HAT).
+- **Active cooling.** A Pi 4 under sustained load throttles hard without a
+  heatsink/fan. A runner doing Chromium work is sustained load.
+- **A real 3 A USB-C PSU.** Undervoltage on a Pi 4 with a bus-powered SSD
+  produces bizarre intermittent failures that look like software bugs.
 - Wired ethernet. Runner polls outbound only — **no port forwarding, no inbound
   ports, works fine behind CGNAT and a dynamic IP.**
 
@@ -208,10 +219,28 @@ failsafe silently rots.
 
 ## 5. Phasing
 
-**Phase 0 — unblock today's outage (independent of the Pi).**
-Either raise the Actions spending limit, or run `dbt build` by hand against the
-session pooler to unfreeze the board. This is not optional; the Pi is days away
-and the board is stale now.
+**Phase 0 — unblock today's outage (independent of the Pi). PARTLY DONE.**
+On 2026-07-29 the board was unfrozen by hand-running the compiled model SQL for
+`int_stop_events` and `fct_claimable_stop_events` through the Supabase SQL API
+(delete+insert on `stop_event_key`, matching dbt's incremental strategy).
+`v_journeys` and `v_claimable_journeys` returned to `2026-07-29`; grain and
+`assert_claimable_layer_covers_fct_journeys` both verified clean afterwards.
+
+**That was a one-shot, not a repair.** `dbt run` still fails on every trigger
+until the minutes quota resets or the spending limit is raised, so the board goes
+stale again within the 360-min watchdog threshold (~6 h). Until the Pi is
+serving, the only two real options are raising the spending limit or repeating
+the manual refresh. Two things stay stale under the manual path: the SEO aggs
+(`agg_station_delays_daily`, `agg_operator_delays_daily`) and
+`dim_active_stations` — both catch up on the next genuine `dbt build`, since the
+aggs reprocess a multi-day window.
+
+Note for anyone repeating the manual refresh: `fct_claimable_stop_events` has a
+**unique index on `stop_event_key`**, so delete+insert cannot be expressed as one
+statement with data-modifying CTEs (the INSERT's uniqueness check does not see
+the CTE DELETE). Stage the batch into a table, then DELETE and INSERT inside an
+explicit transaction. `int_stop_events` has no unique index and tolerates the
+single-statement form.
 
 **Phase 1 — Pi standing, nothing moved.** Hardware, Ubuntu 24.04 arm64, runner
 registered and idle. Validate by hand on the Pi: `dbt build` against the pooler,
