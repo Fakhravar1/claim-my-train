@@ -370,22 +370,41 @@ via `sudo ./svc.sh install arian && sudo ./svc.sh start`, confirmed `enabled` +
 registration. The download block above implies otherwise; do not go looking for
 it before configuring.
 
-Make dbt available to jobs (the workflow uses `actions/setup-python`, but having
-a system Python present is what lets the tool-cache fallback work):
+### ✅ `actions/setup-python` on arm64 — RESOLVED 2026-07-29, no workaround needed
 
-```bash
-ls /opt/hostedtoolcache 2>/dev/null || sudo mkdir -p /opt/hostedtoolcache
-sudo chown -R "$USER":"$USER" /opt/hostedtoolcache
+This was the one genuine unknown carried out of Phase 1. It is settled: a
+smoke-test job (`.github/workflows/pi-smoke-test.yml`, dispatched with
+`runner=qvitta-pi`) ran green end to end on this Pi.
+
+```
+arch:        aarch64          runner:      qvitta-pi
+kernel:      6.8.0-1060-raspi environment: self-hosted
+tool cache:  /opt/actions-runner/_work/_tool
+actions/setup-python@v5 → "Create Python 3.12.13 folder"   ← downloaded arm64, no pre-seed
+dbt-core 1.12.0 + dbt-postgres 1.10.0 installed from .github/requirements/dbt.txt
 ```
 
-If `actions/setup-python` later fails to resolve arm64, pre-seed
-`/opt/hostedtoolcache/Python/3.12.<x>/arm64/` with a `.complete` marker file so
-it resolves locally — that keeps the workflow YAML identical on both runners.
-**This remains untested and is the one genuine unknown carried into Phase 2** —
-Phase 1 ran dbt from `/opt/qvitta/dbtvenv` directly and never exercised
-`actions/setup-python`. Bumping `dbt-run.yml` to `python-version: '3.12'` (per
-§5) is what makes the Pi and `ubuntu-latest` agree; do that before assuming the
-tool cache is a non-issue.
+`actions/python-versions` **does** publish linux-arm64 for 3.12 — setup-python
+fetched and installed 3.12.13 unaided. **No tool-cache pre-seeding, and no
+`runner.environment` branching in the YAML.**
+
+⚠️ Two corrections to what this section used to say:
+
+- **`RUNNER_TOOL_CACHE` is `/opt/actions-runner/_work/_tool`, not
+  `/opt/hostedtoolcache`.** Self-hosted runners default the tool cache under the
+  work directory. The earlier `mkdir /opt/hostedtoolcache` instruction was
+  pointless — that path is never consulted. Skip it.
+- Any pre-seed fallback, if ever needed for another version, belongs at
+  `$RUNNER_TOOL_CACHE/Python/<ver>/arm64/` with a `.complete` marker.
+
+**Self-hosted jobs are not billed.** The same run reported
+`{"billable":{}}` — an empty billable object against 199 s of wall clock — from
+`GET /repos/:owner/:repo/actions/runs/:id/timing`. Confirms the core premise of
+`pi-runner-plan.md`: moving `dbt-run` here takes its ~2 160 min/month to zero.
+
+Still required in Phase 2: bump `dbt-run.yml` from `python-version: '3.11'` to
+`'3.12'`. Ubuntu 24.04 does not package 3.11, and `ubuntu-latest` provides 3.12,
+so 3.12 is what lets one YAML serve both runners.
 
 ## 7. AdGuard Home
 

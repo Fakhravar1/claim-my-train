@@ -263,18 +263,24 @@ best-effort.
 - Install as a systemd service (`./svc.sh install && ./svc.sh start`) so it
   survives reboot. Leave runner auto-update on.
 
-### arm64 items to verify during setup
+### arm64 items to verify during setup — ✅ BOTH CLEARED 2026-07-29
 
-At dbt-only scope there is exactly **one** real unknown:
+1. ~~**`actions/setup-python` on linux-arm64.**~~ **Resolved: it just works.** The
+   `pi-smoke-test.yml` job on `qvitta-pi` had setup-python@v5 fetch and install
+   **Python 3.12.13** for arm64 unaided ("Create Python 3.12.13 folder"). No tool
+   cache pre-seed, no `runner.environment` branching. The workflow file stays
+   identical on both runners — provided `dbt-run.yml` is bumped **3.11 → 3.12**,
+   since Ubuntu 24.04 does not package 3.11 and `ubuntu-latest` has 3.12.
+   Note `RUNNER_TOOL_CACHE` on a self-hosted runner is
+   `/opt/actions-runner/_work/_tool`, not `/opt/hostedtoolcache`.
+2. ~~`dbt-core`, `dbt-postgres`, `psycopg2`.~~ **Uneventful, as expected.**
+   Installed clean from `.github/requirements/dbt.txt` on arm64 (dbt-core 1.12.0
+   + dbt-postgres 1.10.0), and `dbt build` ran green by hand — see §5.
 
-1. **`actions/setup-python` on linux-arm64.** `actions/python-versions` arm64
-   coverage is recent and incomplete. If it fails to resolve, pre-seed the tool
-   cache at `$RUNNER_TOOL_CACHE/Python/3.11.<x>/arm64/` with a `.complete`
-   marker; setup-python then resolves locally and **the workflow file stays
-   identical**. Do not branch the YAML on `runner.environment` — that is how the
-   two paths drift. (`dbt-run.yml` pins 3.11.)
-2. `dbt-core`, `dbt-postgres`, `psycopg2` — pure Python plus an aarch64 manylinux
-   wheel. Expected to be uneventful; verify by running `dbt build` by hand.
+**Self-hosted jobs cost zero Actions minutes — confirmed, not assumed.** The
+smoke run returned `{"billable":{}}` from the run-timing API against 199 s of
+wall clock. This is the premise the whole plan rests on, and it now has a
+measurement behind it.
 
 Deferred with the browser workflows (§2), relevant only if they are moved later:
 Playwright arm64 Chromium (`playwright install --with-deps chromium`, fallback
@@ -316,12 +322,14 @@ reboot-surviving systemd service. `dbt build` against the session pooler:
 — it took `int_stop_events` from ~5 h stale back to 11 min. No workflow changes
 made.
 
-⚠️ **The `setup-python` tool-cache question from §4 was NOT validated** and
-carries into Phase 2. Phase 1 ran dbt from `/opt/qvitta/dbtvenv` directly, so
-`actions/setup-python` never executed on this runner. It remains the one genuine
-unknown. Address it by bumping `dbt-run.yml` to `python-version: '3.12'` (Ubuntu
-24.04 ships 3.12 and does not package 3.11; `ubuntu-latest` has 3.12 too, so both
-runners agree) rather than by branching the YAML.
+**Phase 1.5 — runner proven, still nothing moved. ✅ DONE 2026-07-29.** A one-off
+`pi-smoke-test.yml` (checkout → setup-python 3.12 → `pip install -r
+.github/requirements/dbt.txt` → `dbt --version`) dispatched at `runs-on:
+qvitta-pi` and passed every step in 3m14s. It closed the §4 `setup-python`
+unknown, confirmed **zero billable minutes**, and exercised the
+`runs-on: ${{ inputs.runner }}` mechanism §3's router depends on — so that
+assumption is tested *before* the router exists rather than after. Delete the
+workflow when Phase 2 lands.
 
 Still outstanding from Phase 1, neither blocking: the **router DHCP reservation**
 for 192.168.1.199, and — only if AdGuard is ever installed — suppressing the

@@ -31,7 +31,7 @@
 > | Board is **1 GB**, not 4 GB — but is fine | Peak 413 MB used / 485 MB free. Would NOT be fine if Phase 4 moved Chromium here. |
 > | Pi is **faster** than `ubuntu-latest` | 122 s vs 157–181 s. Phase 3's 15-min cadence has more headroom than assumed. |
 > | Global DNS pinned, but `eth0` keeps DHCP DNS with `+DefaultRoute` | §7's AdGuard bypass is incomplete; needs `use-dns: false`. Harmless until AdGuard is installed. |
-> | `actions/setup-python` on arm64 | **Still unvalidated** — Phase 1 never ran it. Carries into Phase 2 as the one genuine unknown. |
+> | `actions/setup-python` on arm64 | ✅ **Resolved 2026-07-29** by a smoke-test job: setup-python@v5 installed Python 3.12.13 for arm64 unaided, no tool-cache pre-seed. Self-hosted runs also confirmed **zero billable minutes**. |
 >
 > The SD card arrived holding a **Home Assistant OS install (2024-07-11)**, which
 > was wiped with the owner's explicit confirmation. Worth knowing if that
