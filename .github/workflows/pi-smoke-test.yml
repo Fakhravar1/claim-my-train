@@ -1,0 +1,68 @@
+# One-off Phase 1.5 validation for the Raspberry Pi self-hosted runner.
+#
+# Proves three things before any real work is routed to the Pi:
+#   1. The `qvitta-pi` runner can actually execute a job at all (Phase 1 left it
+#      registered and idle, but nothing ever ran on it).
+#   2. `actions/setup-python` resolves on linux-arm64 — THE unknown carried out
+#      of Phase 1, flagged in docs/pi-runner-plan.md §4 and docs/pi-setup.md §6.
+#      Pinned to 3.12 because Ubuntu 24.04 ships 3.12 and does not package 3.11;
+#      `ubuntu-latest` has 3.12 too, so both runners agree and the workflow YAML
+#      stays identical on both. dbt-run.yml still pins 3.11 and must be bumped
+#      in Phase 2.
+#   3. The `runs-on: ${{ inputs.runner }}` mechanism that Phase 2's router
+#      depends on (docs/pi-runner-plan.md §3) behaves as the plan assumes.
+#
+# Deliberately NOT added to notify-claude-on-failure.yml — that catch-all covers
+# production workflows, and one-off spikes stay unlisted (CLAUDE.md §10).
+#
+# ⚠️ DELETE THIS FILE once Phase 2 lands.
+
+name: Pi smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner to execute on
+        type: choice
+        options: [qvitta-pi, ubuntu-latest]
+        default: qvitta-pi
+
+jobs:
+  smoke:
+    # Same repo guard as dbt-run.yml: this file is mirrored to the Lovable
+    # companion, which has no runner and must never execute it.
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    runs-on: ${{ inputs.runner || 'qvitta-pi' }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment
+        run: |
+          echo "arch:       $(uname -m)"
+          echo "kernel:     $(uname -r)"
+          echo "runner:     ${RUNNER_NAME:-?}"
+          echo "environment:${RUNNER_ENVIRONMENT:-?}"
+          echo "tool cache: ${RUNNER_TOOL_CACHE:-?}"
+          free -h || true
+          df -h / | tail -1
+
+      # The step Phase 1 never exercised.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: .github/requirements/dbt.txt
+
+      - name: Python resolved
+        run: |
+          python --version
+          which python
+
+      - name: Install dbt (same pins as dbt-run.yml)
+        run: pip install -r .github/requirements/dbt.txt
+
+      - name: dbt --version
+        run: dbt --version
