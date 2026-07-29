@@ -6,6 +6,24 @@ on:
   # `schedule:` jitter). The in-repo `schedule:` was removed on purpose — do NOT
   # re-add it, or the job double-fires (cron-jobs.org + GitHub both trigger).
   workflow_dispatch:          # external cron + manual "Run workflow" button
+    inputs:
+      runner:
+        description: Runner to execute on
+        type: choice
+        options: [qvitta-pi, ubuntu-latest]
+        # TRANSITIONAL DEFAULT — see docs/pi-runner-plan.md §3.
+        #
+        # The end state is `qvitta-pi`, but the default must stay `ubuntu-latest`
+        # until the dispatch-workflow edge function is the thing triggering this
+        # workflow. Reason: cron-jobs.org still fires BARE workflow_dispatch calls
+        # that carry no inputs, so they inherit whatever this default is. Pointing
+        # those at the Pi before the router exists means an offline Pi silently
+        # QUEUES the job for up to 24 h (not fails — queues), with nothing to alert
+        # and the hourly triggers piling up behind it.
+        #
+        # Flip this to qvitta-pi ONLY once the router owns the trigger and the
+        # cron-jobs.org job for dbt has been retired.
+        default: ubuntu-latest
 
 jobs:
   run:
@@ -15,7 +33,10 @@ jobs:
     # only executes on the working repo, even if someone re-enables the
     # workflow on the companion or fires it via workflow_dispatch there.
     if: github.repository == 'Fakhravar1/claim-my-train'
-    runs-on: ubuntu-latest
+    # `inputs` IS available in the runs-on context. The `|| 'ubuntu-latest'`
+    # fallback covers non-dispatch events; it tracks the transitional default
+    # above and flips to 'qvitta-pi' at the same time.
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     concurrency:
       group: dbt-run          # prevents overlapping runs if one is slow
       cancel-in-progress: false
@@ -25,7 +46,13 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          # 3.12, not 3.11: Ubuntu 24.04 (the Pi runner) ships 3.12 and does not
+          # package 3.11, while `ubuntu-latest` provides 3.12 too — so 3.12 is the
+          # version that lets ONE workflow file serve both runners without
+          # branching on runner.environment, which is how failsafe paths rot.
+          # Verified on arm64 2026-07-29: setup-python@v5 fetched 3.12.13 for
+          # linux-arm64 unaided, no tool-cache pre-seed needed.
+          python-version: '3.12'
           # Persist pip's wheel-download cache across the ~96 scheduled runs/day
           # so re-installing dbt each run skips the downloads. Keyed on the CI
           # requirements file below (the version pins never change between runs).
