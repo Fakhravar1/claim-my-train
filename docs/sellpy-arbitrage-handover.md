@@ -135,14 +135,44 @@ This holds regardless of which theory wins, which is why it is the safest thing 
 ### Break-even math
 
 ```
-profit = s · 0.8 · S − P        s = sell-through, S = your sale price, P = your buy price
-
-for +40% on deployed capital:   S = 1.75 · P / s
-
-  s = 1.0  →  S = 1.75 × P
-  s = 0.6  →  S = 2.9  × P
-  s = 0.4  →  S = 4.4  × P
+profit = s · k · S − P     s = sell-through, S = sale price, P = buy price, k = share you keep
 ```
+
+**`k` is a lever, and two things move it** (both operator-supplied 2026-08-04, neither yet verified
+in the data):
+
+| Route | What you keep | Effective Sellpy fee |
+|---|---|---|
+| Circle payout taken as **cash** | 0.800 | 20.0% |
+| Cash payout, next buy funded by **Amex** (1.35% cashback) | 0.811 | 18.9% |
+| Circle payout taken as **Sellpy credit (+5%)** | **0.840** | **16.0%** |
+
+Taking the payout as **Sellpy credit is worth ~3.6 pp more per cycle than cash + Amex cashback**,
+and the two do not stack on the same krona — credit funds the next purchase directly, so no card is
+involved and no cashback accrues. The rule that falls out: **recycle proceeds as credit; use Amex
+only for fresh capital injected from outside.** The +5% is not a rounding error — it cuts Sellpy's
+commission by a fifth, from 20% to 16%.
+
+Caveat before relying on it: confirm whether the +5% credit conversion has a cap, an expiry, or any
+restriction on what it can buy. An illiquid +5% is worth less than a liquid +1.35%.
+
+Break-even at `k = 0.84`, by gross multiple `m = S/P`:
+
+```
+   m      s to break even     s for +40% on capital
+  1.4          0.85                  1.19  (impossible)
+  2.0          0.60                  0.83
+  3.0          0.40                  0.56
+  4.0          0.30                  0.42
+  5.0          0.24                  0.33
+  6.0          0.20                  0.28
+```
+
+**This table is the most decision-useful thing in the file.** It says the required sell-through
+collapses as the multiple rises — at 5× you can be wrong three times out of four and still break
+even, while at 1.4× you need 85% and can never reach +40% at any sell-through. It is also the
+cleanest statement of why the §3.5 Carhartt trade (m = 1.43) was structurally bad and not just
+unlucky.
 
 **Sell-through is the binding constraint, not valuation.** Every unsold item is a 100% loss plus
 shelf space plus handling time. **`s` is currently unknown and unestimated** — the three trades in
@@ -214,8 +244,11 @@ meaningless.
 **Confirmed mechanics (facts, not theory):**
 - `p2pValueShare: {version: 1, customerShare: 0.8}` on the Circle listings — the 80% share is in
   the data.
-- **Payout lags the sale by 21–24 days** in all three cases (last offer `endedAt` → `paidAt`). Your
-  capital is locked ~3 weeks beyond the sale. Relevant to cash-flow planning, not to margin.
+- **Circle payouts lag the sale by 21–24 days; consignment payouts are same-day.** Measured on all
+  six records: for the three items *bought* (Sellpy holds the stock) `paidAt` equals the last
+  offer's `endedAt` exactly; for the three *Circle* sales it lags 24 / 21 / 22 days — presumably
+  the shipping + return window, since on Circle you ship it yourself. Your capital is locked ~3
+  weeks past the sale on every Circle trade. Cash-flow only, not margin.
 - Circle listings are the same Parse class `Item`; a price change creates a new `MarketOffer` row,
   so your own relist history is queryable the same way as Sellpy's ladders.
 - One Circle listing was **manually discounted** (800 → 600). Consistent with "no auto-discount" —
