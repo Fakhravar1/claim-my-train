@@ -12,6 +12,33 @@ live site. That recon has since been run from a laptop — §5 now holds results
 
 ---
 
+## 0. Plain-language glossary
+
+Earlier drafts of this file used shorthand without defining it. Every symbol used anywhere below:
+
+| Term | What it actually means |
+|---|---|
+| **P** | **P**urchase price — what you paid Sellpy for the item. |
+| **S** | **S**ale price — what your buyer pays you on Circle. |
+| **m** | The **m**ultiple: `S ÷ P`. How many times your money came back before fees. Buy at 50, sell at 250, m = 5. |
+| **k** | The share you **k**eep after Sellpy's cut. Cash payout k = 0.80. Payout taken as Sellpy **credit** (+5%) k = 0.84. |
+| **s** | **S**ell-through — of every 10 items bought, how many eventually sell. 6 of 10 → s = 0.6. **Never measured. This is the biggest hole in the whole project.** |
+| **E[x]** | "Expected x" — the average of x over many repetitions. `E[days to sell]` = how long an item like this usually takes. |
+| **reference price** | The typical price that *comparable items actually sold for* (not what they were listed at). Earlier drafts called this `ref_p50`. |
+| **the ladder** | Sellpy's automatic markdown schedule. An item is listed high and stepped down every ~10 days until it sells or expires. |
+| **rung** | One step on that ladder. "Bought at rung 11" = the price had already been cut ten times. |
+| **opening ask** | The very first price Sellpy listed the item at, before any markdown. |
+| **dwell** | Days between Sellpy sorting an item (`assortedAt`) and actually listing it (`putOnShelfAt`). |
+
+The profit formula in words:
+
+> Take your sale price. Multiply by the share you keep. Multiply by the fraction of items that
+> actually sell. Subtract what you paid. That's average profit per item **bought** — not per item sold.
+
+`profit per item bought = s × k × S − P`
+
+---
+
 ## 1. The idea
 
 Buy underpriced second-hand clothing on Sellpy, warehouse it personally, relist it on
@@ -80,49 +107,78 @@ from Sellpy's published terms rather than from data:
 That asymmetry is real. What is *not* established is which mispricing it lets you harvest, or how
 often, or at what sell-through.
 
-### Theory A — seasonality (the original hypothesis)
+### Idea 1 — Wrong month (seasonality)
 
-Sellpy's intake is driven by closet clear-outs, which are seasonal — winter coats flood in during
-spring cleaning, get listed in April, decay all summer, hit the floor in July, get recycled. Not
-because they're bad; because they were listed in the wrong month. Buy the coat at its floor in
-June, relist at the top of a fresh ladder in September. Storage cost ≈ 0.
+People clean out closets seasonally. Winter coats arrive in spring, get listed in April, sit all
+summer, and are cheapest in July when nobody wants a coat. They are cheap because of the *month*,
+not because they are bad. Buy out of season, sell in season. Storage costs nothing.
 
-**Status:** consistent with one of the three trades (the COS coat: bought 20 Aug, relisted 18 Oct,
-sold 12 Nov — the best trade of the three). **One consistent observation is not evidence of a
-seasonal effect** — that item also fits Theory B, and the two are confounded in every trade we have.
+**What the trades say:** the two clearest supporting cases in the whole dataset.
+- COS coat, autumn/winter item: bought **20 Aug**, relisted 18 Oct, sold **12 Nov**.
+- Dr. Martens sandals, spring/summer item: bought **11 Nov**, relisted 30 Dec, sat unsold through
+  winter and spring, then sold in **late June** — the week sandal season starts, at 94% of the
+  original asking price.
 
-**Test:** requires the clearing-ratio table by (brand, category, month) across many items. Now
-buildable retroactively from `MarketOffer` history (§5.2) rather than requiring months of polling.
+**This is now the best-supported idea in the file.** Note that Sellpy tags season natively
+(`metadata.season = ["Höst","Vinter"]`), so this needs no inference at all.
 
-### Theory B — mispricing at listing (raised 2026-08-04 by the §3.5 data)
+**Practical implication:** listing an item out of season doesn't lose money, it just parks capital.
+The sandals only needed a 6% price cut across six months. Time on the shelf is close to free — see
+"what is actually scarce" below, which corrects an earlier error in this file.
 
-An alternative reading of the same three trades: the edge is not in the *decay tail* but in the
-**opening ask**. A long ladder means Sellpy's algorithm priced the item roughly right and the
-market haggled it down — you buy a correctly-valued item at a modest discount, for a thin margin.
-A *short* ladder at an absurdly low opening price means the algorithm was wrong, and that error is
-the whole spread.
+### Idea 2 — Wrong price from the start (mispricing at listing)
 
-If true, this inverts the original buy rule, because `landing_price` cannot anchor the valuation
-when `landing_price` is the thing that is wrong.
+Sellpy's pricing algorithm sometimes just gets an item badly wrong on day one. A wool-and-cashmere
+COS coat opened at **55 kr**. That isn't decay, it's an error, and the error is the entire profit.
 
-**Status:** the three trades are ordered exactly as Theory B predicts and exactly opposite to the
-"buy deep in the tail" instruction (§3.5). That is suggestive and nothing more — n=3, hand-picked,
-and Theory A explains at least one of them equally well.
+**What the trades say:** the two items Sellpy opened cheap (55, 170) both returned **5×**. The two
+it opened expensively (1070, 1480) returned **1.4×** and **2.0×**.
 
-**Candidate screen if it holds:** `sellabilityEstimate.score` high (Sellpy's own model says it
-sells) **AND** opening ask low against the brand/category/condition norm. Both inputs are free from
-the API. The contradiction between the two is the signal; neither number alone is (the highest-
-scoring item of the three was the worst trade).
+**If true it inverts the original buy rule**, which anchors the valuation on the listing price — you
+cannot multiply a ratio onto a base that is itself the error you're harvesting.
 
-### Theory C — warehouse dwell as a clearance marker
+**Candidate screen:** Sellpy's sell-score high (their model says it will sell) **and** opening ask
+low for its brand/category/condition. The *contradiction between Sellpy's own two signals* is what
+you're looking for. Neither number works alone: the highest-scoring items (0.966 and 0.930) were
+the two worst trades.
 
-`assortedAt` → `putOnShelfAt` gap may identify items relisted at clearance prices regardless of
-worth. In the three trades the gaps were 2 days, 11 days, and **440 days**, and the 440-day item
-was the best trade. **n=1 on the interesting end.** Cheap to test, free from the API, and it would
-be a mechanical screen if real.
+### Idea 3 — Forgotten stock (warehouse dwell)
 
-Theories B and C may be the same effect seen twice — a long-dwell item might just *be* an item with
-a low opening ask. Not separable at n=3.
+The COS coat sat **440 days** between being sorted and being listed. The other three: 2, 11 and 2
+days. An item forgotten for a year may get dumped on the shelf at a clearance price regardless of
+worth.
+
+**n = 1.** Barely evidence. But it is free to record, so record it.
+
+### Idea 4 — The refusal ceiling — RAISED AND THEN LARGELY WITHDRAWN (2026-08-04)
+
+*Kept because the reasoning is instructive, not because it survived.*
+
+**The claim was:** a long markdown ladder is a record of the market refusing the item at every
+price above where you bought. Sellpy asked 1,480 for the sandals and got no takers, then 1,340,
+1,180, … down to 370 — ten refusals. Relisting at 800 asks a price the market already declined
+three times, so your resale ceiling is capped by refusals that already happened. A *short* ladder
+means the price was never tested, so nothing caps you.
+
+**Why it mostly doesn't hold up.** The evidence offered was that the sandals took six months to
+sell. But they were **summer sandals listed in December** — Idea 1 explains the delay completely,
+and the ceiling story makes a prediction that failed: it implies you'd have to discount heavily to
+clear, and in fact they sold after a **6% cut**, at 749 of an 800 ask. The market didn't refuse the
+price; the season hadn't arrived.
+
+**What survives.** The multiple was still low (2.0× vs 5.0× for the short-ladder buys), and that
+pattern holds across all four trades. So *something* about heavily-marked-down items produces
+thinner margins — but "the market already said no" is not a demonstrated explanation, and Idea 2
+(they were simply priced right to begin with, so there was no error to harvest) explains the same
+facts more simply.
+
+**Do not use ladder length as a buy signal on this basis.** Record it; let the data decide.
+
+### How these overlap
+
+The COS coat fits Ideas 1, 2 and 3 simultaneously. Four trades cannot separate them. That is the
+single strongest argument for the observational study in §11 — it is designed specifically to pull
+these apart without spending money.
 
 ### The reframe that survives all three: you never need absolute valuation
 
@@ -207,39 +263,72 @@ No image search appears in any version of it.
 **Read the caveats before the numbers.** This is the whole dataset. It is not a sample in any
 statistical sense.
 
-- **n = 3.**
-- **All three sold. They were chosen because they sold.** Survivorship is total. Items bought and
-  still sitting unsold are not represented, and dead stock is the stated primary risk (§8).
-- **The denominator is unknown.** How many buys produced these three sales has not been recorded.
-  Without it, sell-through `s` — the binding constraint — cannot be estimated at all.
-- **Two of the three were relisted on the same day** (2025-10-18), so they are one batch under one
-  set of autumn conditions, not two independent observations.
-- Condition may be doing unattributed work: the weak trade was graded **"Acceptabelt"** (lowest),
-  the two strong ones **"Bra"**. Cannot be separated from the other explanations at this n.
+- **n = 4** (a fourth trade was added 2026-08-04).
+- **Three sold; the fourth sold and then had to be cancelled** because the item couldn't be shipped
+  inside Circle's 5-day window. Items bought and *never* sold are still not represented.
+- **The denominator is unknown.** How many buys produced these four outcomes has not been recorded.
+  Without it, sell-through `s` cannot be estimated at all.
+- **Two of the four were relisted on the same day** (2025-10-18) — one batch, one set of autumn
+  conditions, not two independent observations.
+- Condition and disclosed defects may be doing unattributed work: both weak trades carried a
+  **"Fläck"/"Fläckig" defect across the whole item** (and the Carhartt was graded "Acceptabelt");
+  neither strong trade had a defect. **The spotting on the Carhartt was disclosed in the listing** —
+  so it was public information the market had already priced in, not a hidden flaw.
 
-The mechanics below (prices, dates, the 0.8 share) are **verified from the API**, not recalled.
-The *interpretation* is theory.
+The mechanics below are **read from the API**, not recalled. The *interpretation* is theory.
 
-| | Carhartt WIP jacket | Ambika maxi dress | COS wool/cashmere coat |
-|---|---|---|---|
-| Condition | Acceptabelt | Bra | Bra |
-| `sellabilityEstimate.score` | 0.9295 | 0.7327 | 0.8990 |
-| `assortedAt` → `putOnShelfAt` | 2 d | 11 d | **440 d** |
-| Sellpy **opening** ask | 1070 kr | 170 kr | **55 kr** |
-| Ladder | 8 rungs / 78 d | 4 rungs / 42 d | 2 rungs / 13 d |
-| **Bought at** | 420 (last rung) | 120 (last rung) | 50 |
-| Held before relisting | 307 d | 161 d | 59 d |
-| Circle ask | 800 → **cut to 600** | 600, no cut | 250, no cut |
-| Days on Circle | 89 | 48 | **25** |
-| Sold at | 600 | 600 | 250 |
-| Net to seller (×0.8) | 480 | 480 | 200 |
-| **Profit** | **+60 (+14%)** | **+360 (+300%)** | **+150 (+300%)** |
-| Round trip | 395 d | 209 d | **84 d** |
-| **Profit per krona-day** | 0.00036 | 0.0144 (40×) | **0.0357 (99×)** |
+| | Carhartt jacket | Dr. Martens sandals | Ambika maxi dress | COS wool coat |
+|---|---|---|---|---|
+| Season tag | — | Vår, Sommar | — | Höst, Vinter |
+| Condition / defect | Acceptabelt, Fläckig | Bra, Fläck | Bra, none | Bra, pilling |
+| Sellpy sell-score | 0.930 | **0.966** | 0.732 | 0.899 |
+| Warehouse dwell | 2 d | 2 d | 11 d | **440 d** |
+| **Opening ask** | 1070 | **1480** | 170 | **55** |
+| Ladder before you bought | 8 rungs | **11 rungs** | 4 rungs | 2 rungs |
+| **Bought at** | 420 | 370 | 120 | 50 |
+| Bought in month | Feb | **Nov** (summer item) | May | **Aug** (winter item) |
+| Relisted at | 800 → cut to 600 | 800 → 780 → 749 | 600, no cut | 250, no cut |
+| Days on Circle | 89 | **178** | 48 | 25 |
+| Sold at | 600 | 749 → **cancelled** | 600 | 250 |
+| **Multiple (S ÷ P)** | **1.4×** | **2.0×** | **5.0×** | **5.0×** |
+| Profit at k = 0.84 | +84 | (+259 if it had shipped) | +384 | +160 |
 
-Aggregate: 590 kr deployed → 1,160 kr net → **+570 kr (+97%)**, over overlapping holds of 3–13
-months. Annualised figures are deliberately omitted — with n=3 and no denominator they would be
-meaningless.
+Completed: 590 kr deployed → 1,218 kr back at k = 0.84 → **+628 kr (+106%)**. The sandals tie up a
+further 370 kr, unresolved. Annualised figures are deliberately omitted — with n=4 and no
+denominator they would be meaningless.
+
+**The one ordering that holds across all four:** the more the price had already been marked down
+before you bought, the lower your multiple. 11 rungs → 2.0×; 8 → 1.4×; 4 → 5.0×; 2 → 5.0×. Buy
+price runs the same way (370/420 → low, 50/120 → high), because on Sellpy the two are nearly the
+same thing: expensive items are usually expensive *because* they started high and have been walked
+down. **Whether the driver is the markdown history or simply that Sellpy priced those items
+correctly to begin with is not resolvable at n=4** — see Idea 2 vs Idea 4.
+
+### What is actually scarce — correcting an earlier error in this file
+
+An earlier draft ranked opportunities by "profit per krona-day" and concluded that cheap, fast items
+beat expensive, slow ones by ~100×. **That ranking assumes capital and time are the scarce
+resources. At this scale they are not**, and the operator has corrected two of the three inputs:
+
+- **Labour per item is minimal.** Discovery is automated. Sellpy **reuses the original ad**, so
+  there is no photography or copywriting. Items ship in the box they arrived in. Realistically
+  ~10 minutes an item, not the 20–40 previously assumed.
+- **Shelf time is nearly free.** The sandals sat six months and sold at 94% of ask. Holding an item
+  through to its season costs storage space and parked capital, and little else.
+- **The real constraint is the 5-day shipping obligation.** The fourth trade failed on exactly
+  this — an item sold and could not be posted in time. That is not solved by working faster; it
+  requires being physically available whenever something sells. At 200 items a year that is roughly
+  a shipping event every other day, forever, including holidays and illness.
+
+**If the binding constraint is shipping events rather than capital, then profit *per transaction*
+matters more than profit per krona, and the case for larger tickets is stronger than the earlier
+draft allowed.** 20 items a year at +1,500 each is a very different operation from 200 at +150 each,
+for similar money and a tenth of the shipping obligations.
+
+This does **not** resolve to "buy expensive". The four trades say expensive items bought at the
+bottom of long ladders returned 1.4–2.0×. What it argues for is a *large ticket that Sellpy opened
+cheap* — high absolute margin and few transactions. Whether such items exist in quantity is
+precisely what §11 is designed to find out.
 
 **Confirmed mechanics (facts, not theory):**
 - `p2pValueShare: {version: 1, customerShare: 0.8}` on the Circle listings — the 80% share is in
@@ -646,22 +735,140 @@ Separate Supabase project, separate repo.
    (§3.5); what is missing is how many buys produced them. **Sell-through is the binding constraint
    (§3), it is currently unestimated, and no amount of crawler work substitutes for this number.**
    It costs an hour and it is the single highest-value action available.
-1. **Keep doing round trips by hand, and record every one — including the failures.** Deliberately
-   buy across the space the theories disagree about: some deep-tail items (Theory A/original), some
-   low-opening-ask items (Theory B), some long-dwell items (Theory C). Three trades cannot separate
-   them; a dozen chosen adversarially might.
+1. **Run the historical backtest (§12).** Costs nothing, risks nothing, needs no account, and can
+   be done immediately with the API access already established. It tests Ideas 1–4 against months
+   of real market behaviour instead of four anecdotes.
+2. **Stand up the observation cohort (§11).** Also costs nothing. Runs in parallel with everything
+   else and starts accumulating the one thing history can't give: forward outcomes on a cohort we
+   picked in advance, including the failures.
+3. **Separate repo + separate Supabase project.** Both of the above want somewhere to write.
+   This does not belong on a claim-my-train branch.
+4. **Keep doing round trips by hand, recording every one — including failures.** Buy deliberately
+   across the space the ideas disagree about: some deep-tail items, some low-opening-ask items,
+   some long-dwell items, some in and out of season.
    *(The original version of this file listed "build the crawler" as step 4 and the manual round
    trips as an afterthought. That was the wrong order and is now corrected.)*
-2. **Backfill `MarketOffer` history for a narrow, chosen slice** (§5.2) — one or two brands and
-   categories, slowly. This is now possible retroactively, so the clearing-ratio table can exist
-   before the crawler does. It is also the cheapest way to test Theories A/B/C at a scale three
-   trades can't reach.
-3. **Then Phase 1: collection only.** `MarketOffer` enumeration → item ids → `Item` enrichment →
-   Supabase. Observe, no valuation, no buying.
-4. Give it its own repo and Supabase project before step 3. It does not belong on a claim-my-train
-   branch.
+5. **Then Phase 1 proper: collection at scale.** `MarketOffer` enumeration → item ids → `Item`
+   enrichment → Supabase. Observe, no valuation, no automated buying.
 
 **Guiding principle for the next phase:** everything in §3 is theory and everything in §5 is
 verified mechanism. Spend effort on the cheapest experiments that convert §3 entries into §5
 entries, and resist building infrastructure that assumes any one theory is correct — the collection
 layer in §6 is deliberately theory-neutral, and it should stay that way.
+
+---
+
+## 11. The observation cohort (planned 2026-08-04)
+
+**Purpose:** get forward-looking outcome data on items chosen *before* the outcome is known, at zero
+capital risk. This is the only way to measure sell-through and time-to-sell honestly, because
+history (§12) can only ever show what did happen, never what a rule would have picked.
+
+### Design
+
+Pick a cohort of currently-listed items, stratified by price band, and follow every one of them to
+its terminal outcome — sold, marked down repeatedly, or expired.
+
+| Band | Definition | Why |
+|---|---|---|
+| **High** | opening ask > 2000 kr | Where a single trade could carry a month. Untested by any of the four trades. |
+| **Mid** | 500–2000 kr | The band the two weak trades came from. |
+| **Low** | < 500 kr | The band both 5× trades came from. |
+
+Start at ~50 per band. **This is a starting point, not a limit** — see "scale" below.
+
+### Five design rules that decide whether this is worth doing
+
+1. **Select systematically, not by taste.** If items are hand-picked on instinct, the cohort only
+   measures instinct and generalises to nothing. Define the filter, then take everything that
+   matches (or a random sample of it).
+2. **Include a control group.** Half the cohort should be items the current ideas say are *bad*
+   buys — long ladders, high opening asks, in-season purchases. Without them there is nothing to
+   compare against, and every rule will look brilliant.
+3. **Freeze the prediction before the outcome.** For each item, record what each idea predicts *at
+   entry* — expected multiple, expected days to sell. An unrecorded prediction is unfalsifiable.
+4. **Follow items to the end, including the boring ones.** The items that quietly expire are the
+   sell-through denominator, and they are the entire point.
+5. **Track Circle listings as a separate cohort.** Sellpy's own clearing prices and Circle clearing
+   prices are different markets; the whole strategy rests on the gap between them. Circle listings
+   are the same Parse class with `p2pValueShare` set, so they are trackable the same way.
+
+### Scale: poll, don't favourite
+
+The natural instinct is to favourite items and let Sellpy's price-drop and sold emails do the
+reporting. **Polling `MarketOffer` directly is better on every axis:**
+
+- **No 150-item ceiling.** Polling scales to thousands for the same effort. The statistics improve
+  with n and there is no reason to be limited by what fits in an inbox.
+- **Richer data.** Emails say "price dropped". `MarketOffer` gives the exact step, its start and
+  end timestamps, and the full prior sequence.
+- **No feedback risk.** §4 flags an unresolved worry: favourite counts are shown publicly as social
+  proof, so mass-favouriting the items you intend to buy cheaply could prop up their prices — you'd
+  be bidding against yourself. Polling is passive and cannot contaminate the experiment.
+- **Emails as a supplement, not the mechanism.** Favourite a handful deliberately, to learn what
+  Sellpy's notifications actually contain and how fast they fire. That is worth knowing. It is not
+  worth building the study on.
+
+### On the account
+
+An account is **not required** to run this study — item and offer reads are unauthenticated.
+It is required for (a) seeing anything user-specific, and (b) eventually buying.
+
+⚠️ **Claude will not create the account or handle its password.** Set it up yourself and hold the
+credentials; the program can be given whatever token or session it needs through your own secret
+store, the same way `claim-worker` handles Supabase keys. Nothing in this study needs Claude to log
+in as you.
+
+---
+
+## 12. The historical backtest (planned 2026-08-04)
+
+Because `MarketOffer` stores every price step with timestamps (§5.2), a buying rule can be tested
+against the past **without spending money and without waiting.**
+
+### Method
+
+1. Pick a cutoff date in the past — say 1 January 2026.
+2. Reconstruct what was knowable *on that date only*: which items were listed and unsold, their
+   current ask, opening ask, number of markdowns so far, brand, category, condition, defects,
+   season tag, sell-score, warehouse dwell.
+3. Apply a candidate rule to produce a shortlist. E.g. *"opening ask in the bottom 20% for its
+   brand and category, fewer than three markdowns, out of season."*
+4. Look forward in data that already exists: what did those items actually clear at, and how fast?
+5. Score the rule. Change it. Run again.
+
+That settles Idea 1 vs Idea 2 vs Idea 4 with data instead of four anecdotes, in an afternoon.
+
+### The limitation that must not be forgotten
+
+This measures **what items cleared for on Sellpy**, not what they would have fetched **on Circle**.
+The 5× returns came from reselling *above* Sellpy's own price, and the backtest cannot see that.
+
+So it validates the *detector* — "can I identify items priced below what they're worth?" — but not
+the resale premium. **Unless Circle listings turn out to be enumerable**, in which case Circle
+clearing prices are visible too and the backtest becomes end-to-end. Worth establishing early; it
+determines how much the backtest can actually prove.
+
+### Rate discipline
+
+A backtest wants bulk history, which is exactly the traffic pattern §8 warns about. Scope it to one
+or two brand/category slices first, pull slowly, and cache everything locally so a rule change
+doesn't mean re-pulling.
+
+---
+
+## 13. Frontend — deferred, deliberately
+
+A dashboard showing what dropped, what sold, and what looks worth buying is the obvious eventual
+shape, and Lovable is a reasonable way to build it.
+
+**It is not the next step.** There is nothing to display yet: four trades and no cohort. A frontend
+built now would encode today's guesses about what matters, and those guesses are exactly what §11
+and §12 exist to overturn.
+
+**Cheaper first version:** a daily digest email — new candidates, price drops in the cohort, items
+that sold. The claim-my-train project already has this exact pattern working end to end (pg_cron →
+edge function → Resend, §16 of that project's CLAUDE.md), so it is close to free to replicate and
+it forces the underlying queries to be written properly.
+
+Build the dashboard when there is a decision being made often enough to justify a screen for it.
