@@ -52,6 +52,11 @@ whole business is built on it.
 - **Does the ~90-day donate/recycle expiry still apply to Circle listings?** No auto-discount is
   established; whether there is still a hard end-of-life is not. If there is, you have a countdown
   after all — quieter, but it changes the hold strategy. **Highest-value open question in this file.**
+  *Weak, ambiguous evidence (n=1):* one Circle listing ran **89 days** before selling and one
+  consignment item was on the shelf **126 days** total — but only **78 of those days** as a live
+  `MarketOffer`, with a 48-day gap between `putOnShelfAt` and the first offer. So the 90-day
+  window may be counted from first offer, not from shelving, and nothing here rules the rule in or
+  out. Resolvable directly from `MarketOffer` history at scale (§5.2).
 - Is there a cap on how many items one account can list via Circle?
 - Can you re-Circle an item bought *from* someone else's Circle listing (i.e. can inventory cycle)?
 - Any Circle-specific condition/quality gate at listing time?
@@ -60,24 +65,72 @@ whole business is built on it.
 
 ## 3. The thesis
 
-**Not** "find undervalued items." It is:
+> ⚠️ **Epistemic status of this whole section: THEORY.** Nothing below is established. The only
+> trade data in existence is **three round trips** (§3.5), all of which sold, all hand-picked, with
+> no visibility into the denominator. Three observations cannot distinguish between the competing
+> explanations sketched here — they can only suggest which ones are worth testing first. Treat
+> every claim in §3 as a hypothesis with an attached test, not as a finding.
 
-> You absorb forced-liquidation inventory from sellers on a hard 90-day deadline, and you
-> have no deadline. You own a shelf; they own a countdown.
+The core structural claim — the one thing that is closer to fact than theory, because it follows
+from Sellpy's published terms rather than from data:
 
-The dominant, automatable source of mispricing is **seasonality**. Sellpy's intake is driven
-by closet clear-outs, which are themselves seasonal — winter coats flood in during spring
-cleaning, get listed in April, decay all summer, hit the 30 kr floor in July, and get
-recycled. Not because they're bad. Because they were listed in the wrong month.
+> Consignment sellers operate under a price ladder and an end-of-life; Circle sellers set their own
+> price and (as far as we know) do not auto-discount. **You own a shelf; they own a countdown.**
 
-Buy the coat at its floor in June, relist at the top of a fresh ladder in September. Storage
-cost ≈ 0 because the shelf already exists.
+That asymmetry is real. What is *not* established is which mispricing it lets you harvest, or how
+often, or at what sell-through.
 
-### The key reframe: you never need absolute valuation
+### Theory A — seasonality (the original hypothesis)
 
-You do not need to know what an Acne tee is worth. You need to know **what it's worth in
-November versus what it costs in June.** That's a ratio, and all the hard item-specific
-unknowns cancel out of a ratio. Everything the trade requires is relative.
+Sellpy's intake is driven by closet clear-outs, which are seasonal — winter coats flood in during
+spring cleaning, get listed in April, decay all summer, hit the floor in July, get recycled. Not
+because they're bad; because they were listed in the wrong month. Buy the coat at its floor in
+June, relist at the top of a fresh ladder in September. Storage cost ≈ 0.
+
+**Status:** consistent with one of the three trades (the COS coat: bought 20 Aug, relisted 18 Oct,
+sold 12 Nov — the best trade of the three). **One consistent observation is not evidence of a
+seasonal effect** — that item also fits Theory B, and the two are confounded in every trade we have.
+
+**Test:** requires the clearing-ratio table by (brand, category, month) across many items. Now
+buildable retroactively from `MarketOffer` history (§5.2) rather than requiring months of polling.
+
+### Theory B — mispricing at listing (raised 2026-08-04 by the §3.5 data)
+
+An alternative reading of the same three trades: the edge is not in the *decay tail* but in the
+**opening ask**. A long ladder means Sellpy's algorithm priced the item roughly right and the
+market haggled it down — you buy a correctly-valued item at a modest discount, for a thin margin.
+A *short* ladder at an absurdly low opening price means the algorithm was wrong, and that error is
+the whole spread.
+
+If true, this inverts the original buy rule, because `landing_price` cannot anchor the valuation
+when `landing_price` is the thing that is wrong.
+
+**Status:** the three trades are ordered exactly as Theory B predicts and exactly opposite to the
+"buy deep in the tail" instruction (§3.5). That is suggestive and nothing more — n=3, hand-picked,
+and Theory A explains at least one of them equally well.
+
+**Candidate screen if it holds:** `sellabilityEstimate.score` high (Sellpy's own model says it
+sells) **AND** opening ask low against the brand/category/condition norm. Both inputs are free from
+the API. The contradiction between the two is the signal; neither number alone is (the highest-
+scoring item of the three was the worst trade).
+
+### Theory C — warehouse dwell as a clearance marker
+
+`assortedAt` → `putOnShelfAt` gap may identify items relisted at clearance prices regardless of
+worth. In the three trades the gaps were 2 days, 11 days, and **440 days**, and the 440-day item
+was the best trade. **n=1 on the interesting end.** Cheap to test, free from the API, and it would
+be a mechanical screen if real.
+
+Theories B and C may be the same effect seen twice — a long-dwell item might just *be* an item with
+a low opening ask. Not separable at n=3.
+
+### The reframe that survives all three: you never need absolute valuation
+
+You do not need to know what an Acne tee is worth. You need to know **what it's worth in November
+versus what it costs in June** — or, under Theory B, what it's worth versus what Sellpy opened it
+at. Both are ratios, and item-specific unknowns cancel out of a ratio.
+
+This holds regardless of which theory wins, which is why it is the safest thing in this section.
 
 ### Break-even math
 
@@ -91,20 +144,96 @@ for +40% on deployed capital:   S = 1.75 · P / s
   s = 0.4  →  S = 4.4  × P
 ```
 
-**Sell-through is the binding constraint, not valuation.** Every unsold item is a 100% loss
-plus shelf space plus handling time. This is why the buy has to be deep in the decay tail.
+**Sell-through is the binding constraint, not valuation.** Every unsold item is a 100% loss plus
+shelf space plus handling time. **`s` is currently unknown and unestimated** — the three trades in
+§3.5 all sold, but they were selected *because* they sold, so they say nothing about `s`. Until the
+buy-count denominator exists, every projected return in this file is unfounded.
 
-### The buy rule
+### The buy rule — provisional, and now suspect
+
+The original formulation:
 
 ```
 clearing_ratio[brand, category, month] = median(clearing_price / landing_price)
-
-est_clearing(item, target_month) = landing_price × clearing_ratio[brand, cat, target_month]
-
+est_clearing(item, target_month)       = landing_price × clearing_ratio[brand, cat, target_month]
 BUY IF:  0.8 × est_clearing(item, target_month) × p(sell)  >  price_now + costs
 ```
 
-Every input comes from observations the system collects itself. No image search anywhere in it.
+**Known weakness under Theory B:** it anchors on `landing_price`. If the opening ask is itself the
+error being harvested, this multiplies a ratio onto a wrong base. A Theory-B rule would instead
+estimate the item's value independently — e.g. the median realised clearing price for
+(brand, category, condition, size band) — and define edge as `est_value / current_ask`.
+
+Do not commit to either form yet. Both are computable from the same collected data (§6), so the
+collection layer can be built without resolving this, and the rule chosen once there is enough
+history to test A against B.
+
+No image search appears in any version of it.
+
+---
+
+## 3.5 The entire evidence base: three round trips (2026-08-04)
+
+**Read the caveats before the numbers.** This is the whole dataset. It is not a sample in any
+statistical sense.
+
+- **n = 3.**
+- **All three sold. They were chosen because they sold.** Survivorship is total. Items bought and
+  still sitting unsold are not represented, and dead stock is the stated primary risk (§8).
+- **The denominator is unknown.** How many buys produced these three sales has not been recorded.
+  Without it, sell-through `s` — the binding constraint — cannot be estimated at all.
+- **Two of the three were relisted on the same day** (2025-10-18), so they are one batch under one
+  set of autumn conditions, not two independent observations.
+- Condition may be doing unattributed work: the weak trade was graded **"Acceptabelt"** (lowest),
+  the two strong ones **"Bra"**. Cannot be separated from the other explanations at this n.
+
+The mechanics below (prices, dates, the 0.8 share) are **verified from the API**, not recalled.
+The *interpretation* is theory.
+
+| | Carhartt WIP jacket | Ambika maxi dress | COS wool/cashmere coat |
+|---|---|---|---|
+| Condition | Acceptabelt | Bra | Bra |
+| `sellabilityEstimate.score` | 0.9295 | 0.7327 | 0.8990 |
+| `assortedAt` → `putOnShelfAt` | 2 d | 11 d | **440 d** |
+| Sellpy **opening** ask | 1070 kr | 170 kr | **55 kr** |
+| Ladder | 8 rungs / 78 d | 4 rungs / 42 d | 2 rungs / 13 d |
+| **Bought at** | 420 (last rung) | 120 (last rung) | 50 |
+| Held before relisting | 307 d | 161 d | 59 d |
+| Circle ask | 800 → **cut to 600** | 600, no cut | 250, no cut |
+| Days on Circle | 89 | 48 | **25** |
+| Sold at | 600 | 600 | 250 |
+| Net to seller (×0.8) | 480 | 480 | 200 |
+| **Profit** | **+60 (+14%)** | **+360 (+300%)** | **+150 (+300%)** |
+| Round trip | 395 d | 209 d | **84 d** |
+| **Profit per krona-day** | 0.00036 | 0.0144 (40×) | **0.0357 (99×)** |
+
+Aggregate: 590 kr deployed → 1,160 kr net → **+570 kr (+97%)**, over overlapping holds of 3–13
+months. Annualised figures are deliberately omitted — with n=3 and no denominator they would be
+meaningless.
+
+**Confirmed mechanics (facts, not theory):**
+- `p2pValueShare: {version: 1, customerShare: 0.8}` on the Circle listings — the 80% share is in
+  the data.
+- **Payout lags the sale by 21–24 days** in all three cases (last offer `endedAt` → `paidAt`). Your
+  capital is locked ~3 weeks beyond the sale. Relevant to cash-flow planning, not to margin.
+- Circle listings are the same Parse class `Item`; a price change creates a new `MarketOffer` row,
+  so your own relist history is queryable the same way as Sellpy's ladders.
+- One Circle listing was **manually discounted** (800 → 600). Consistent with "no auto-discount" —
+  the seller changed it.
+
+**What the numbers appear to say — all of it theory:**
+1. Capital efficiency varies by ~100× across three trades. If that spread is real and not noise,
+   it dominates every other consideration, and **absolute buy price is the variable to watch.**
+2. The trade the original §3 recommended (deep decay tail, Carhartt) was the worst of the three;
+   the two short-ladder buys were the best. Hence Theory B.
+3. Measured against Sellpy's own opening ask, the sale prices were 0.56× / 3.5× / 4.5×. The two
+   profitable trades were the two where Sellpy opened low.
+4. The highest `sellability score` produced the worst trade — so score alone is not a buy signal,
+   and may even be inversely related to edge (a high score plausibly means correctly priced, which
+   means no mispricing to harvest).
+
+**The single most valuable next data point is not another winning trade — it is the buy count.**
+Three wins tell you the upside exists. They tell you nothing about whether it pays.
 
 ---
 
@@ -258,15 +387,64 @@ Circle sell-through, the hard term in the buy rule is solved on day one.
 3. **Does `score` correlate with your realised sell-through?** The one that actually matters.
    Answerable only after the §10 manual round trips.
 
+### 5.2 `MarketOffer` — price history, and the discovery surface (found 2026-08-04)
+
+**This is the most consequential finding in the file, and unlike §3 it is verified rather than
+theorised.**
+
+Price does not live on `Item`. It lives in Parse class **`MarketOffer`**, one row per price step:
+
+```json
+{"objectId":"…","item":{"__type":"Pointer","className":"Item","objectId":"…"},
+ "pricing":{"amount":420,"currency":"SEK"},"region":"SE",
+ "first":false,"latest":true,"createdAt":"…","endedAt":{"iso":"…"}}
+```
+
+Three properties, all confirmed against real items:
+
+1. **It is the complete ladder, retroactively.** Querying by item pointer returns every historical
+   price step with `createdAt`/`endedAt` — the full decay curve of an item that sold months ago.
+   Filter `region: "SE"` or you get every market Sellpy operates in interleaved (a single step
+   returned 11 rows across currencies).
+2. **`first` / `latest` flags** give the opening ask and the clearing price directly, without
+   reconstructing the sequence.
+3. **It is enumerable without an item pointer.** `{"region":"SE","latest":true}` returns live
+   offers for arbitrary items — unlike class `Item`, which only serves reads by `objectId`. So
+   `MarketOffer` is *both* the discovery mechanism and the price history; `Item` is enrichment by
+   id on top of it.
+
+**Consequences:**
+
+- **The "run for weeks before it says anything" premise is wrong.** Clearing ratios, ladder shapes,
+  and time-to-clear can be computed from history that already exists. Phase 1 stops being a waiting
+  game and becomes a backfill.
+- **Typesense may not be needed at all.** It was assumed to be the only enumeration path; it isn't.
+  Still worth capturing (facets, brand/category filters, and it is the *sanctioned* surface — see
+  §8), but it is no longer load-bearing.
+- **§6's `price_observations` table changes character** — it is a backfill target first and a
+  polling target second. Poll only to catch *new* items and to close the gap since the last pull.
+- Both sides of a trade are observable: your own Circle relist history is `MarketOffer` rows too.
+
+⚠️ **Rate discipline matters more now, not less.** A retroactive full-history pull is exactly the
+kind of traffic that gets noticed, and §8's real risk is the account, not the scraper. Backfill
+slowly and narrowly — scope to the brands/categories you actually intend to trade (§9 q1) before
+pulling anything at volume.
+
 ### Remaining recon (not done)
 
 - **Capture the Typesense search call.** DevTools → Network → Fetch/XHR while browsing a brand
   search. Config comes from the GraphQL `getTypesenseClientConfig` query; the search key is a
-  scoped, client-side, search-only key. Need: collection name, schema, facet fields, page size,
-  and **whether price history / discount schedule is indexed** or only current price.
-- **Check the mobile app API** (mitmproxy). Usually a softer, more generous surface — though with
-  no bot protection on web, this is now a low priority.
-- Verify whether `sellabilityEstimate` is present on *all* items or only recent ones.
+  scoped, client-side, search-only key. Now optional rather than blocking (§5.2), but it carries
+  facets and is the sanctioned path.
+- **Establish how far back `MarketOffer` history actually goes**, and whether old rows are pruned.
+  The oldest observed so far is Dec 2024, but nothing has been sampled deliberately.
+- **Check the mobile app API** (mitmproxy). Low priority — no bot protection on web.
+- Verify whether `sellabilityEstimate` is present on *all* items or only recent ones. Observed
+  `version: "3"` on 2024–25 items and `"3-mla"` on a 2026 item, so the model has already rolled
+  at least once — confirming the §5.1 warning that scores must be keyed by version.
+- Check whether `traderaCategoryId` means items are cross-listed on Tradera. Two of the three
+  traded items carry one. If Sellpy dual-lists, Tradera is a second, independent price signal —
+  and possibly a second exit.
 
 ---
 
@@ -290,12 +468,18 @@ dim_brand /          id (smallint PK), name
 dim_category /       + for category: parent_id, level, is_leaf   ← the taxonomy is a real tree
 dim_type                                                            (Kläder > Sport > Överdelar)
 
-price_observations   item_id, price int, observed_at
-                     ← APPEND ONLY ON CHANGE. See the storage math below — this is the whole ballgame.
+price_observations   item_id, price int, currency, region,
+                     started_at, ended_at, is_first, is_latest, offer_id
+                     ← MIRRORS `MarketOffer` (§5.2). NOT a polling artefact: each row is a real
+                       price step Sellpy already recorded, backfillable retroactively. Filter
+                       region='SE'. Naming it "observations" is now a slight misnomer — these are
+                       Sellpy's own ladder rows, not our samples. Poll only for new/changed items.
 
 outcomes             item_id, terminal_event ('sold'|'floor'|'vanished'), final_price, at
-                     ← an item disappearing ABOVE the 30 kr floor ≈ sold at that price.
-                       `itemStatus` may make this observable directly — verify.
+                     ← largely derivable rather than inferred: `itemStatus='betald'` marks a sale,
+                       the `latest` MarketOffer's amount is the clearing price, and its `endedAt`
+                       is the sale date. `paidAt` is the SELLER PAYOUT and runs 21–24 days later
+                       (observed, n=3) — do not use it as the sale date.
 
 inventory            item_id, cost, bought_at, target_relist_month,
                      status, relisted_at, sold_price, circle_listing_id
@@ -424,16 +608,27 @@ Separate Supabase project, separate repo.
 
 §5 recon is done and §6 is now written against the real schema. What's left, in order:
 
-1. **Do 5–10 round trips by hand. Before any code.** Buy tail items, relist on Circle, record what
-   sells and at what price. It is the only way to find out whether the thesis is real, it answers
-   most of §2's remaining unverified questions for free, and — now that §5.1 exists — it is the
-   only way to test whether Sellpy's `sellability score` predicts *your* sell-through. That single
-   correlation is worth more than the entire crawler.
+0. **Recover the denominator.** Go back through the Sellpy purchase history and count every item
+   bought with intent to resell, including the ones still unsold. Three wins are already recorded
+   (§3.5); what is missing is how many buys produced them. **Sell-through is the binding constraint
+   (§3), it is currently unestimated, and no amount of crawler work substitutes for this number.**
+   It costs an hour and it is the single highest-value action available.
+1. **Keep doing round trips by hand, and record every one — including the failures.** Deliberately
+   buy across the space the theories disagree about: some deep-tail items (Theory A/original), some
+   low-opening-ask items (Theory B), some long-dwell items (Theory C). Three trades cannot separate
+   them; a dozen chosen adversarially might.
    *(The original version of this file listed "build the crawler" as step 4 and the manual round
    trips as an afterthought. That was the wrong order and is now corrected.)*
-2. **Capture the Typesense search call** from DevTools (§5, "Remaining recon"). That completes the
-   ingestion picture — it is the only missing piece, since Parse can't enumerate.
-3. **Then Phase 1: collection only.** Search index → item ids → Parse enrichment → Supabase.
-   Observe, snapshot on change, no valuation, no buying.
+2. **Backfill `MarketOffer` history for a narrow, chosen slice** (§5.2) — one or two brands and
+   categories, slowly. This is now possible retroactively, so the clearing-ratio table can exist
+   before the crawler does. It is also the cheapest way to test Theories A/B/C at a scale three
+   trades can't reach.
+3. **Then Phase 1: collection only.** `MarketOffer` enumeration → item ids → `Item` enrichment →
+   Supabase. Observe, no valuation, no buying.
 4. Give it its own repo and Supabase project before step 3. It does not belong on a claim-my-train
    branch.
+
+**Guiding principle for the next phase:** everything in §3 is theory and everything in §5 is
+verified mechanism. Spend effort on the cheapest experiments that convert §3 entries into §5
+entries, and resist building infrastructure that assumes any one theory is correct — the collection
+layer in §6 is deliberately theory-neutral, and it should stay that way.
