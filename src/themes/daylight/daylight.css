@@ -412,6 +412,21 @@
 .cmt-daylight .nav__cta{display:inline-flex;align-items:center;height:38px;padding:0 .95rem;border:var(--bw) solid var(--line-2);border-radius:var(--btn-radius);background:var(--surface);color:var(--ink);font-size:.92rem;font-weight:600;transition:background .18s,color .18s,border-color .18s;}
 .cmt-daylight .nav__cta:hover{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
 
+/* ≤720px the five nav items overflow a phone viewport (the row measured 580px
+   on a 375px screen, clipping "Logga in" entirely), so the four links collapse
+   into a hamburger drawer; the login/account control stays outside it. */
+.cmt-daylight .nav__links{display:flex;align-items:center;gap:.4rem;}
+.cmt-daylight .nav__mobilemenu{display:none;}
+.cmt-daylight .nav__burger{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;border:var(--bw) solid var(--line-2);border-radius:var(--btn-radius);background:var(--surface);color:var(--ink);cursor:pointer;}
+.cmt-daylight .nav__burger:hover{background:var(--surface-2);}
+.cmt-daylight .nav__drawer{position:absolute;top:100%;left:0;right:0;background:var(--surface);border-bottom:var(--bw) solid var(--line);box-shadow:var(--board-shadow);display:flex;flex-direction:column;gap:.15rem;padding:.5rem var(--gut) .8rem;z-index:40;}
+.cmt-daylight .nav__drawerlink{display:flex;align-items:center;padding:.7rem .5rem;border-radius:var(--r);font-size:.95rem;font-weight:600;color:var(--ink);background:none;border:0;cursor:pointer;}
+.cmt-daylight .nav__drawerlink:hover{background:var(--surface-2);}
+@media(max-width:720px){
+  .cmt-daylight .nav__links{display:none;}
+  .cmt-daylight .nav__mobilemenu{display:block;}
+}
+
 /* ───────── mobile board layout ───────── */
 @media(max-width:720px){
   .cmt-daylight .board{padding:1rem .9rem .85rem;}
@@ -583,13 +598,13 @@ html,body{overflow-x:hidden;}
 .cmt-daylight{overflow-x:hidden;max-width:100vw;}
 @media(max-width:560px){
   .cmt-daylight{--gut:.85rem;}
-  /* nav: shrink brand + CTAs so "FAQ" and "Så funkar det" fit on one line
-     next to Qvitta without touching it or wrapping */
+  /* nav: compact bar — the links live in the hamburger drawer at this width,
+     so only brand + login/account + burger remain inline */
   .cmt-daylight .nav__in{height:54px;}
   .cmt-daylight .brand{font-size:1.15rem;gap:.4rem;}
   .cmt-daylight .brand__mark{width:24px;height:24px;}
-  .cmt-daylight .nav__right{gap:.25rem;}
-  .cmt-daylight .nav__cta{height:32px;padding:0 .55rem;font-size:.78rem;white-space:nowrap;}
+  .cmt-daylight .nav__right{gap:.35rem;}
+  .cmt-daylight .nav__burger{width:34px;height:34px;}
   .cmt-daylight .btn--dark{padding:.45rem .7rem;font-size:.82rem;}
   .cmt-daylight .nav__account>.btn{max-width:120px;font-size:.82rem;padding:.45rem .6rem;}
 

@@ -24,6 +24,23 @@ type NavProps = {
 
 export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
   const scrollToHow = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     const how = document.getElementById("how");
@@ -61,18 +78,56 @@ export function Nav({ signedIn, accountLabel, onSignOut, onLogin }: NavProps) {
           <span className="brand__word">Qvitta</span>
         </Link>
         <div className="nav__right">
-          <Link to="/ersattning" className="nav__cta">Ersättningsguide</Link>
-          <Link to="/forseningar" className="nav__cta">Förseningsstatistik</Link>
-          <Link to="/faq" className="nav__cta">FAQ</Link>
-          <a href="#how" className="nav__cta" onClick={scrollToHow}>Så funkar det</a>
+          <div className="nav__links">
+            <NavLinks className="nav__cta" onHow={scrollToHow} />
+          </div>
           {signedIn ? (
             <AccountMenu label={accountLabel} onSignOut={onSignOut} />
           ) : (
             <button className="btn btn--dark" onClick={onLogin}>Logga in</button>
           )}
+          <div className="nav__mobilemenu" ref={menuRef}>
+            <button
+              className="nav__burger"
+              aria-label={menuOpen ? "Stäng menyn" : "Öppna menyn"}
+              aria-expanded={menuOpen}
+              aria-controls="nav-drawer"
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                {menuOpen ? (
+                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                ) : (
+                  <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                )}
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="nav__drawer" id="nav-drawer">
+                <NavLinks className="nav__drawerlink" onNavigate={() => setMenuOpen(false)} onHow={scrollToHow} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>
+  );
+}
+
+/** The four site links — rendered inline on desktop, inside the drawer on mobile. */
+function NavLinks({ className, onNavigate, onHow }: {
+  className: string;
+  /** Fires on any link tap; the mobile drawer uses it to close itself. */
+  onNavigate?: () => void;
+  onHow: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  return (
+    <>
+      <Link to="/ersattning" className={className} onClick={onNavigate}>Ersättningsguide</Link>
+      <Link to="/forseningar" className={className} onClick={onNavigate}>Förseningsstatistik</Link>
+      <Link to="/faq" className={className} onClick={onNavigate}>FAQ</Link>
+      <a href="#how" className={className} onClick={(e) => { onNavigate?.(); onHow(e); }}>Så funkar det</a>
+    </>
   );
 }
 
