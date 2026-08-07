@@ -635,51 +635,6 @@ export type Database = {
         }
         Relationships: []
       }
-      tmp_planned_announcements_spike: {
-        Row: {
-          activity_id: string
-          activity_type: string | null
-          advertised_train_ident: string | null
-          canceled: boolean | null
-          capture_date: string
-          captured_at: string
-          deviation: string[] | null
-          information_owner: string | null
-          location_signature: string | null
-          modified_time: string | null
-          planned_estimated_time: string | null
-          scheduled_time: string | null
-        }
-        Insert: {
-          activity_id: string
-          activity_type?: string | null
-          advertised_train_ident?: string | null
-          canceled?: boolean | null
-          capture_date: string
-          captured_at?: string
-          deviation?: string[] | null
-          information_owner?: string | null
-          location_signature?: string | null
-          modified_time?: string | null
-          planned_estimated_time?: string | null
-          scheduled_time?: string | null
-        }
-        Update: {
-          activity_id?: string
-          activity_type?: string | null
-          advertised_train_ident?: string | null
-          canceled?: boolean | null
-          capture_date?: string
-          captured_at?: string
-          deviation?: string[] | null
-          information_owner?: string | null
-          location_signature?: string | null
-          modified_time?: string | null
-          planned_estimated_time?: string | null
-          scheduled_time?: string | null
-        }
-        Relationships: []
-      }
     }
     Views: {
       v_active_stations: {

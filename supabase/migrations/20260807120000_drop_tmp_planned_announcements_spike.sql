@@ -1,0 +1,43 @@
+-- Tear down the 72h-rule forward-timetable spike (ran 2026-07-12 → 2026-08-07,
+-- 27 daily T+3d captures, 80,294 rows / 18 MB). Companion to
+-- 20260712100000_add_tmp_planned_announcements_spike.sql.
+--
+-- NB (CLAUDE.md §11 Option A): applied to the live DB via MCP apply_migration
+-- on 2026-08-07; this file is the repo record, not a CLI-replayable migration.
+--
+-- All three tmp pieces removed together:
+--   1. pg_cron 'tmp-planned-spike-daily' (jobid 16)  -> cron.unschedule(...)
+--   2. edge function 'tmp-planned-timetable-spike'   -> supabase functions delete
+--   3. public.tmp_planned_announcements_spike        -> the drop below
+--
+-- ---------------------------------------------------------------------------
+-- FINDINGS (the reason the spike existed — preserved here since the July-2026
+-- summer-works window it captured cannot be re-observed):
+--
+-- 1. NEGATIVE RESULT, and the important one: `planned_estimated_time`
+--    (PlannedEstimatedTimeAtLocation) was populated on 0 of 80,294 captured
+--    rows. Trafikverket does NOT express pre-announced RETIMINGS as a planned
+--    estimate in the T+3d advance timetable. The original design premise —
+--    "diff the advertised timetable against execution to find amendments" —
+--    has no retiming signal to diff on. Do not rebuild this spike expecting one.
+--
+-- 2. Pre-announced CANCELLATIONS do surface, as previously verified:
+--    canceled=true + deviation 'Inställt' (65 rows / 21 trains). Note
+--    'Inställt' also appears on 578 rows WITHOUT canceled=true — most likely
+--    partial/segment cancellations, which needs its own look before either is
+--    trusted as a claim rule.
+--
+-- 3. `modified_time` is the load-bearing field: present on 100% of rows, and
+--    (scheduled_time - modified_time) gives announcement lead time directly.
+--    Observed averages: 'Kort tåg' 12.7 d (5,207 rows, the dominant deviation),
+--    'Inställt' 11.4 d, 'Ändrad väg' 14.0 d — all far outside the 72 h
+--    threshold, i.e. exactly the false-positive class §10 warns about.
+--
+-- 4. CONSEQUENCE FOR THE DESIGN: `modified_time` is ALREADY a column on
+--    public.raw_train_announcements and flows in on every live TV poll. The
+--    sparse `timetable_amendments` diff table may therefore be unnecessary —
+--    the 72 h test looks computable off the existing raw feed with no new
+--    capture infrastructure. Verify that before building anything.
+-- ---------------------------------------------------------------------------
+
+drop table if exists public.tmp_planned_announcements_spike;
