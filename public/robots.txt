@@ -1,9 +1,56 @@
+# Qvitta — https://qvitta.nu
+#
+# Two classes of URL are blocked, both diagnosed from Search Console
+# (Page indexing report, 2026-08-09):
+#
+#  1. Private, auth-gated app routes. /settings was flagged "Page with
+#     redirect" — Googlebot fetches it signed-out, the app bounces it to /,
+#     and the crawl is spent for nothing. /my-delays, /claim-review, /admin
+#     and the legacy /regions/* redirects have the same shape. None of them
+#     can ever rank, so keep the crawler out rather than let it
+#     discover-and-discard. (They also carry meta noindex for the case where
+#     a URL is reached some other way; none is currently indexed, so blocking
+#     here cannot freeze an indexed URL in place.)
+#
+#  2. /?station=<name> board deep links. Every /forseningar station page
+#     links to the live board with that station prefilled, so ~390 of these
+#     exist — each a near-duplicate of the homepage that canonicals back to
+#     "/". "https://qvitta.nu/?station=Framnäs city" was already flagged
+#     "Crawled - currently not indexed". The links stay for humans and now
+#     also carry rel="nofollow" (see stationLiveHref call sites); this rule
+#     is what actually stops the crawler working through all 390.
+#
+# NOTE ON GROUPING: a crawler obeys only the MOST SPECIFIC matching
+# user-agent group and ignores "*" entirely once its own group exists. So the
+# rules are repeated per bot rather than left to inherit. Twitterbot and
+# facebookexternalhit stay fully open on purpose — they fetch whatever URL a
+# user shares, and a blocked fetch means a broken link preview.
+
 User-agent: Googlebot
 Allow: /
+Disallow: /settings
+Disallow: /my-delays
+Disallow: /claim-review
+Disallow: /admin
+Disallow: /regions/
+Disallow: /*?station=
+Disallow: /*&station=
+Disallow: /*?mine=
+Disallow: /*&mine=
 
 User-agent: Bingbot
 Allow: /
+Disallow: /settings
+Disallow: /my-delays
+Disallow: /claim-review
+Disallow: /admin
+Disallow: /regions/
+Disallow: /*?station=
+Disallow: /*&station=
+Disallow: /*?mine=
+Disallow: /*&mine=
 
+# Link-preview scrapers: deliberately unrestricted (see note above).
 User-agent: Twitterbot
 Allow: /
 
@@ -12,5 +59,14 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /settings
+Disallow: /my-delays
+Disallow: /claim-review
+Disallow: /admin
+Disallow: /regions/
+Disallow: /*?station=
+Disallow: /*&station=
+Disallow: /*?mine=
+Disallow: /*&mine=
 
 Sitemap: https://qvitta.nu/sitemap.xml

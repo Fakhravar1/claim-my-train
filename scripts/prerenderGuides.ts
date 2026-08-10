@@ -326,12 +326,12 @@ function stationMainHtml(s: StationStat): string {
     `<p>Under perioden ${esc(period)} avgick ${s.n_departures} tåg från ${esc(s.station_name)}` +
     (operator ? ` (främst ${esc(operator)})` : "") +
     `. ${pctOnTime(s)} % gick i tid, ${s.n_late_20} avgångar var minst 20 minuter försenade och ${s.n_cancelled} ställdes in.</p>` +
-    `<p><a class="qv-btn qv-btn--accent" href="${esc(stationLiveHref(s))}">Se dagens avgångar från ${esc(s.station_name)} — live</a></p>` +
+    `<p><a class="qv-btn qv-btn--accent" rel="nofollow" href="${esc(stationLiveHref(s))}">Se dagens avgångar från ${esc(s.station_name)} — live</a></p>` +
     daysTable +
     `<table><tbody>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</tbody></table>` +
     `<h2>Försenad från ${esc(s.station_name)}? Så får du ersättning</h2>` +
     `<p>En försening på 20 minuter ger i de flesta fall rätt till 50 % av biljettpriset tillbaka — 100 % vid en timme. ` +
-    `<a href="${esc(stationLiveHref(s))}"><strong>Sök din avgång på Qvitta</strong></a> så ser du direkt om den ger rätt till ersättning. ` +
+    `<a rel="nofollow" href="${esc(stationLiveHref(s))}"><strong>Sök din avgång på Qvitta</strong></a> så ser du direkt om den ger rätt till ersättning. ` +
     `Läs mer i <a href="/ersattning">ersättningsguiden</a>` +
     (guideSlug && operator ? ` eller guiden för <a href="/ersattning/${guideSlug}">${esc(operator)}</a>` : "") +
     `.</p>` +
@@ -523,18 +523,69 @@ function homePage(): SeoPage {
 /* sitemap.xml                                                         */
 /* ------------------------------------------------------------------ */
 
+/**
+ * How many station pages the sitemap submits (of the ~390 we prerender).
+ *
+ * Googlebot spends ~0.7 DISCOVERY requests/day on this site (GSC crawl stats
+ * 2026-07-26: 471 requests / 90 days, 14 % discovery, 42 % of the budget eaten
+ * by JS). Submitting every station spreads a starvation-level budget across
+ * URLs Google won't reach for a year — measured result: ~50 of 392 indexed,
+ * 6 impressions total. So we submit only the busiest stations (where the
+ * search demand is) and let the rest be found via /forseningar, which still
+ * links all of them. Raise this as crawl rate grows — it's gated on backlinks,
+ * not on page count.
+ */
+const SITEMAP_STATION_LIMIT = 60;
+
+/**
+ * Stations that are submitted regardless of departure volume.
+ *
+ * Departure volume alone is a BAD proxy for search demand: it ranks by service
+ * frequency, so a pendeltåg stop like Örtofta or Norrviken outranks Uppsala C.
+ * People search for the place, not the timetable. This list is the county seats
+ * / major rail cities inside our coverage; volume fills the remaining slots.
+ * (Umeå, Sundsvall, Östersund, Luleå, Falun/Borlänge and Visby are absent
+ * because we don't poll northern Sweden — see the CLAUDE.md §15 exclusion
+ * register, not an oversight here.)
+ */
+const SITEMAP_PRIORITY_STATIONS = [
+  "stockholm-c", "goteborg-c", "malmo-c", "lund-c", "uppsala-c", "helsingborg-c",
+  "linkoping-c", "norrkoping-c", "vasteras-c", "orebro-c", "jonkoping-c", "gavle-c",
+  "karlstad-c", "eskilstuna-c", "halmstad-c", "kristianstad-c", "vaxjo", "kalmar-c",
+  "karlskrona-c", "boras-c", "skovde-c", "varberg-c", "trollhattan", "molndal",
+  "landskrona", "nykoping-c", "katrineholm-c", "hassleholm", "alvesta", "nassjo-c",
+  "hallsberg", "mjolby", "ystad", "trelleborg",
+];
+
 function sitemapXml(): string {
   const pillarLastmod = ALL_GUIDE_PAGES[0]?.updated;
+  const byVolume = [...STATIONS].sort((a, b) => b.n_departures - a.n_departures);
+  const priority = SITEMAP_PRIORITY_STATIONS.map((slug) =>
+    STATIONS.find((s) => s.slug === slug)
+  ).filter((s): s is StationStat => s !== undefined);
+  // Priority cities first, then the busiest remaining stations up to the cap.
+  const picked = new Set(priority.map((s) => s.slug));
+  const sitemapStations = [...priority];
+  for (const s of byVolume) {
+    if (sitemapStations.length >= SITEMAP_STATION_LIMIT) break;
+    if (!picked.has(s.slug)) {
+      picked.add(s.slug);
+      sitemapStations.push(s);
+    }
+  }
   const urls: { loc: string; changefreq: string; priority: string; lastmod?: string }[] = [
     { loc: `${SITE}/`, changefreq: "daily", priority: "1.0" },
     { loc: `${SITE}/ersattning`, changefreq: "monthly", priority: "0.9", lastmod: pillarLastmod },
     ...GUIDES.map((g) => ({ loc: guideUrl(g.slug), changefreq: "monthly", priority: "0.8", lastmod: g.updated })),
     { loc: `${SITE}/forseningar`, changefreq: "daily", priority: "0.8", lastmod: STATION_STATS_GENERATED },
     ...OPERATORS.map((o) => ({ loc: operatorUrl(o), changefreq: "weekly", priority: "0.7", lastmod: OPERATOR_STATS_GENERATED })),
-    ...STATIONS.map((s) => ({ loc: stationUrl(s), changefreq: "weekly", priority: "0.6", lastmod: STATION_STATS_GENERATED })),
+    ...sitemapStations.map((s) => ({ loc: stationUrl(s), changefreq: "weekly", priority: "0.6", lastmod: STATION_STATS_GENERATED })),
     { loc: `${SITE}/faq`, changefreq: "monthly", priority: "0.7" },
-    { loc: `${SITE}/genvag`, changefreq: "monthly", priority: "0.6" },
-    { loc: `${SITE}/integritet`, changefreq: "yearly", priority: "0.3" },
+    // /genvag and /integritet are deliberately NOT submitted: they have no
+    // prerender entry (see prerenderSeoPages), so they serve the SPA shell,
+    // which canonicals to "/" — submitting them just files them under
+    // "Alternate page with proper canonical tag" and burns crawl budget.
+    // If /genvag should ever rank, give it a real SeoPage first, then re-add.
   ];
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +

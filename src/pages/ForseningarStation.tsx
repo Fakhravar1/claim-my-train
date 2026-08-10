@@ -74,7 +74,10 @@ export default function ForseningarStation() {
         </p>
 
         <div style={{ margin: "0 0 1.6rem" }}>
-          <Link to={stationLiveHref(s)} className="btn btn--accent">
+          {/* nofollow: ~390 of these /?station= links exist across the station
+              pages and each is a near-duplicate of "/". Kept for humans, hidden
+              from the crawler (robots.txt blocks the fetch too). */}
+          <Link to={stationLiveHref(s)} rel="nofollow" className="btn btn--accent">
             Se dagens avgångar från {s.station_name} — live
           </Link>
         </div>
@@ -137,7 +140,7 @@ export default function ForseningarStation() {
           ersättning, och vi hjälper dig skicka in ansökan.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: ".6rem", marginBottom: "1.6rem" }}>
-          <Link to={stationLiveHref(s)} className="btn btn--accent">Hitta din försening</Link>
+          <Link to={stationLiveHref(s)} rel="nofollow" className="btn btn--accent">Hitta din försening</Link>
           <Link to="/ersattning" className="btn">Så funkar ersättningen</Link>
           {guideSlug && operator && (
             <Link to={`/ersattning/${guideSlug}`} className="btn">
