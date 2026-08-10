@@ -85,7 +85,7 @@ export default function ForseningarStation() {
         {s.days && s.days.length > 0 && (
           <>
             <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 .7rem" }}>
-              Senaste dagarna
+              Dag för dag i {period}
             </h2>
             <div style={{ overflowX: "auto", margin: "0 0 1.6rem" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", background: "var(--card-bg)" }}>
@@ -165,7 +165,7 @@ export default function ForseningarStation() {
 
         <p style={{ marginTop: "1.6rem", fontSize: ".85rem", color: "var(--muted)", lineHeight: 1.6 }}>
           Statistiken bygger på Trafikverkets realtidsdata för uppmätta avgångar (tåg med
-          realtidssignal) och uppdateras löpande. Period: {period}.
+          realtidssignal) och uppdateras månadsvis. Period: {period}.
         </p>
       </main>
 

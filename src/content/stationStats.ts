@@ -8,7 +8,7 @@
  */
 import raw from "./stationStats.json";
 
-/** One day in the "Senaste dagarna" table (compact keys — ships in the JS bundle). */
+/** One day in the "Dag för dag" table (compact keys — ships in the JS bundle). */
 export type StationDayStat = {
   /** ISO service date. */
   d: string;
@@ -97,6 +97,16 @@ export function periodLabel(s: { from_date: string; to_date: string }): string {
   const t = new Date(`${s.to_date}T00:00:00`);
   if (isNaN(f.getTime()) || isNaN(t.getTime())) return `${s.from_date} – ${s.to_date}`;
   if (f.getMonth() === t.getMonth() && f.getFullYear() === t.getFullYear()) {
+    // A WHOLE calendar month renders as just "juli 2026" rather than
+    // "1–31 juli 2026". Since 2026-08-10 the snapshot always publishes a full
+    // previous month (refresh_station_stats.py), so this is the normal case —
+    // and "juli 2026" is the citable form we actually want in headings, meta
+    // descriptions and any press pitch. The day-range form below still covers
+    // a partial month, e.g. the first run after a mid-month backfill.
+    const lastOfMonth = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+    if (f.getDate() === 1 && t.getDate() === lastOfMonth) {
+      return `${MONTHS[t.getMonth()]} ${t.getFullYear()}`;
+    }
     return `${f.getDate()}–${t.getDate()} ${MONTHS[t.getMonth()]} ${t.getFullYear()}`;
   }
   return `${f.getDate()} ${MONTHS[f.getMonth()]} – ${t.getDate()} ${MONTHS[t.getMonth()]} ${t.getFullYear()}`;

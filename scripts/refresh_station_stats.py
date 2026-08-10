@@ -9,6 +9,11 @@ from dbt_dev.agg_operator_delays_daily (each falling back to int_stop_events
 for days the agg doesn't hold yet). Stations with fewer than MIN_MEASURED
 measured departures in the window are dropped so we never publish thin pages.
 
+The published period is the PREVIOUS CALENDAR MONTH and the job runs monthly
+(see PERIOD_START below for why). Run it on the 2nd or later, never the 1st:
+dbt and the Trafikverket feed need a night to settle the month's final day,
+and a 1st-of-month run would bake in an incomplete last day.
+
 The operator snapshot stays at RAW-label day grain ('Ö-TÅG', 'SKANE',
 'Mälardalstrafik AB', ...): the brand merge (which labels are one operator,
 and which get a page) lives in src/content/operatorStats.ts next to the
@@ -36,12 +41,33 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT_PATH = REPO_ROOT / "src" / "content" / "stationStats.json"
 OUT_PATH_OPERATORS = REPO_ROOT / "src" / "content" / "operatorStats.json"
 
-# Prefer the accumulating agg (grows past the int prune); cap the window at 30
-# full days. While the agg holds fewer days than int_stop_events (it was added
-# later), the union below still yields the widest window available.
-WINDOW_DAYS = 30
+# PERIOD = the PREVIOUS CALENDAR MONTH (changed 2026-08-10 from a trailing
+# 30-day window).
+#
+# Why a calendar month rather than a rolling window: publishing these pages
+# costs a manual Lovable "Publish" click (Lovable has no autopublish and no API
+# to trigger one), so a daily cron was writing stats that only reached
+# production when a human remembered. A named month is also better content than
+# an arbitrary window — "juli 2026" is a period you can cite in a pitch;
+# "11 juli – 9 augusti" is not — and a whole month has no partial-day edge
+# effects at its boundaries.
+#
+# Both bounds are SQL expressions rather than Python dates so the query is
+# evaluated against the DATABASE's clock, matching the rest of the pipeline.
+# Cast to ::date because service_date is a date and date_trunc returns a
+# timestamp.
+PERIOD_START = "(date_trunc('month', current_date) - interval '1 month')::date"
+PERIOD_END = "date_trunc('month', current_date)::date"  # exclusive
+
 MIN_MEASURED = 50  # departures with a realtime signal — below this the page is too thin
-DAY_ROWS = 7  # per-day rows published per station ("Senaste dagarna" table)
+# Every day of the published month ("Dag för dag" table). 31 covers the longest
+# month; shorter months simply yield fewer rows. This is the natural unit for a
+# monthly page — a 7-day tail would be an arbitrary "last week of last month".
+# Cost: ~926 KB of stationStats.json vs ~305 KB at 7 rows. Acceptable because
+# the /forseningar pages are lazy-loaded (App.tsx), so the board and the claim
+# path never download it. If it needs shrinking later, bucket by ISO week
+# rather than truncating back to an arbitrary tail.
+DAY_ROWS = 31
 
 # Day-grain rows; period totals AND the per-day tail are aggregated in Python
 # from this one result set (keeps the agg/int fallback union in one place).
@@ -51,8 +77,8 @@ with base as (
            n_departures, n_measured, n_late_5, n_late_20, n_cancelled,
            sum_delay_seconds, max_delay_seconds
     from dbt_dev.agg_station_delays_daily
-    where service_date >= current_date - interval '{WINDOW_DAYS} days'
-      and service_date < current_date
+    where service_date >= {PERIOD_START}
+      and service_date < {PERIOD_END}
 
     union all
 
@@ -67,8 +93,8 @@ with base as (
            max(delay_seconds)
     from dbt_dev.int_stop_events
     where event_type = 'departure'
-      and service_date >= current_date - interval '{WINDOW_DAYS} days'
-      and service_date < current_date
+      and service_date >= {PERIOD_START}
+      and service_date < {PERIOD_END}
       and service_date not in (
           select distinct service_date from dbt_dev.agg_station_delays_daily
       )
@@ -101,8 +127,8 @@ with base as (
            n_trains, n_measured, n_late_5, n_late_20, n_cancelled,
            sum_delay_seconds, max_delay_seconds
     from dbt_dev.agg_operator_delays_daily
-    where service_date >= current_date - interval '{WINDOW_DAYS} days'
-      and service_date < current_date
+    where service_date >= {PERIOD_START}
+      and service_date < {PERIOD_END}
 
     union all
 
@@ -121,8 +147,8 @@ with base as (
                count(delay_seconds) > 0           as is_measured,
                bool_or(coalesce(canceled, false)) as canceled
         from dbt_dev.int_stop_events
-        where service_date >= current_date - interval '{WINDOW_DAYS} days'
-          and service_date < current_date
+        where service_date >= {PERIOD_START}
+          and service_date < {PERIOD_END}
           and service_date not in (
               select distinct service_date from dbt_dev.agg_operator_delays_daily
           )
@@ -152,7 +178,11 @@ select distinct on (station_id)
 from dbt_dev.int_stop_events
 where event_type = 'departure'
   and coalesce(operator, train_owner) is not null
-  and service_date >= current_date - interval '{WINDOW_DAYS} days'
+  -- Bounded to the SAME period as the stats above: the operator hint labels a
+  -- station with who ran its trains during the month being published, not
+  -- whoever runs them today.
+  and service_date >= {PERIOD_START}
+  and service_date < {PERIOD_END}
 group by station_id, coalesce(operator, train_owner)
 order by station_id, count(*) desc
 """
@@ -210,7 +240,7 @@ def main() -> None:
         conn.close()
 
     # Aggregate the day-grain rows per station: period totals over the whole
-    # window + the last DAY_ROWS days for the "Senaste dagarna" table.
+    # window + the last DAY_ROWS days for the "Dag för dag" table.
     by_station: dict[str, list[dict]] = {}
     for r in day_rows:
         by_station.setdefault(r["station_id"], []).append(r)

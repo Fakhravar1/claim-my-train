@@ -1,11 +1,21 @@
 name: Refresh station stats
 
-# Daily regeneration of src/content/stationStats.json (the data snapshot
-# behind the /forseningar SEO pages) from dbt_dev.agg_station_delays_daily.
-# Daily cadence keeps the per-day "Senaste dagarna" tables at most ~1 day
-# stale and bumps the sitemap lastmod every day (a freshness signal for
-# "försening idag"-type queries). The agg accumulates, so each refresh also
-# widens the published window (capped at 30 d).
+# MONTHLY regeneration of src/content/stationStats.json + operatorStats.json
+# (the data snapshots behind the /forseningar SEO pages) from
+# dbt_dev.agg_station_delays_daily / agg_operator_delays_daily. Each run
+# publishes the PREVIOUS CALENDAR MONTH.
+#
+# Why monthly, not daily (changed 2026-08-10): these pages are static, built at
+# `vite build` time, and reaching production requires a MANUAL "Publish" click
+# in Lovable — Lovable has no autopublish and exposes no API to trigger one. A
+# daily cron therefore wrote stats that sat unpublished until a human
+# remembered; production was measured 3 days stale on 2026-08-10. Monthly makes
+# the manual step liveable (12 clicks/year instead of 365) and a named month
+# ("juli 2026") is better, more citable content than a rolling window.
+#
+# ⚠️ The trade: a MISSED publish now costs a month, not a day. The
+# check-unpublished-content job in this workflow is what stops that being
+# silent — do not remove it without replacing the signal.
 #
 # The commit is pushed with GITHUB_TOKEN, and pushes made by Actions do NOT
 # trigger other workflows — so the mirror-to-lovable workflow won't fire.
@@ -13,7 +23,9 @@ name: Refresh station stats
 
 on:
   schedule:
-    - cron: "30 4 * * *" # daily ~04:30 UTC; free-tier jitter is fine at daily cadence
+    # 04:30 UTC on the 2nd of each month. The 2nd, not the 1st: dbt and the
+    # Trafikverket feed need a night to settle the final day of the month.
+    - cron: "30 4 2 * *"
   workflow_dispatch:
 
 jobs:

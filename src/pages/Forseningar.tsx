@@ -154,7 +154,7 @@ export default function Forseningar() {
 
 
         <p style={{ marginTop: "1.5rem", fontSize: ".9rem", color: "var(--muted)", lineHeight: 1.6 }}>
-          Statistiken bygger på uppmätta avgångar (tåg med realtidssignal) och uppdateras löpande.
+          Statistiken bygger på uppmätta avgångar (tåg med realtidssignal) och uppdateras månadsvis.
           En avgång räknas som försenad från 5 minuter och som ersättningsgrundande från 20 minuter
           — vilken ersättning just din resa ger beror på operatören, se{" "}
           <Link to="/ersattning" style={{ color: "var(--accent)" }}>ersättningsguiden</Link>.

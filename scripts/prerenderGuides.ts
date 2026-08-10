@@ -309,7 +309,7 @@ function stationMainHtml(s: StationStat): string {
 
   const daysTable =
     s.days && s.days.length > 0
-      ? `<h2>Senaste dagarna</h2>` +
+      ? `<h2>Dag för dag i ${esc(period)}</h2>` +
         `<table><thead><tr><th>Dag</th><th>Avgångar</th><th>≥ 20 min sena</th><th>Inställda</th><th>Största försening</th></tr></thead>` +
         `<tbody>${s.days
           .map(
@@ -337,7 +337,7 @@ function stationMainHtml(s: StationStat): string {
     `.</p>` +
     `<h2>Mest försenade stationerna just nu</h2>` +
     `<p>${top.map((x) => `<a href="${stationPath(x)}">${esc(x.station_name)}</a>`).join(" · ")} · <a href="/forseningar">Alla stationer</a></p>` +
-    `<p class="qv-muted">Statistiken bygger på Trafikverkets realtidsdata för uppmätta avgångar och uppdateras löpande. Period: ${esc(period)}.</p>`
+    `<p class="qv-muted">Statistiken bygger på Trafikverkets realtidsdata för uppmätta avgångar och uppdateras månadsvis. Period: ${esc(period)}.</p>`
   );
 }
 
@@ -385,7 +385,7 @@ function operatorMainHtml(o: OperatorStat): string {
 
   const daysTable =
     o.days.length > 0
-      ? `<h2>Senaste dagarna</h2>` +
+      ? `<h2>Dag för dag i ${esc(period)}</h2>` +
         `<table><thead><tr><th>Dag</th><th>Tåg</th><th>≥ 20 min sena</th><th>Inställda</th><th>Största försening</th></tr></thead>` +
         `<tbody>${o.days
           .map(

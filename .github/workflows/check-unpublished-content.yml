@@ -1,0 +1,67 @@
+name: Check unpublished content
+
+# Fails when the repo holds a stats snapshot that production is NOT serving —
+# i.e. someone still needs to click "Publish" in Lovable.
+#
+# WHY THIS EXISTS. The /forseningar pages are static, baked in at `vite build`,
+# and Lovable has no autopublish and no API to trigger one (verified
+# 2026-08-10), so a committed snapshot only goes live when a human clicks
+# Publish. On 2026-08-10 production was found 3 days stale with three pushes
+# sitting unpublished and nothing anywhere reporting it: the mirror was green,
+# dbt was green, the freshness watchdog was green, because every one of those
+# watches the DATA pipeline and none of them watches the DEPLOY.
+#
+# The stats refresh moved to monthly the same day, which makes the manual click
+# liveable (12/year) but RAISES the cost of forgetting once — from ~3 days
+# stale to ~6 weeks. This check is what buys that trade back.
+#
+# HOW IT DETECTS IT: sitemap.xml carries STATION_STATS_GENERATED as the
+# <lastmod> of /forseningar, so the live sitemap states which snapshot
+# production was built from. Compare against the repo's own snapshot date. No
+# new endpoint or secret needed.
+#
+# DELIBERATELY NOT in notify-claude-on-failure.yml's workflows list: a pending
+# Publish is a chore for a human, not an incident worth waking an agent for.
+# The red X plus GitHub's own failure email to the repo owner IS the alert.
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # daily 09:00 UTC — nags once a day until published
+  workflow_dispatch:
+
+jobs:
+  check:
+    # Working repo only: the mirror copies workflow files to the companion,
+    # which must never run this.
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare repo snapshot against what production serves
+        run: |
+          set -euo pipefail
+
+          REPO_DATE="$(python -c "import json;print(json.load(open('src/content/stationStats.json',encoding='utf-8'))['generated'])")"
+
+          # <lastmod> of the /forseningar entry in the live sitemap.
+          LIVE_DATE="$(curl -sS --fail --max-time 30 https://qvitta.nu/sitemap.xml \
+            | tr '>' '>\n' \
+            | grep -A2 'https://qvitta.nu/forseningar<' \
+            | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' \
+            | head -1)"
+
+          echo "repo snapshot: ${REPO_DATE}"
+          echo "live snapshot: ${LIVE_DATE:-<none found>}"
+
+          if [ -z "${LIVE_DATE}" ]; then
+            echo "::error::Could not read /forseningar <lastmod> from the live sitemap. Either the sitemap format changed or the site is down — check https://qvitta.nu/sitemap.xml"
+            exit 1
+          fi
+
+          if [ "${REPO_DATE}" != "${LIVE_DATE}" ]; then
+            echo "::error::Production is serving the ${LIVE_DATE} stats snapshot but the repo holds ${REPO_DATE}. Open https://lovable.dev/projects/7a18a54c-fbdf-4f46-8d07-bdef0ef54260 and click Publish."
+            exit 1
+          fi
+
+          echo "In sync — production is serving the current snapshot."

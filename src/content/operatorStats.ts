@@ -29,7 +29,7 @@ type RawRow = {
   mx: number; // largest delay, seconds
 };
 
-/** One day in the "Senaste dagarna" table (compact keys — ships in the JS bundle). */
+/** One day in the "Dag för dag" table (compact keys — ships in the JS bundle). */
 export type OperatorDayStat = {
   d: string;
   /** Trains that day. */

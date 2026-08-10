@@ -87,7 +87,7 @@ export default function ForseningarOperator() {
         {o.days.length > 0 && (
           <>
             <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 .7rem" }}>
-              Senaste dagarna
+              Dag för dag i {period}
             </h2>
             <div style={{ overflowX: "auto", margin: "0 0 1.6rem" }}>
               <table style={{ borderCollapse: "collapse", width: "100%", background: "var(--card-bg)" }}>
