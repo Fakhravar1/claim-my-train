@@ -154,19 +154,40 @@ CHECKS = {
 
 
 def report(results: list[dict]) -> None:
+    import time
     import urllib.request
 
-    req = urllib.request.Request(
-        f"{SUPABASE_URL}/functions/v1/report-claim-canary",
-        data=json.dumps({"results": results, "run_url": RUN_URL}).encode(),
-        headers={
-            "Authorization": f"Bearer {SERVICE_ROLE}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        print("report-claim-canary:", resp.status, resp.read().decode()[:300])
+    payload = json.dumps({"results": results, "run_url": RUN_URL}).encode()
+    # Retry the report POST: the form checks already ran, so a single transient
+    # network timeout reaching the reporter must not fail the whole run — that
+    # both loses a healthy result and stalls the claim_canary_state heartbeat,
+    # tripping a false claim_canary_ran freshness breach (seen 2026-08-13).
+    last_err: Exception | None = None
+    for attempt in range(1, 4):  # 3 tries, backoff 2s / 4s
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/functions/v1/report-claim-canary",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {SERVICE_ROLE}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                print("report-claim-canary:", resp.status, resp.read().decode()[:300])
+                return
+        except Exception as e:  # noqa: BLE001 — retry any transport-level failure
+            last_err = e
+            print(
+                f"report-claim-canary POST attempt {attempt}/3 failed: "
+                f"{type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+    # Genuinely unreachable after 3 tries — surface it loudly (fails the run).
+    raise last_err  # type: ignore[misc]
 
 
 def main() -> int:
