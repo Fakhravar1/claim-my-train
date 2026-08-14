@@ -1,4 +1,18 @@
-{{ config(materialized='table', indexes=[{'columns': ['origin_local_date']}]) }}
+{{ config(
+    materialized='table',
+    indexes=[{'columns': ['origin_local_date']}],
+    pre_hook="set local statement_timeout = '600s'"
+) }}
+
+-- pre_hook (2026-08-14): this full rebuild scans 14 days of the QUADRATIC fct_journeys
+-- view and sorts every row by random() to sample 15 per (day, tier). That work sits right
+-- at the build's ~120s statement_timeout and tips over on any DB-pressure spike (it hit
+-- 130.94s and cancelled on the 2026-08-14 23:30 UTC build, while the 15 runs before it
+-- passed). Raising the timeout for THIS model only is pure upside — the same ~130s of work
+-- now commits instead of being thrown away, so v_network_board refreshes and CI goes green.
+-- It treats the symptom: the durable fix is to cut the model's cost (narrow the window, or
+-- sample at the int_stop_events source) so the quadratic fan-out never has to be sorted.
+-- `set local` applies only inside this model's build transaction.
 
 -- agg_network_board
 -- Precomputed representative SAMPLE for the "/" Daylight board's default (no-selection)
