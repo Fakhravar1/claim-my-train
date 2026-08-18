@@ -26,9 +26,15 @@ with j as (
             else 'ontime'
         end as tier
     from {{ ref('fct_journeys') }}
-    -- Board reaches ~14 days back in the default (non-claimable) view; keep a matching
-    -- window. Small regardless: 6 tiers x ~15 rows x 14 days ~= 1.3k rows.
-    where origin_local_date >= (current_date - interval '14 days')::date
+    -- Window is bounded by int_stop_events' RETENTION, not by the board's reach. The
+    -- board's default view nominally goes ~14 days back, but fct_journeys is a view over
+    -- int_stop_events, which pg_cron job 13 prunes to ~5 days (measured span 2026-08-19:
+    -- 6 days). Days 7-14 therefore hold zero rows and only cost the planner selectivity
+    -- on the quadratic pairing view — this build step measured ~50s every 15 min, the
+    -- largest recurring load on the instance (2026-08-18 saturation incident).
+    -- Keep this >= the int_stop_events retention window: if job 13's retention is ever
+    -- raised, raise this to match or the board silently loses the extra days.
+    where origin_local_date >= (current_date - interval '7 days')::date
 ),
 
 ranked as (
