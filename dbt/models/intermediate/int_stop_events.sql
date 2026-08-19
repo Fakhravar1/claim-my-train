@@ -5,12 +5,24 @@
     on_schema_change='sync_all_columns',
     indexes=[
       {'columns': ['event_type', 'station_id', 'service_date']},
-      {'columns': ['service_number', 'event_type', 'scheduled']}
+      {'columns': ['service_number', 'event_type', 'scheduled']},
+      {'columns': ['ingested_at']}
     ],
     post_hook="analyze {{ this }}"
 ) }}
 
 -- int_stop_events
+--
+-- INDEX NOTE (2026-08-19): the third index, on `ingested_at`, exists for
+-- public.check_data_freshness() (the §10 watchdog, pg_cron jobid 15, every 30 min),
+-- which does `max(ingested_at)` on this table. Unindexed that was a seq scan of the
+-- whole ~107 MB heap — measured >60 s on an IDLE instance, i.e. 48 full-table scans
+-- per day of background load on the free tier. Both raw tables already carry the
+-- same index for the same reason (migrations 20260601120000 / 20260611130000).
+-- ⚠️ dbt only applies `indexes=` when it CREATES the relation, and --full-refresh is
+-- forbidden here (§10/§15), so on the existing table the index must be created
+-- imperatively — see supabase/migrations/20260819180000_add_int_stop_events_ingested_at_index.sql.
+--
 -- Disjoint union of stop-events across the two feeds. No precedence/overlap
 -- resolution: the feeds cover SEPARATE territory, so they don't compete.
 --   * TV   (stg_train_announcements) — Swedish train stops, genuine track-measured delay

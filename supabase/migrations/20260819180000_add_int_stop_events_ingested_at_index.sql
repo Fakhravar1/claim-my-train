@@ -1,0 +1,36 @@
+-- Btree on dbt_dev.int_stop_events(ingested_at).
+--
+-- WHY: public.check_data_freshness() (the §10 data-freshness watchdog, pg_cron
+-- jobid 15, every 30 min) computes `max(ingested_at)` over dbt_dev.int_stop_events.
+-- That column had no index, so the call was a sequential scan of the full ~107 MB
+-- heap (~388k rows). Measured 2026-08-19 on an IDLE instance: the function did not
+-- complete within 60 s. That is 48 full-table scans/day of pure background load on
+-- a free-tier instance already sitting at ~76% of the 500 MB ceiling — and it makes
+-- the watchdog itself a contributor to the resource pressure it exists to detect.
+--
+-- The two raw tables already carry exactly this index for the same reason:
+--   20260601120000_add_raw_departures_ingested_at_index.sql
+--   20260611130000 (raw_train_announcements)
+-- int_stop_events was simply the one that never got it.
+--
+-- ⚠️ WHY BOTH THIS FILE **AND** THE dbt MODEL CONFIG:
+-- The matching `{'columns': ['ingested_at']}` entry was added to the `indexes=[...]`
+-- config in dbt/models/intermediate/int_stop_events.sql, but the dbt-postgres adapter
+-- only applies `indexes=` when it CREATES the relation. int_stop_events is an
+-- incremental model that already exists, so a normal `dbt build` will NOT create this
+-- index — and `--full-refresh` is FORBIDDEN on this table (§10/§15: it rebuilds from
+-- the ≤3 d raw horizon and permanently drops older rows). So the index has to be
+-- created imperatively, once, against the live table. The config entry is what makes
+-- it survive any future legitimate rebuild.
+--
+-- APPLY (§11 Option A — run in the Supabase dashboard SQL editor; this file is a
+-- record of the live state, it is not replayed by the CLI):
+--   CONCURRENTLY so the every-15-min dbt build is never blocked. Note it cannot run
+--   inside a transaction block — run it as a standalone statement.
+--
+-- COST: ~8-12 MB (~2% of the 500 MB free-tier ceiling) against removing a >60 s
+-- seq scan that currently runs 48x/day. Re-check §13's storage playbook if the DB
+-- is near the ceiling when this is applied.
+
+create index concurrently if not exists idx_int_stop_events_ingested_at
+    on dbt_dev.int_stop_events (ingested_at);
