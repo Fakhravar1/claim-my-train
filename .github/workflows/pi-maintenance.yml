@@ -58,13 +58,18 @@ jobs:
               df -i / | tail -1
               echo "=== memory / swap ==="
               free -h
-              echo "=== biggest consumers under /opt ==="
-              sudo -n du -xh --max-depth=2 /opt 2>/dev/null | sort -rh | head -12
+              # Bounded: this walks BOTH runners' _work trees, so on a box with a
+              # sick SD card it can run for minutes and hold the runner (see the
+              # header note — a slow diagnose queues the scheduled dbt build).
+              echo "=== biggest consumers under /opt (bounded 60s; may be partial) ==="
+              sudo -n timeout 60 du -xh --max-depth=2 /opt 2>/dev/null | sort -rh | head -12 \
+                || echo "(du exceeded 60s — disk I/O is slow; treat that as a finding)"
               echo "=== runner service ==="
               systemctl is-enabled actions.runner.Fakhravar1-claim-my-train.qvitta-pi.service || true
               systemctl is-active  actions.runner.Fakhravar1-claim-my-train.qvitta-pi.service || true
               echo "=== dbt venv ==="
-              /opt/qvitta/dbtvenv/bin/dbt --version 2>&1 | head -5 || echo "dbt venv BROKEN or missing"
+              timeout 60 /opt/qvitta/dbtvenv/bin/dbt --version 2>&1 | head -5 \
+                || echo "dbt venv BROKEN, missing, or too slow to answer in 60s"
               echo "=== DNS (must not depend on a local resolver) ==="
               resolvectl status 2>/dev/null | sed -n '1,8p' || true
               getent hosts aws-1-eu-west-1.pooler.supabase.com >/dev/null \
@@ -75,7 +80,8 @@ jobs:
               echo "=== throttling / undervoltage ==="
               vcgencmd get_throttled 2>/dev/null || echo "(vcgencmd unavailable)"
               echo "=== recent service errors ==="
-              sudo -n journalctl -p err -n 25 --no-pager 2>/dev/null || echo "(journal is volatile; empty after reboot)"
+              sudo -n timeout 30 journalctl -p err -n 25 --no-pager 2>/dev/null \
+                || echo "(journal is volatile, unreadable, or slow; empty after reboot)"
               ;;
 
             clean-caches)
