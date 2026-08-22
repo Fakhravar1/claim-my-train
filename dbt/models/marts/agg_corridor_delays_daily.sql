@@ -48,6 +48,9 @@ with base as (
         ,ingested_at
         ,modified_time
     from {{ ref('stg_train_announcements') }}
+    -- ⚠️ KEEP IN SYNC WITH idx_rta_station_sched_hubs (migration 20260822070000):
+    -- that index is PARTIAL on exactly this hub list. Adding a hub here without
+    -- adding it to the index predicate silently drops it to a seq scan.
     where location_signature in ('Cst', 'Mc')                -- monitored hubs
       and event_type is not null
       and not coalesce(deleted, false)                       -- drop TV retractions
