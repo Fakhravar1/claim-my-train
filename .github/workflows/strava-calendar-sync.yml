@@ -1,0 +1,88 @@
+name: Strava to Google Calendar sync
+
+# Copies completed Strava activities into a dedicated Google Calendar.
+# Self-contained: everything it needs lives in strava-calendar-sync/.
+
+on:
+  schedule:
+    # GitHub cron is always UTC. Sweden runs UTC+1 in winter and UTC+2 in
+    # summer, so 03:20 UTC lands at 04:20 / 05:20 local — early morning, well
+    # after any late-evening upload from the day before has settled on Strava.
+    # (Free-tier scheduled runs are best-effort and can drift by an hour or
+    # more; that is harmless here, the watermark decides what gets fetched.)
+    - cron: '20 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: List what would be created without writing anything
+        type: boolean
+        default: false
+      since:
+        description: 'One-off backfill from this date (YYYY-MM-DD), ignoring the watermark'
+        type: string
+        required: false
+
+jobs:
+  sync:
+    # This repository is mirrored wholesale to the Lovable companion repo
+    # (see CLAUDE.md section 11). The companion holds none of these secrets, so
+    # without this guard the job would fail there every night.
+    if: github.repository == 'Fakhravar1/claim-my-train'
+    runs-on: ubuntu-latest
+    concurrency:
+      # Two overlapping runs would race on the watermark commit.
+      group: strava-calendar-sync
+      cancel-in-progress: false
+    permissions:
+      # Needed to commit the updated state/last_sync.json back to the branch.
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: strava-calendar-sync/requirements.txt
+
+      - name: Install dependencies
+        working-directory: strava-calendar-sync
+        run: pip install -r requirements.txt
+
+      - name: Sync activities
+        working-directory: strava-calendar-sync
+        env:
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          # Only used on the very first run, when there is no watermark yet.
+          BACKFILL_DAYS: '30'
+          # Read into shell variables rather than interpolated into the command,
+          # so a dispatch input can never be read as shell syntax.
+          DRY_RUN: ${{ inputs.dry_run }}
+          SINCE: ${{ inputs.since }}
+        run: |
+          args=()
+          if [ "${DRY_RUN}" = "true" ]; then args+=(--dry-run); fi
+          if [ -n "${SINCE}" ]; then args+=(--since "${SINCE}"); fi
+          python sync.py "${args[@]}"
+
+      - name: Commit the updated watermark
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          if git diff --quiet -- strava-calendar-sync/state/last_sync.json; then
+            echo "Watermark unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add strava-calendar-sync/state/last_sync.json
+          # [skip ci] keeps this bookkeeping commit from re-triggering the other
+          # workflows in this repository (notably Mirror to Lovable).
+          git commit -m "Strava sync: advance watermark [skip ci]"
+          # Cheap insurance against a human pushing between checkout and push.
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
