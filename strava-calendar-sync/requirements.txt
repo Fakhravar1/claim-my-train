@@ -1,4 +1,0 @@
-# Kept deliberately small: an HTTP client and Google's own auth + API client.
-requests>=2.31,<3
-google-auth>=2.23,<3
-google-api-python-client>=2.100,<3

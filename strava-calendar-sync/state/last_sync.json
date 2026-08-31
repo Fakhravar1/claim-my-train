@@ -1,6 +1,0 @@
-{
-  "last_activity_start": null,
-  "last_activity_start_epoch": null,
-  "updated_at": null,
-  "note": "Watermark for the Strava -> Google Calendar sync. Written by sync.py after a fully successful run. A null watermark means 'never synced': the next run falls back to BACKFILL_DAYS (default 30)."
-}
