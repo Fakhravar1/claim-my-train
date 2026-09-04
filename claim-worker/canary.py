@@ -60,6 +60,36 @@ def dismiss_cookies(pg: Page) -> None:
                 return
         except Exception:
             pass
+    # No consent button matched, but a modal may still be open over the form (SJ opens a
+    # MUI Dialog). Escape closes a MUI Dialog; harmless when nothing is open.
+    try:
+        if pg.locator(".MuiDialog-root, [role=dialog]").count():
+            pg.keyboard.press("Escape")
+            pg.wait_for_timeout(400)
+    except Exception:
+        pass
+
+
+def blocking_overlay(pg: Page, selector: str) -> str | None:
+    """Describe what actually sits on top of `selector`, or None if the element itself
+    would receive a click. Pure DOM hit-test: reads only, never clicks.
+
+    Why this exists: presence is NOT reachability. Both SJ worker failures (claims
+    40bda7fb on 2026-06-27 and dcb012b8 on 2026-09-04) were a MUI Dialog backdrop
+    intercepting pointer events on a button that was present, visible, enabled and
+    stable — so a count()-based check stayed green through both."""
+    try:
+        return pg.locator(selector).first.evaluate(
+            """el => {
+                const r = el.getBoundingClientRect();
+                if (!r.width || !r.height) return 'zero-size';
+                const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                if (!top || top === el || el.contains(top) || top.contains(el)) return null;
+                return (top.tagName + '.' + (top.className || '')).slice(0, 120);
+            }"""
+        )
+    except Exception:
+        return None
 
 
 def visible_select_labels(pg: Page) -> list[str]:
@@ -142,7 +172,15 @@ def check_sj(pg: Page) -> str:
         raise AssertionError(f"page-1 ids missing: {missing} (url={pg.url})")
     if pg.locator("button[type=submit]").count() == 0:
         raise AssertionError("no submit button on page 1")
-    return "page-1 booking/email fields + submit present"
+    # Reachability, not just presence — see blocking_overlay()'s docstring. submit_sj.py
+    # can now click through this overlay, but it is still drift we want reported.
+    blocker = blocking_overlay(pg, "button[type=submit]")
+    if blocker:
+        raise AssertionError(
+            f"page-1 submit is present but covered by {blocker} — a click on "
+            f"'Hämta resa' is intercepted (submit_sj.py falls back to a DOM click)"
+        )
+    return "page-1 booking/email fields + submit present and clickable"
 
 
 CHECKS = {

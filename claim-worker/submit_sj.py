@@ -22,6 +22,99 @@ half-submit a form we don't fully understand. Finish mapping pages 4+ before rel
 ────────────────────────────────────────────────────────────────────────────
 """
 SJ_FORM_URL = "https://www.sj.se/ersattning-vid-forsening/"
+SUBMIT_SELECTOR = "button[type=submit]"
+
+# ── Overlay handling (added 2026-09-04 after the second CI failure of this class) ──────
+# SJ renders a MUI <Dialog> over page 1. Its MuiDialog-container is a full-viewport
+# role="presentation" backdrop, so Playwright's pointer hit-test resolves to the backdrop
+# and the click on "Hämta resa" retries until it times out:
+#   "<div class="MuiDialog-container …"> … subtree intercepts pointer events"
+# That exact failure errored claim 40bda7fb (2026-06-27) and again dcb012b8 (2026-09-04).
+# The previous handler only knew OneTrust ("Acceptera alla" / #onetrust-accept-btn-handler),
+# which does not match this dialog — hence the 8 s timeout and the raw Playwright dump that
+# reached the user's outcome email.
+CONSENT_BUTTONS = (
+    "#onetrust-accept-btn-handler",
+    "button:has-text('Acceptera alla')",
+    "button:has-text('Godkänn alla')",
+    "button:has-text('Acceptera')",
+    "button:has-text('Godkänn')",
+    "button:has-text('Tillåt alla')",
+)
+# Explicit CLOSE affordances only. We never click an unrecognised button inside an unknown
+# dialog — that could take an action we did not intend. Close it, or leave it and click
+# through it below.
+CLOSE_BUTTONS = (
+    "[role=dialog] button[aria-label*='täng' i]",   # "Stäng" / "stäng dialogruta"
+    "[role=dialog] button[aria-label*='close' i]",
+    "[role=dialog] button:has-text('Stäng')",
+    ".MuiDialog-root button[aria-label*='täng' i]",
+    ".MuiDialog-root button[aria-label*='close' i]",
+)
+
+
+def _dismiss_overlays(page) -> None:
+    """Best-effort: close whatever is covering the form. Consent-accept first, then an
+    explicit close control, then Escape (which closes a MUI Dialog). Never fails the run."""
+    for group in (CONSENT_BUTTONS, CLOSE_BUTTONS):
+        for sel in group:
+            try:
+                btn = page.locator(sel)
+                if btn.count() and btn.first.is_visible():
+                    btn.first.click(timeout=3000)
+                    page.wait_for_timeout(600)
+                    break  # one per group is enough
+            except Exception:
+                pass
+    try:
+        if page.locator(".MuiDialog-root, [role=dialog]").count():
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(400)
+    except Exception:
+        pass
+
+
+def _blocking_overlay(page, selector: str = SUBMIT_SELECTOR) -> str | None:
+    """Describe the element actually on top of `selector`, or None when the element itself
+    would receive the click. Pure DOM hit-test — reads nothing, clicks nothing."""
+    try:
+        return page.locator(selector).first.evaluate(
+            """el => {
+                const r = el.getBoundingClientRect();
+                if (!r.width || !r.height) return 'zero-size';
+                const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                if (!top || top === el || el.contains(top) || top.contains(el)) return null;
+                return (top.tagName + '.' + (top.className || '')).slice(0, 120);
+            }"""
+        )
+    except Exception:
+        return None
+
+
+def _click_page1_submit(page) -> None:
+    """Click page 1's "Hämta resa".
+
+    Page 1 is a LOOKUP — it only asks SJ whether the booking exists — so falling back to a
+    DOM-level click when an overlay hijacks the pointer hit-test is safe: same element,
+    same handler, only the backdrop is skipped. The FINAL "Slutför ansökan" click
+    deliberately does NOT use this: a modal covering the real submission must fail loudly
+    rather than be clicked through (§8 — we never submit through something we can't see)."""
+    try:
+        page.click(SUBMIT_SELECTOR, timeout=8000)
+        return
+    except Exception:
+        pass
+
+    _dismiss_overlays(page)
+    try:
+        page.click(SUBMIT_SELECTOR, timeout=8000)
+        return
+    except Exception:
+        pass
+
+    blocker = _blocking_overlay(page)
+    page.locator(SUBMIT_SELECTOR).first.evaluate("el => el.click()")
+    print(f"  SJ page 1: clicked through an overlay ({blocker or 'unknown'})")
 
 
 def _page_message(page, *, limit: int = 600) -> str | None:
@@ -79,18 +172,13 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
         try:
             page.goto(SJ_FORM_URL, wait_until="networkidle", timeout=60000)
 
-            # Cookie consent (OneTrust-style); harmless if absent.
-            for sel in ("button:has-text('Acceptera alla')", "#onetrust-accept-btn-handler"):
-                btn = page.locator(sel)
-                if btn.count() and btn.first.is_visible():
-                    btn.first.click(timeout=3000)
-                    page.wait_for_timeout(800)
-                    break
+            # Cookie consent / any dialog SJ opens over the form; harmless if absent.
+            _dismiss_overlays(page)
 
             # Page 1: booking/ticket number + email-or-phone, then "Hämta resa".
             page.fill("#orderOrTicketNumber", booking, timeout=8000)
             page.fill("#orderSecurity", contact, timeout=8000)
-            page.click("button[type=submit]", timeout=8000)
+            _click_page1_submit(page)
             page.wait_for_load_state("networkidle", timeout=30000)
 
             url = page.url
@@ -123,6 +211,17 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
                             "message": _page_message(page)
                             or "SJ hittar inte bokningen för de uppgifter du angav.",
                             "screenshot": screenshot, "external_reference": None}
+                # Still on page 1 AND something is STILL covering the submit button: our
+                # click never reached SJ at all, so this is form drift on our side, not an
+                # SJ verdict. Fail loudly and name the blocker rather than record a raw
+                # Playwright timeout (or worse, mislabel it "sj_rejected") on the claim.
+                blocker = _blocking_overlay(page)
+                if blocker:
+                    raise RuntimeError(
+                        f"SJ page 1 submit is covered by an overlay we could not dismiss "
+                        f"({blocker}) — update _dismiss_overlays/selectors in submit_sj.py"
+                    )
+
                 # Some other interstitial SJ showed (e.g. "ej berättigad till ersättning").
                 # Don't guess — return SJ's own visible text so it reaches the user verbatim.
                 return {"submitted": False, "already_claimed": False, "error": "sj_rejected",
