@@ -49,21 +49,45 @@
 -- If a future station shows this pattern, investigate the same way before
 -- adding it here — don't widen this list speculatively.
 --
--- TIME-BOUNDED EXCEPTION — Stockholm pendeltåg summer 2026 service change,
--- added 2026-07-12, EXPIRES 2026-09-01 (the `service_date` bound below).
--- On 2026-07-11 Trafikverket's feed collapsed Ankomst for several Stockholm
--- pendeltåg stations while Avgang simultaneously dropped ~40% on BOTH trunks
--- — Huddinge 45550 (arr 130→10), Stuvsta 772 (130→10), Häggvik 703 (128→12),
--- Sollentuna 67244 (137→54, one bad day from tripping), plus Mölnbo 715 on
--- Nyköpingsbanan in milder form (not excluded). Investigated 2026-07-12:
--- raw_train_announcements shows the IDENTICAL collapse, so this is
--- Trafikverket publishing fewer announcements (planned summer track work /
--- reduced timetable that started 2026-07-11), not our pipeline — the
--- collector is station-agnostic and int matches raw row-for-row. The
--- exception is date-bounded rather than permanent: if the feed still looks
--- like this after 2026-09-01, the test re-fails and forces a fresh look
--- (either the works were extended — extend the bound — or these stations
--- have become permanent Karlberg-class exceptions).
+-- RESOLVED AND REMOVED 2026-09-05 — the Stockholm pendeltåg summer-2026
+-- exception (Huddinge 45550, Stuvsta 772, Häggvik 703, Sollentuna 67244),
+-- added 2026-07-12 with an EXPIRES 2026-09-01 bound. The bound did its job:
+-- it lapsed on 2026-09-01 and the test did NOT re-fail, i.e. the summer track
+-- work ended and normal Ankomst volume returned. Verified 2026-09-05 over
+-- 2026-08-31..09-05 (every day past the expiry): Huddinge 0.50-0.60,
+-- Stuvsta 0.50-0.60, Häggvik 0.44, Sollentuna 0.44 — all far above the 0.10
+-- threshold. The block was dead code from 2026-09-01 onward, so it is gone
+-- and these four stations are guarded again. This is the intended lifecycle
+-- of a time-bounded exception; keep writing them with a date, not forever.
+--
+-- TIME-BOUNDED EXCEPTION — Göteborg–Alingsås replacement-bus blockade,
+-- added 2026-09-05, EXPIRES 2026-10-01 (the `service_date` bound below).
+-- Floda 203, Partille 132, Aspedalen 1011 and Aspen 1012 reported
+-- arrival_count = 0 against 105-125 departures on service_date 2026-09-05
+-- (a Saturday), having run normal traffic the day before (e.g. Aspedalen
+-- 35 arr / 165 dep on 09-04). Investigated 2026-09-05 against
+-- raw_train_announcements — this is NOT our pipeline:
+--   * raw matches int EXACTLY, row for row (raw Ankomst 0 / Avgang 106 at
+--     Asd and Apn, 0/125 Fd, 0/105 P), so nothing is being dropped by the
+--     crosswalk join or the dedup; Trafikverket simply published no Ankomst.
+--   * 100% of the surviving events carry a "Buss" Deviation naming a road
+--     stop — "Buss 22K | Hpl D" (Floda), "Hpl C" (Partille), "Hpl Almekärr"
+--     (Aspedalen), "Hpl Ekebacken" (Aspen). These are replacement BUSES on
+--     a planned engineering blockade, and Trafikverket publishes only the
+--     bus departure from the road stop, never a bus arrival — so a 0-arrival
+--     day is the correct representation of the feed, not a collapse.
+--   * The day before, the same stops were almost entirely deviation-free
+--     ordinary train traffic, which is what makes this a clean step change
+--     rather than the Karlberg-class permanent lopsidedness below.
+-- Bounded to 2026-10-01 because the blockade's end date is not published in
+-- the feed: if buses are still running then the test re-fails and forces a
+-- fresh look (extend the bound, or promote to a permanent exception).
+-- NOTE for whoever picks this up: a tighter mechanism is available if this
+-- recurs often — exclude a (station, day) whose events are ~100% "Buss"
+-- deviation, which self-re-arms the moment trains return and needs no date.
+-- Deliberately not done here: the repo's precedent is an explicit station
+-- list plus a date, and an incident fix is the wrong place to invent a new
+-- exception mechanism.
 with daily_counts as (
     select
         station_id,
@@ -74,10 +98,10 @@ with daily_counts as (
     from {{ ref('int_stop_events') }}
     where service_date = current_date - 1
       and station_id != '45985'  -- Karlberg, see KNOWN EXCEPTION above
-      -- Stockholm pendeltåg summer 2026 works, see TIME-BOUNDED EXCEPTION above
+      -- Göteborg–Alingsås replacement-bus blockade, see TIME-BOUNDED EXCEPTION above
       and not (
-          station_id in ('45550', '703', '772', '67244')
-          and service_date < date '2026-09-01'
+          station_id in ('203', '132', '1011', '1012')
+          and service_date < date '2026-10-01'
       )
     group by 1, 2, 3
 ),
