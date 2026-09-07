@@ -334,10 +334,9 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     page.wait_for_timeout(1500)
     confirm_shot = page.screenshot(full_page=True)
 
-    # Best-effort case/reference id from the confirmation page. Verified on the first
-    # real submission 2026-06-23 that "Slutför ansökan" succeeds; the exact reference
-    # format is still UNCONFIRMED (that run screenshotted mid-load). The screenshot is
-    # the audit fallback regardless of whether the regex matches.
+    # "Slutför ansökan" succeeded once, on 2026-06-23. That is NOT a guarantee it
+    # files every time — see the registration check below. The screenshot is the
+    # audit fallback either way.
     # SJ confirmation. Capture two things off the page:
     #  (a) external_reference = SJ's ärendenummer/case id. SJ shows "Ärendenummer:
     #      1-102194544357" (the serviceRequestId shape, confirmed via the public API
@@ -347,10 +346,39 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     #      registrera"). We surface that so the user isn't told a flat "done".
     ref = None
     partial = False
+    body = ""
+    try:
+        body = page.locator("body").inner_text(timeout=5000)
+    except Exception:
+        pass
+
+    # ── DO NOT report a submission we cannot see ────────────────────────────────
+    # This function used to return submitted=True unconditionally after the click,
+    # on the assumption that "Slutför ansökan" always files. On 2026-09-07 it did
+    # not: SJ routed to a payout step ("Hur vill du få ersättningen?" / Swish) that
+    # our map does not cover, and the claim was marked submitted + the user emailed
+    # "inskickad" while SJ's own API still reported NO service request on the
+    # booking. Telling someone their compensation claim is filed when it is not is
+    # the worst failure this worker can produce — worse than any error — because
+    # they stop chasing it and the 60-day deadline runs out.
+    #
+    # So success now requires SJ to SAY it registered. The reverse risk (SJ rewords
+    # its confirmation and we under-report a real submission) is safe: re-filing
+    # goes through sj-lookup / the /redan-ansokt/ branch, which both refuse a
+    # booking SJ already holds a claim for.
+    low = body.lower()
+    registered = ("ansökan är registrerad" in low or "delvis registrerad" in low
+                  or "ärendenummer" in low)
+    if not registered:
+        return {"submitted": False, "already_claimed": False, "error": "sj_incomplete",
+                "message": "SJ:s formulär tog oss vidare till ett steg vi inte hanterar "
+                           f"automatiskt ({_page_message(page) or page.url}). Din ansökan "
+                           "är INTE inskickad — ansök direkt på sj.se med din bokning.",
+                "screenshot": confirm_shot, "external_reference": None}
+
     try:
         import re as _re
-        body = page.locator("body").inner_text(timeout=5000)
-        partial = "delvis registrerad" in body.lower()
+        partial = "delvis registrerad" in low
         m = _re.search(r"ärendenummer\s*[:\-]?\s*([0-9][0-9\-]{5,})", body, _re.I)
         if not m:
             m = _re.search(r"\b(\d-\d{8,})\b", body)  # SJ serviceRequestId shape
