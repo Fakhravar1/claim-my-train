@@ -44,6 +44,36 @@ def _safe_screenshot(page) -> bytes | None:
         return None
 
 
+def _await_settled(page, *, timeout: int = 25000) -> bool:
+    """Wait out SJ's async "Ett ögonblick…" loader before reading the page.
+
+    SJ's SPA answers page 1 ASYNCHRONOUSLY: networkidle fires while the loader is
+    still on screen, so page.url and the body text read right after the click can
+    describe the SPINNER instead of SJ's actual answer. That is exactly what
+    happened on 2026-09-07 once the overlay fix let the click through — the claim
+    was marked error with SJ's "verdict" recorded as "Ett ögonblick…", which is a
+    loading state, not an outcome.
+
+    Returns True if the page settled, False if the loader was still up when the
+    budget ran out — callers must treat False as "we could not read SJ's answer",
+    never as a verdict.
+    """
+    try:
+        page.wait_for_function(
+            "!/ett \\u00f6gonblick/i.test(document.body.innerText || '')", timeout=timeout
+        )
+    except Exception:
+        return False
+    # The SPA swaps route and renders after the loader clears; give it a beat so
+    # page.url and the body text describe the same step.
+    page.wait_for_timeout(1200)
+    try:
+        page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception:
+        pass
+    return True
+
+
 def _page_message(page, *, limit: int = 600) -> str | None:
     """Pull the visible heading/body text SJ shows on the current step so the exact words
     SJ presents (confirmation, "redan ansökt", a rejection) reach the user. Best-effort:
@@ -138,6 +168,7 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     click_when_clear(page, "button[type=submit]", timeout=15000,
                      user_message=SJ_UNEXPECTED)
     page.wait_for_load_state("networkidle", timeout=30000)
+    settled = _await_settled(page)
 
     url = page.url
     screenshot = page.screenshot(full_page=True)
@@ -152,6 +183,14 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
                    "för den här resan. Vi har skickat en bekräftelse via e-post.",
                 "screenshot": screenshot, "external_reference": None}
     if "/valj-resa/" not in url:
+        if not settled:
+            # The loader never cleared, so we have NO answer from SJ — say that,
+            # rather than passing a loading state off as a rejection. Retryable:
+            # re-filing from Mina ärenden just runs this again.
+            return {"submitted": False, "already_claimed": False, "error": "sj_timeout",
+                    "message": "SJ:s formulär svarade inte i tid. Din ansökan är INTE "
+                               "inskickad — försök igen från Mina ärenden om en stund.",
+                    "screenshot": screenshot, "external_reference": None}
         # Still on page 1 -> SJ rejected the inputs. SJ's copy has varied — the
         # 2026-06-23 spike saw "Vi hittade ingen matchande resa"; SJ now shows
         # "Vi hittar inte din bokning. Det kan bero på att din resa ännu inte är
@@ -214,15 +253,9 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     click_when_clear(page, "button:has-text('Slutför ansökan')", timeout=10000,
                      user_message=SJ_UNEXPECTED)
     page.wait_for_load_state("networkidle", timeout=30000)
-    # The confirmation renders behind an async "Ett ögonblick…" spinner — wait for it
-    # to clear before screenshotting, or the audit shot catches only the loader.
-    try:
-        page.wait_for_function(
-            "!/ett \\u00f6gonblick/i.test(document.body.innerText)", timeout=20000
-        )
-    except Exception:
-        pass
-    page.wait_for_timeout(1500)
+    # The confirmation renders behind the same async loader — wait it out, or the
+    # audit shot catches only the spinner (and the ärendenummer scrape finds nothing).
+    _await_settled(page, timeout=20000)
     confirm_shot = page.screenshot(full_page=True)
 
     # Best-effort case/reference id from the confirmation page. Verified on the first

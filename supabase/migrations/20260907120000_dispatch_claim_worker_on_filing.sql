@@ -55,11 +55,9 @@ revoke all on function public.check_claim_dispatch_secret(text) from public;
 revoke all on function public.check_claim_dispatch_secret(text) from anon, authenticated;
 grant execute on function public.check_claim_dispatch_secret(text) to service_role;
 
--- 3. The trigger. STATEMENT-level with a transition table, not row-level: the
---    /claim-review digest path bulk-upserts many claims in one statement, and one
---    worker run drains all of them — a dispatch per row would be pure noise.
-create or replace function public.dispatch_claim_worker()
-returns trigger
+-- 3. The dispatch itself, shared by both triggers below.
+create or replace function public.dispatch_claim_worker_now()
+returns void
 language plpgsql
 security definer
 set search_path = pg_catalog, public
@@ -67,21 +65,12 @@ as $$
 declare
   secret text;
 begin
-  -- Only rows the worker will actually pick up (worker.py's poll filter).
-  if not exists (
-    select 1 from inserted
-    where status in ('pending', 'sj_authorized', 'hlt_authorized',
-                     'kalmar_authorized', 'vy_authorized')
-  ) then
-    return null;
-  end if;
-
   select decrypted_secret into secret
   from vault.decrypted_secrets
   where name = 'claim_dispatch_secret';
 
   if secret is null then
-    return null;  -- not configured yet: the */15 cron still covers it
+    return;  -- not configured yet: the */15 cron still covers it
   end if;
 
   perform net.http_post(
@@ -93,11 +82,34 @@ begin
     body := '{}'::jsonb,
     timeout_milliseconds := 10000
   );
-  return null;
 exception when others then
   -- NEVER fail the user's filing over a dispatch. The claim row is what matters;
   -- the cron picks it up regardless.
-  raise warning 'dispatch_claim_worker: %', sqlerrm;
+  raise warning 'dispatch_claim_worker_now: %', sqlerrm;
+end;
+$$;
+
+revoke all on function public.dispatch_claim_worker_now() from public;
+revoke all on function public.dispatch_claim_worker_now() from anon, authenticated;
+
+-- 4. INSERT — STATEMENT-level with a transition table, not row-level: the
+--    /claim-review digest path bulk-upserts many claims in one statement, and one
+--    worker run drains all of them, so a dispatch per row would be pure noise.
+create or replace function public.tg_dispatch_claim_worker_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  -- Only statements that produced a row the worker will actually poll for.
+  if exists (
+    select 1 from inserted
+    where status in ('pending', 'sj_authorized', 'hlt_authorized',
+                     'kalmar_authorized', 'vy_authorized')
+  ) then
+    perform public.dispatch_claim_worker_now();
+  end if;
   return null;
 end;
 $$;
@@ -107,18 +119,37 @@ create trigger claims_dispatch_worker_on_insert
   after insert on public.claims
   referencing new table as inserted
   for each statement
-  execute function public.dispatch_claim_worker();
+  execute function public.tg_dispatch_claim_worker_insert();
 
--- Re-filing an errored claim reopens the row IN PLACE (useStartClaim's 23505 path,
--- and the sjEdit booking editor), so an UPDATE back to 'pending' is a filing too.
--- Worker-driven updates (-> generated/submitted/error) don't match the status
--- filter above, so they can't loop.
+-- 5. UPDATE — ROW-level with a WHEN clause. Re-filing an errored claim reopens the
+--    row IN PLACE (useStartClaim's 23505 path, the sjEdit booking editor) and a
+--    human authorising a dry-run flips it to *_authorized: both are filings.
+--    Row-level here because Postgres refuses a transition table on a trigger with a
+--    column list, and the WHEN clause is the more precise filter anyway — it fires
+--    only on an actual TRANSITION into a pollable status, so the worker's own
+--    updates (-> generated/submitted/error) cannot loop, and neither can an
+--    outcome/paid_out edit that leaves status untouched. Nothing bulk-updates
+--    claims to 'pending', so per-row here costs at most one dispatch.
+create or replace function public.tg_dispatch_claim_worker_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  perform public.dispatch_claim_worker_now();
+  return null;
+end;
+$$;
+
 drop trigger if exists claims_dispatch_worker_on_update on public.claims;
 create trigger claims_dispatch_worker_on_update
-  after update of status on public.claims
-  referencing new table as inserted
-  for each statement
-  execute function public.dispatch_claim_worker();
+  after update on public.claims
+  for each row
+  when (new.status is distinct from old.status
+        and new.status in ('pending', 'sj_authorized', 'hlt_authorized',
+                           'kalmar_authorized', 'vy_authorized'))
+  execute function public.tg_dispatch_claim_worker_update();
 
 -- PostgREST caches the schema; make the new RPC visible to the edge function now
 -- rather than whenever the next reload happens to land.
