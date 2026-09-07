@@ -49,8 +49,47 @@
 -- If a future station shows this pattern, investigate the same way before
 -- adding it here — don't widen this list speculatively.
 --
--- TIME-BOUNDED EXCEPTION — Stockholm pendeltåg summer 2026 service change,
--- added 2026-07-12, EXPIRES 2026-09-01 (the `service_date` bound below).
+-- REPLACEMENT-BUS EXCLUSION (added 2026-09-06). Rows whose Trafikverket
+-- Deviation marks them as a replacement bus ("Buss", "Buss 22K", "Buss
+-- ersätter", …) are excluded from the counts entirely.
+--
+-- Why: during planned track work Trafikverket publishes the replacement bus
+-- as an **Avgang-only** event at the affected stops — a departure from a
+-- named bus stop ("Hpl C", "Hpl Almekärr") with NO matching Ankomst. That is
+-- a one-sided count by construction, not a collapse, so the ratio rule is
+-- meaningless for those rows and fires a false alarm every time a line goes
+-- over to buses for a weekend.
+--
+-- Evidence (2026-09-06, the failure that prompted this): the Göteborg–
+-- Alingsås commuter line went to replacement buses on Sat 2026-09-05.
+-- Aspedalen 1011, Aspen 1012, Partille 132 and Floda 203 all reported
+-- arr 0 / dep 105–125 where the Friday before was arr 33–72 / dep ~160.
+-- **100% of the Saturday departures carried a `Buss` + `Hpl <x>` deviation**;
+-- raw_train_announcements shows the identical shape, so this is the feed
+-- describing buses, not our pipeline dropping arrivals. Jonsered 15675 and
+-- Stenkullen 1315 had the same shape below the 100-event threshold, and
+-- Lerum 540 a partial version — i.e. the whole line, exactly matching the
+-- published works.
+--
+-- This is deliberately a MECHANISM exclusion, not another station list: it
+-- needs no expiry, it self-applies to any future line that goes to buses,
+-- and it removes only the bus rows — genuine train events at the same stop
+-- are still counted and still guarded. If a stop is served ONLY by buses for
+-- a period it simply falls under the >=100 threshold and is untested, the
+-- same as any other low-volume day.
+--
+-- RESOLVED — Stockholm pendeltåg summer 2026 service change (exception added
+-- 2026-07-12 with an expiry of 2026-09-01, REMOVED 2026-09-06).
+-- The expiry did its job: it lapsed on schedule and forced this fresh look.
+-- Re-measured 2026-09-06 over 2026-09-01..05, the four stations have fully
+-- recovered and are nowhere near the 0.10 threshold — Huddinge 45550 and
+-- Stuvsta 772 at ratio 0.50–0.60, Häggvik 703 and Sollentuna 67244 at 0.44
+-- (vs the 0.08 that tripped it in July). The summer track work ended, so the
+-- exclusion is dead code and is deleted rather than extended; those four
+-- stations are guarded by this test again. Kept for the record so a future
+-- reader knows the outcome, not just that an exception once existed.
+--
+-- (historical detail of that incident, for pattern-matching)
 -- On 2026-07-11 Trafikverket's feed collapsed Ankomst for several Stockholm
 -- pendeltåg stations while Avgang simultaneously dropped ~40% on BOTH trunks
 -- — Huddinge 45550 (arr 130→10), Stuvsta 772 (130→10), Häggvik 703 (128→12),
@@ -59,11 +98,7 @@
 -- raw_train_announcements shows the IDENTICAL collapse, so this is
 -- Trafikverket publishing fewer announcements (planned summer track work /
 -- reduced timetable that started 2026-07-11), not our pipeline — the
--- collector is station-agnostic and int matches raw row-for-row. The
--- exception is date-bounded rather than permanent: if the feed still looks
--- like this after 2026-09-01, the test re-fails and forces a fresh look
--- (either the works were extended — extend the bound — or these stations
--- have become permanent Karlberg-class exceptions).
+-- collector is station-agnostic and int matches raw row-for-row.
 with daily_counts as (
     select
         station_id,
@@ -74,10 +109,12 @@ with daily_counts as (
     from {{ ref('int_stop_events') }}
     where service_date = current_date - 1
       and station_id != '45985'  -- Karlberg, see KNOWN EXCEPTION above
-      -- Stockholm pendeltåg summer 2026 works, see TIME-BOUNDED EXCEPTION above
-      and not (
-          station_id in ('45550', '703', '772', '67244')
-          and service_date < date '2026-09-01'
+      -- Replacement buses are Avgang-only by construction, see
+      -- REPLACEMENT-BUS EXCLUSION above.
+      and not exists (
+          select 1
+          from unnest(coalesce(deviation, '{}')) as d
+          where d like 'Buss%'
       )
     group by 1, 2, 3
 ),
