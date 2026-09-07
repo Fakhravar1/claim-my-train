@@ -14,7 +14,8 @@ and asserts the DOM still matches what our fill scripts / headless workers expec
   vasttrafik_form    — BankID at END: assert the from/to typeahead ids and the
                        label-detected "Dag" select that vasttrafik-fill-script targets.
   sj_form            — page 1 of SJ's no-login form: #orderOrTicketNumber +
-                       #orderSecurity + a submit button (submit_sj.py's entry point).
+                       #orderSecurity + a submit button that is actually CLICKABLE
+                       and not covered by a modal (submit_sj.py's entry point).
 
 Results POST to the report-claim-canary edge function (service-role bearer), which
 handles breach/recovery emails + the claim_canary_state heartbeat.
@@ -37,6 +38,8 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
+from browser_utils import NOT_FOUND, blocking_overlay, dismiss_overlays
+
 OUT_DIR = Path(__file__).parent / "canary_out"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SERVICE_ROLE = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -50,16 +53,14 @@ SJ_URL = "https://www.sj.se/ersattning-vid-forsening/"  # submit_sj.py SJ_FORM_U
 
 
 def dismiss_cookies(pg: Page) -> None:
-    """Best-effort cookie-banner dismissal — never fail a check over a banner."""
-    for label in ("Godkänn", "Acceptera", "Tillåt alla", "Jag förstår", "OK"):
-        try:
-            btn = pg.locator(f"button:has-text('{label}')")
-            if btn.count():
-                btn.first.click(timeout=3000)
-                pg.wait_for_timeout(600)
-                return
-        except Exception:
-            pass
+    """Best-effort banner dismissal — never fail a check over a banner.
+
+    Delegates to browser_utils so the canary clears EXACTLY what submit_sj clears.
+    They used to differ (the canary tried five labels, submit_sj two), which is a
+    large part of why the canary sailed through the overlay that was killing every
+    SJ claim: the canary dismissed SJ's dialog, the worker never could.
+    """
+    dismiss_overlays(pg, allow_escape=True)
 
 
 def visible_select_labels(pg: Page) -> list[str]:
@@ -142,7 +143,18 @@ def check_sj(pg: Page) -> str:
         raise AssertionError(f"page-1 ids missing: {missing} (url={pg.url})")
     if pg.locator("button[type=submit]").count() == 0:
         raise AssertionError("no submit button on page 1")
-    return "page-1 booking/email fields + submit present"
+    # THE 2026-09-04 BLIND SPOT. Existence is not clickability: on 2026-06-27 and
+    # again on 2026-09-04 this button existed, resolved, and was "visible, enabled
+    # and stable" — while a MuiDialog on top of it ate the click and killed the
+    # claim. This canary was green through all ten weeks of it. Hit-test the actual
+    # click point, exactly as click_when_clear does before submitting.
+    blocker = blocking_overlay(pg, "button[type=submit]")
+    if blocker and blocker != NOT_FOUND:
+        raise AssertionError(
+            "page-1 submit button is covered — a headless click would time out "
+            f"(after dismissing banners, elementFromPoint hits: {blocker})"
+        )
+    return "page-1 booking/email fields + submit present and clickable"
 
 
 CHECKS = {
@@ -204,7 +216,11 @@ def main() -> int:
     else:
         print("SUPABASE_URL missing — cannot report", file=sys.stderr)
         return 1
-    return 0 if all(r["ok"] for r in results) or CALIBRATION else 0
+    # Non-zero on breach so the run goes RED. notify-claude-on-failure.yml watches
+    # "claim canary" via workflow_run, but until 2026-09-07 the else-branch here also
+    # returned 0, so the workflow could never fail and that wiring could never fire —
+    # a breach was only ever an email. Calibration runs stay 0 (they report nothing).
+    return 0 if CALIBRATION or all(r["ok"] for r in results) else 1
 
 
 if __name__ == "__main__":

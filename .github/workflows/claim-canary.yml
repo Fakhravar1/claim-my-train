@@ -30,6 +30,13 @@ jobs:
           pip install playwright
           playwright install --with-deps chromium
 
+      # Guards the fix for the 2026-09-04 overlay failure. Offline (set_content
+      # only, no operator site is touched) and ~5 s, so it runs before the canary
+      # rather than in a workflow of its own.
+      - name: Unit-test the overlay helpers
+        working-directory: claim-worker
+        run: python test_browser_utils.py
+
       - name: Run canary
         working-directory: claim-worker
         env:

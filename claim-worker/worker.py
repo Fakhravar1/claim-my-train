@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 
 from supabase import create_client
 
+from browser_utils import FormError
 from fill_template import fill
 
 URL = os.environ["SUPABASE_URL"]
@@ -118,7 +119,21 @@ def handle_sj(sb, claim: dict) -> None:
     # 'sj_authorized' rows still satisfy this and submit too.)
     live = SJ_SUBMIT_LIVE
 
-    result = submit_sj(claim, profile, live=live)
+    try:
+        result = submit_sj(claim, profile, live=live)
+    except FormError as e:
+        # The flow hit something it doesn't recognise. Store the screenshot BEFORE
+        # re-raising — an operator-side change is only diagnosable if we kept the
+        # picture (both 2026 SJ failures left us nothing but a Playwright trace).
+        if e.screenshot:
+            shot = f'{claim["user_id"]}/{cid}-sj.png'
+            sb.storage.from_(BUCKET).upload(
+                shot, e.screenshot, {"content-type": "image/png", "upsert": "true"}
+            )
+            sb.table("claims").update({"pdf_path": shot}).eq("id", cid).execute()
+            print(f"  {cid}: sj -> failure screenshot at {shot}", file=sys.stderr)
+        print(f"  {cid}: sj -> {e.detail} (url={e.url})", file=sys.stderr)
+        raise
 
     # Stash the form screenshot in the private bucket for human review (the user's
     # pre-authorization look at what we'd submit / the post-submit confirmation). Store
@@ -321,9 +336,14 @@ def main() -> int:
             handler(sb, claim)
         except Exception as e:  # one bad row must not wedge the batch
             failures += 1
-            print(f"  {cid}: ERROR {e}", file=sys.stderr)
+            # FormError separates the two audiences; anything else has only one string.
+            # error_message is shown in "Mina ärenden" AND emailed by send-claim-outcome,
+            # so a raw Playwright trace must never end up in it (it did until 2026-09-07).
+            detail = getattr(e, "detail", None) or str(e)
+            user_message = getattr(e, "user_message", None) or str(e)
+            print(f"  {cid}: ERROR {detail}", file=sys.stderr)
             sb.table("claims").update(
-                {"status": "error", "error_message": str(e)[:500]}
+                {"status": "error", "error_message": user_message[:500]}
             ).eq("id", cid).execute()
 
         # Email the owner if this run moved the claim to a real outcome (not an intermediate
