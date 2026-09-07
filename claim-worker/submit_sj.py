@@ -44,34 +44,74 @@ def _safe_screenshot(page) -> bytes | None:
         return None
 
 
-def _await_settled(page, *, timeout: int = 25000) -> bool:
-    """Wait out SJ's async "Ett ögonblick…" loader before reading the page.
+# SJ's loader text. Matched case-insensitively; \u00f6 keeps the source ASCII-safe
+# inside the JS predicates below.
+_LOADER = "ett \\u00f6gonblick"
 
-    SJ's SPA answers page 1 ASYNCHRONOUSLY: networkidle fires while the loader is
-    still on screen, so page.url and the body text read right after the click can
-    describe the SPINNER instead of SJ's actual answer. That is exactly what
-    happened on 2026-09-07 once the overlay fix let the click through — the claim
-    was marked error with SJ's "verdict" recorded as "Ett ögonblick…", which is a
-    loading state, not an outcome.
+# The routes page 1 can hand us, and the phrases SJ renders when it answers WITHOUT
+# navigating (wrong booking, already claimed, not eligible). One of these appearing is
+# what "SJ has answered" means — the mere absence of a loader is not.
+_RESULT_PATHS = "valj-resa|redan-ansokt|tillaggskostnader|kontaktinformation"
+_RESULT_TEXT = (
+    "hittar inte din bokning|ingen matchande resa|hittade ingen|"
+    "redan f\\u00e5tt din ans\\u00f6kan|inte ber\\u00e4ttigad|registrerad"
+)
 
-    Returns True if the page settled, False if the loader was still up when the
-    budget ran out — callers must treat False as "we could not read SJ's answer",
-    never as a verdict.
+
+def _wait_js(page, predicate: str, timeout: int) -> bool:
+    """page.wait_for_function that can't lie and can't explode.
+
+    Two traps, both hit for real on 2026-09-07:
+      * An exception INSIDE the predicate aborts the wait instantly — it does not
+        retry. `document.body.innerText` throws while the SPA is mid-navigation and
+        body is momentarily null, which is why a 25 s wait returned in under a
+        second and the claim was reported as a timeout it never actually spent.
+      * A false return must mean "keep waiting", so every predicate here is
+        null-safe and only ever returns true on a signal we recognise.
     """
     try:
-        page.wait_for_function(
-            "!/ett \\u00f6gonblick/i.test(document.body.innerText || '')", timeout=timeout
-        )
+        page.wait_for_function(predicate, timeout=timeout)
+        return True
     except Exception:
         return False
-    # The SPA swaps route and renders after the loader clears; give it a beat so
-    # page.url and the body text describe the same step.
-    page.wait_for_timeout(1200)
-    try:
-        page.wait_for_load_state("networkidle", timeout=10000)
-    except Exception:
-        pass
-    return True
+
+
+def _await_page1_result(page, *, timeout: int = 45000) -> bool:
+    """Wait until SJ has actually ANSWERED page 1 (booking lookup), not just stopped
+    loading. SJ answers asynchronously behind an "Ett ögonblick…" loader while
+    networkidle has already fired, so reading page.url or the body right after the
+    click describes the SPINNER, not the verdict — on 2026-09-07 that loading text
+    was recorded as SJ's answer on a real claim.
+
+    False = we never saw a recognisable answer. That is NOT a verdict; the caller
+    must report it as "could not read SJ's response", never as a rejection.
+    """
+    return _wait_js(
+        page,
+        """() => {
+          const b = document.body; if (!b) return false;
+          const t = b.innerText || "";
+          if (/%s/i.test(t)) return false;                 // still loading
+          const p = location.pathname || "";
+          if (/%s/.test(p)) return true;                   // routed to a real step
+          return /%s/i.test(t);                            // answered in place
+        }""" % (_LOADER, _RESULT_PATHS, _RESULT_TEXT),
+        timeout,
+    )
+
+
+def _await_no_loader(page, *, timeout: int = 20000) -> bool:
+    """Wait for the loader to clear on a page we've already routed to (the
+    confirmation). Weaker than _await_page1_result on purpose: here we only need the
+    spinner gone before scraping the ärendenummer and taking the audit screenshot."""
+    return _wait_js(
+        page,
+        """() => {
+          const b = document.body; if (!b) return false;
+          return !/%s/i.test(b.innerText || "");
+        }""" % _LOADER,
+        timeout,
+    )
 
 
 def _page_message(page, *, limit: int = 600) -> str | None:
@@ -168,7 +208,8 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     click_when_clear(page, "button[type=submit]", timeout=15000,
                      user_message=SJ_UNEXPECTED)
     page.wait_for_load_state("networkidle", timeout=30000)
-    settled = _await_settled(page)
+    settled = _await_page1_result(page)
+    page.wait_for_timeout(800)  # let the routed step paint before we read it
 
     url = page.url
     screenshot = page.screenshot(full_page=True)
@@ -191,6 +232,14 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
                     "message": "SJ:s formulär svarade inte i tid. Din ansökan är INTE "
                                "inskickad — försök igen från Mina ärenden om en stund.",
                     "screenshot": screenshot, "external_reference": None}
+        # Whatever SJ showed, put it in the CI log: the audit screenshot lives in a
+        # private bucket, and a one-line body snippet is what actually gets read.
+        try:
+            import sys as _sys
+            _body = " ".join((page.locator("body").inner_text(timeout=3000) or "").split())
+            print(f"  sj: page-1 did not route (url={url}) body={_body[:300]!r}", file=_sys.stderr)
+        except Exception:
+            pass
         # Still on page 1 -> SJ rejected the inputs. SJ's copy has varied — the
         # 2026-06-23 spike saw "Vi hittade ingen matchande resa"; SJ now shows
         # "Vi hittar inte din bokning. Det kan bero på att din resa ännu inte är
@@ -255,7 +304,8 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     page.wait_for_load_state("networkidle", timeout=30000)
     # The confirmation renders behind the same async loader — wait it out, or the
     # audit shot catches only the spinner (and the ärendenummer scrape finds nothing).
-    _await_settled(page, timeout=20000)
+    _await_no_loader(page)
+    page.wait_for_timeout(1500)
     confirm_shot = page.screenshot(full_page=True)
 
     # Best-effort case/reference id from the confirmation page. Verified on the first
