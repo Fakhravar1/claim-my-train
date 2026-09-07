@@ -114,6 +114,26 @@ def _await_no_loader(page, *, timeout: int = 20000) -> bool:
     )
 
 
+def _await_path(page, pattern: str, *, timeout: int = 30000) -> bool:
+    """Wait for the SPA to ROUTE to a step we recognise.
+
+    This replaces wait_for_load_state("networkidle") between steps. SJ's page keeps
+    the network busy (analytics, polling, keep-alives), so networkidle can burn its
+    entire budget on a page that is already rendered and interactive — on 2026-09-07
+    that is exactly what killed a run standing on a fully-loaded
+    /tillaggskostnader/. The app's own URL is the honest readiness signal.
+    """
+    return _wait_js(page, '() => /%s/.test(location.pathname || "")' % pattern, timeout)
+
+
+def _quiet(page, *, timeout: int = 8000) -> None:
+    """Best-effort 'let the network calm down'. NEVER load-bearing: see _await_path."""
+    try:
+        page.wait_for_load_state("networkidle", timeout=timeout)
+    except Exception:
+        pass
+
+
 def _page_message(page, *, limit: int = 600) -> str | None:
     """Pull the visible heading/body text SJ shows on the current step so the exact words
     SJ presents (confirmation, "redan ansökt", a rejection) reach the user. Best-effort:
@@ -191,7 +211,10 @@ def submit_sj(claim: dict, profile: dict, *, live: bool) -> dict:
 def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live: bool) -> dict:
     """The mapped SJ flow itself. Split out of submit_sj() so every exit — including
     an unexpected one — passes through the screenshot/FormError wrapper above."""
-    page.goto(SJ_FORM_URL, wait_until="networkidle", timeout=60000)
+    page.goto(SJ_FORM_URL, wait_until="domcontentloaded", timeout=60000)
+    _quiet(page)
+    # The field, not the network, is what "page 1 is ready" means.
+    page.wait_for_selector("#orderOrTicketNumber", timeout=30000)
 
     # Consent / notice modals. This USED to look only for OneTrust-shaped
     # banners, which is why both SJ claims ever filed (2026-06-27, 2026-09-04)
@@ -207,7 +230,7 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     page.fill("#orderSecurity", contact, timeout=8000)
     click_when_clear(page, "button[type=submit]", timeout=15000,
                      user_message=SJ_UNEXPECTED)
-    page.wait_for_load_state("networkidle", timeout=30000)
+    _quiet(page)
     settled = _await_page1_result(page)
     page.wait_for_timeout(800)  # let the routed step paint before we read it
 
@@ -279,18 +302,21 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     boxes.first.check(timeout=5000)
     click_when_clear(page, "button:has-text('Fortsätt')", timeout=10000,
                      user_message=SJ_UNEXPECTED)
-    page.wait_for_load_state("networkidle", timeout=30000)
+    _await_path(page, "tillaggskostnader|kontaktinformation")
+    _quiet(page)
 
     # Page 3 "Egna utlägg": skip the optional extra-costs step.
     if "/tillaggskostnader/" in page.url:
         click_when_clear(page, "button:has-text('Hoppa över')", timeout=10000,
                          user_message=SJ_UNEXPECTED)
-        page.wait_for_load_state("networkidle", timeout=30000)
+        _await_path(page, "kontaktinformation")
+        _quiet(page)
 
     # Page 4 "Personuppgifter" (/kontaktinformation/): contact details + confirm.
     # SJ has NO bank/payout step — refund goes to the original payment method.
     if "/kontaktinformation/" not in page.url:
         raise RuntimeError(f"expected SJ personuppgifter page, got {page.url}")
+    page.wait_for_selector("#name", timeout=20000)
     page.fill("#name", (profile.get("first_name") or "").strip(), timeout=8000)
     page.fill("#familyName", (profile.get("last_name") or "").strip(), timeout=8000)
     page.fill("#mobilePhoneNumber", (profile.get("claim_mobile") or "").strip(), timeout=8000)
@@ -301,7 +327,7 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     # FINAL submit — files the claim with SJ. Reached only under both gates (§8).
     click_when_clear(page, "button:has-text('Slutför ansökan')", timeout=10000,
                      user_message=SJ_UNEXPECTED)
-    page.wait_for_load_state("networkidle", timeout=30000)
+    _quiet(page)
     # The confirmation renders behind the same async loader — wait it out, or the
     # audit shot catches only the spinner (and the ärendenummer scrape finds nothing).
     _await_no_loader(page)
