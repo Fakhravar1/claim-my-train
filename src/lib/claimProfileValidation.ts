@@ -205,6 +205,12 @@ export const profileFieldRequirements = (
     // from the profile), so a Vy filing needs the address saved.
     case "vy":
       return ["address"];
+    // SJ's payout step (/kontouppgifter/) pays via Swish, which needs a personnummer of
+    // 10 or 12 digits — validatePersonnummer's regex enforces exactly that, so requiring
+    // it here gives submit_sj._fill_payout the guarantee it refuses to guess without.
+    // The mobile is already required for EVERY profile, so this is the only addition.
+    case "sj":
+      return ["personnummer"];
     // If the Skånetrafiken PDF path is ever revived:
     // case "skanetrafiken": return ["personnummer", "address", "signature"];
     default:
@@ -360,7 +366,15 @@ export const validateClaimProfile = (
   // Fields beyond name/email/mobile are only REQUIRED when the operator's filing
   // path needs them (profileFieldRequirements). A non-empty value is still
   // format-validated regardless, so junk never gets saved.
-  const required = profileFieldRequirements(opts.operator);
+  // Which operator's filing path decides what is REQUIRED. Prefer an explicit
+  // opts.operator, else the operator on the profile being saved.
+  // ⚠️ Until 2026-09-08 this read opts.operator ONLY — and NEITHER caller passed it
+  // (Settings passes just {skipTicket}, ClaimModal passes nothing), so this returned []
+  // every time and the whole per-operator requirement mechanism was dead code: Vy's
+  // address requirement had never once been enforced. Falling back to the input keeps it
+  // live by construction, so a new `case` in profileFieldRequirements actually takes
+  // effect instead of quietly doing nothing.
+  const required = profileFieldRequirements(opts.operator ?? input.purchasingOperator);
 
   const firstName = validateRequiredText(input.firstName, "Förnamn");
   if (firstName) errors.firstName = firstName;

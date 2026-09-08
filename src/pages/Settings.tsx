@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   validateClaimProfile,
+  profileFieldRequirements,
   type ClaimProfileErrors,
   PURCHASING_OPERATORS,
   purchasingOperatorLabel,
@@ -299,6 +300,9 @@ const Settings = () => {
   const [claimTicketId, setClaimTicketId] = useState("");
   const [claimPersonnummer, setClaimPersonnummer] = useState("");
   const [purchasingOperator, setPurchasingOperator] = useState("");
+  // Drives the field hint below; validateClaimProfile derives the same list from the
+  // operator on the profile, so the label and the save rule can't disagree.
+  const personnummerRequired = profileFieldRequirements(purchasingOperator).includes("personnummer");
   const [streetAddress, setStreetAddress] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [city, setCity] = useState("");
@@ -777,8 +781,13 @@ const Settings = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="claim-personnummer">Personnummer</Label>
+                  {/* Operator-aware: with SJ selected this field is REQUIRED (their payout
+                      step pays via Swish), so say so up front instead of letting the save
+                      fail with a validation error the user didn't see coming. */}
                   <p className="text-xs text-muted-foreground">
-                    Valfritt — behövs bara för operatörer vars formulär kräver det.
+                    {personnummerRequired
+                      ? "Krävs för SJ — de betalar ut ersättningen via Swish, kopplat till ditt personnummer."
+                      : "Valfritt — behövs bara för operatörer vars formulär kräver det."}
                   </p>
                   <Input
                     id="claim-personnummer"
