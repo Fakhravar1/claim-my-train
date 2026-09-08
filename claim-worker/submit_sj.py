@@ -21,6 +21,9 @@ Even in live mode this raises at the first unmapped page (payout/confirm), so we
 half-submit a form we don't fully understand. Finish mapping pages 4+ before relying on live.
 ────────────────────────────────────────────────────────────────────────────
 """
+import os
+import sys
+
 from browser_utils import FormError, click_when_clear, dismiss_overlays
 
 SJ_FORM_URL = "https://www.sj.se/ersattning-vid-forsening/"
@@ -132,6 +135,121 @@ def _quiet(page, *, timeout: int = 8000) -> None:
         page.wait_for_load_state("networkidle", timeout=timeout)
     except Exception:
         pass
+
+
+# Stop before SJ's final button and report what we filled, instead of submitting.
+# Set by the workflow's sj_verify_only input; used to confirm a payout fill lands on
+# the right fields BEFORE any money is routed anywhere.
+VERIFY_ONLY = os.environ.get("SJ_PAYOUT_VERIFY_ONLY", "").lower() == "true"
+
+
+def _fill_payout(page, profile: dict) -> None:
+    """SJ's payout step, /kontouppgifter/ — "Hur vill du få ersättningen?"
+
+    SJ offers SWISH or BANKKONTO, and the step is mandatory: there is no "pay it back
+    the way I paid" option, contrary to what CLAUDE.md said until 2026-09-08. We take
+    Swish because it is the only branch completable from data we already hold
+    (claim_mobile + claim_personnummer); Bankkonto would mean storing bank details,
+    which is a separate product and privacy decision.
+
+    Targeted BY LABEL, never by id: this page's ids are React-generated (`_r_i_`) and
+    change between builds.
+
+    Refuses rather than guesses when either field is missing. A payout routed to a
+    Swish account that isn't the claimant's sends their money to a stranger, so a
+    blocked claim is strictly better than a filled-in guess.
+    """
+    mobile = (profile.get("claim_mobile") or "").strip()
+    pnr = (profile.get("claim_personnummer") or "").strip()
+    if not mobile or not pnr:
+        raise FormError(
+            "SJ kräver mobilnummer och personnummer för utbetalning via Swish. "
+            "Fyll i dem under Inställningar och försök igen från Mina ärenden.",
+            detail=f"payout: missing {'mobile ' if not mobile else ''}"
+                   f"{'personnummer' if not pnr else ''}".strip(),
+        )
+
+    # Swish appears preselected, but never assume: if its fields aren't there, pick it.
+    mob = page.get_by_label("Mobilnummer").first
+    if not _visible_soon(mob):
+        try:
+            page.get_by_text("Swish", exact=True).first.click(timeout=5000)
+        except Exception:
+            pass
+        mob = page.get_by_label("Mobilnummer").first
+
+    # SJ validates this field as "10 eller 12 siffror" — DIGITS, no separator. We store
+    # personnummer hyphenated (YYYYMMDD-XXXX), which SJ rejected outright on
+    # 2026-09-08: "Kontrollera det svenska personnumret (10 eller 12 siffror)".
+    pnr_digits = "".join(c for c in pnr if c.isdigit())
+    if len(pnr_digits) not in (10, 12):
+        raise FormError(
+            "Personnumret i din profil har ett format SJ inte accepterar. Ange det som "
+            "10 eller 12 siffror under Inställningar och försök igen.",
+            detail=f"payout: personnummer has {len(pnr_digits)} digits, SJ wants 10 or 12",
+        )
+    # The mobile goes as stored: SJ accepted +46… on 2026-09-08 (its validation summary
+    # read "Du behöver åtgärda 1 sak" and named only the personnummer).
+    mob.fill(mobile, timeout=8000)
+    page.get_by_label("Svenskt personnummer").first.fill(pnr_digits, timeout=8000)
+
+    # Masked read-back: enough to prove the values landed in the right boxes, without
+    # putting a personnummer or a full phone number in a CI log.
+    try:
+        got_m = mob.input_value(timeout=3000)
+        got_p = page.get_by_label("Svenskt personnummer").first.input_value(timeout=3000)
+        print(f"  sj: payout=swish mobile=…{got_m[-2:]} ({len(got_m)} chars) "
+              f"pnr=…{got_p[-2:]} ({len(got_p)} chars, digits-only)", file=sys.stderr)
+    except Exception:
+        pass
+
+
+def _visible_soon(locator, timeout: int = 4000) -> bool:
+    try:
+        locator.wait_for(state="visible", timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
+def _describe_controls(page, limit: int = 25) -> list[str]:
+    """What choices is this page actually offering?
+
+    Diagnostics for landing on a step the flow does not map. A body snippet tells you
+    the heading; this tells you the OPTIONS — which is what decides whether a step can
+    be automated at all, or is a decision that belongs to the user (SJ's payout step
+    being the case in point).
+    """
+    try:
+        return page.evaluate(
+            """(limit) => {
+              const out = [];
+              const label = (el) => {
+                if (el.id) {
+                  const l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+                  if (l && l.innerText) return l.innerText;
+                }
+                const w = el.closest('label');
+                if (w && w.innerText) return w.innerText;
+                return el.getAttribute('aria-label') || el.name || el.value || '';
+              };
+              const sel = 'input[type=radio], input[type=checkbox], select, button, [role=radio], [role=button]';
+              for (const el of document.querySelectorAll(sel)) {
+                if (!el.offsetWidth && !el.offsetHeight) continue;
+                const tag = el.tagName.toLowerCase();
+                const text = (tag === 'button' || el.getAttribute('role') === 'button')
+                  ? el.innerText : label(el);
+                const line = (tag + (el.type ? ':' + el.type : '') + ' | ' + (text || ''))
+                  .replace(/\\s+/g, ' ').trim();
+                if (line && !out.includes(line)) out.push(line);
+                if (out.length >= limit) break;
+              }
+              return out;
+            }""",
+            limit,
+        )
+    except Exception:
+        return []
 
 
 def _page_message(page, *, limit: int = 600) -> str | None:
@@ -312,8 +430,9 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
         _await_path(page, "kontaktinformation")
         _quiet(page)
 
-    # Page 4 "Personuppgifter" (/kontaktinformation/): contact details + confirm.
-    # SJ has NO bank/payout step — refund goes to the original payment method.
+    # Page 4 "Personuppgifter" (/kontaktinformation/): contact details, then onward to
+    # the payout step. NB both pages carry a button labelled "Slutför ansökan" — that
+    # collision is what let the old code mistake "advanced a page" for "filed".
     if "/kontaktinformation/" not in page.url:
         raise RuntimeError(f"expected SJ personuppgifter page, got {page.url}")
     page.wait_for_selector("#name", timeout=20000)
@@ -324,10 +443,22 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
               (claim.get("booking_email") or profile.get("claim_email") or "").strip(), timeout=8000)
     page.check("#confirmEnteredData", timeout=8000)
 
-    # FINAL submit — files the claim with SJ. Reached only under both gates (§8).
     click_when_clear(page, "button:has-text('Slutför ansökan')", timeout=10000,
                      user_message=SJ_UNEXPECTED)
     _quiet(page)
+
+    # Page 5 "Kontouppgifter" (/kontouppgifter/): how SJ should pay. Mandatory.
+    if _await_path(page, "kontouppgifter", timeout=20000):
+        _fill_payout(page, profile)
+        if VERIFY_ONLY:
+            return {"submitted": False, "already_claimed": False, "error": "sj_verify_only",
+                    "message": "Verifieringskörning: utbetalningsuppgifterna fylldes i, "
+                               "men ansökan skickades INTE in.",
+                    "screenshot": page.screenshot(full_page=True), "external_reference": None}
+        # FINAL submit — THIS is the click that files the claim with SJ (§8).
+        click_when_clear(page, "button:has-text('Slutför ansökan')", timeout=10000,
+                         user_message=SJ_UNEXPECTED)
+        _quiet(page)
     # The confirmation renders behind the same async loader — wait it out, or the
     # audit shot catches only the spinner (and the ärendenummer scrape finds nothing).
     _await_no_loader(page)
@@ -370,6 +501,14 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     registered = ("ansökan är registrerad" in low or "delvis registrerad" in low
                   or "ärendenummer" in low)
     if not registered:
+        # Report the unmapped step in full to the CI log. The audit screenshot goes to a
+        # private bucket, so without this the only way to learn what SJ asked for is to
+        # reproduce the whole run — which is what made the payout step expensive to find.
+        import sys as _sys
+        print(f"  sj: UNMAPPED step url={page.url}", file=_sys.stderr)
+        print(f"  sj: body={' '.join((body or '').split())[:1200]!r}", file=_sys.stderr)
+        for c in _describe_controls(page):
+            print(f"  sj: control | {c}", file=_sys.stderr)
         return {"submitted": False, "already_claimed": False, "error": "sj_incomplete",
                 "message": "SJ:s formulär tog oss vidare till ett steg vi inte hanterar "
                            f"automatiskt ({_page_message(page) or page.url}). Din ansökan "
