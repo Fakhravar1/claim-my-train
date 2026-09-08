@@ -6,7 +6,12 @@ on:
     # NB: GitHub free-tier scheduled actions are best-effort — real cadence is often 15 min–1 h
     # of jitter (same as dbt-run.yml). The worker no-ops fast when there are no pending claims.
     - cron: "*/15 * * * *"
-  workflow_dispatch: {}        # manual "Run workflow" button
+  workflow_dispatch:           # manual "Run workflow" button
+    inputs:
+      sj_verify_only:
+        description: "SJ: fill the payout step, then STOP without submitting"
+        type: boolean
+        default: false
 
 jobs:
   generate-pdfs:
@@ -81,3 +86,8 @@ jobs:
           # Same hard off-switch for Vy's headless web form (submit_vy.py). Leave unset until
           # the station-dropdown mapping is tuned against a real booking; dry-run only.
           VY_SUBMIT_LIVE: ${{ vars.VY_SUBMIT_LIVE }}
+          # Verification lane for SJ's payout step: fill the Swish fields, screenshot,
+          # and stop BEFORE the button that files. Empty on scheduled runs, so the
+          # normal path is untouched. Use it whenever the payout fill changes — a
+          # mistyped Swish number pays a stranger.
+          SJ_PAYOUT_VERIFY_ONLY: ${{ inputs.sj_verify_only }}
