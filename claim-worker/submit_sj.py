@@ -178,8 +178,20 @@ def _fill_payout(page, profile: dict) -> None:
             pass
         mob = page.get_by_label("Mobilnummer").first
 
+    # SJ validates this field as "10 eller 12 siffror" — DIGITS, no separator. We store
+    # personnummer hyphenated (YYYYMMDD-XXXX), which SJ rejected outright on
+    # 2026-09-08: "Kontrollera det svenska personnumret (10 eller 12 siffror)".
+    pnr_digits = "".join(c for c in pnr if c.isdigit())
+    if len(pnr_digits) not in (10, 12):
+        raise FormError(
+            "Personnumret i din profil har ett format SJ inte accepterar. Ange det som "
+            "10 eller 12 siffror under Inställningar och försök igen.",
+            detail=f"payout: personnummer has {len(pnr_digits)} digits, SJ wants 10 or 12",
+        )
+    # The mobile goes as stored: SJ accepted +46… on 2026-09-08 (its validation summary
+    # read "Du behöver åtgärda 1 sak" and named only the personnummer).
     mob.fill(mobile, timeout=8000)
-    page.get_by_label("Svenskt personnummer").first.fill(pnr, timeout=8000)
+    page.get_by_label("Svenskt personnummer").first.fill(pnr_digits, timeout=8000)
 
     # Masked read-back: enough to prove the values landed in the right boxes, without
     # putting a personnummer or a full phone number in a CI log.
@@ -187,7 +199,7 @@ def _fill_payout(page, profile: dict) -> None:
         got_m = mob.input_value(timeout=3000)
         got_p = page.get_by_label("Svenskt personnummer").first.input_value(timeout=3000)
         print(f"  sj: payout=swish mobile=…{got_m[-2:]} ({len(got_m)} chars) "
-              f"pnr=…{got_p[-2:]} ({len(got_p)} chars)", file=sys.stderr)
+              f"pnr=…{got_p[-2:]} ({len(got_p)} chars, digits-only)", file=sys.stderr)
     except Exception:
         pass
 
