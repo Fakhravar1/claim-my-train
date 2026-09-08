@@ -31,6 +31,22 @@ const isValidContact = (s: string) => {
   return (v.replace(/[^\d]/g, "").length >= 6); // otherwise treat as a phone number
 };
 
+/**
+ * SJ's LAST step is a payout page — "Hur vill du få ersättningen?" — and it is mandatory
+ * (there is no "pay it back the way I paid"). We answer it with SWISH, which needs a mobile
+ * number and a personnummer of 10 or 12 DIGITS; submit_sj._fill_payout strips separators and
+ * REFUSES anything else rather than guess, because a payout routed to the wrong Swish account
+ * is money sent to a stranger.
+ *
+ * Both fields are optional at profile save (since 2026-07-01), so without this check a user
+ * files happily and learns two minutes later, by email, that nothing was submitted. Mirror the
+ * worker's rule here so they fix it BEFORE filing. Keep the two in lockstep.
+ */
+const pnrDigits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+const hasMobile = (p: { claim_mobile?: string | null } | null) => Boolean((p?.claim_mobile ?? "").trim());
+const hasPersonnummer = (p: { claim_personnummer?: string | null } | null) =>
+  [10, 12].includes(pnrDigits(p?.claim_personnummer).length);
+
 export function SjClaimModal({
   journey,
   onClose,
@@ -61,7 +77,14 @@ export function SjClaimModal({
     ? "Boknings- eller biljettnumret ska vara 8 eller 12 tecken." : null;
   const contactErr = touched && !isValidContact(contact)
     ? "Ange e-posten eller mobilnumret du använde vid köpet." : null;
-  const canSubmit = isValidBooking(booking) && isValidContact(contact) && !pending && !checking;
+  // What SJ's payout step will need. Only enforced for a signed-in user — a signed-out one
+  // is sent to /settings by submit() anyway, and has no profile to judge.
+  const payoutMissing = user
+    ? [!hasMobile(profile) && "mobilnummer",
+       !hasPersonnummer(profile) && "personnummer (10 eller 12 siffror)"].filter(Boolean) as string[]
+    : [];
+  const canSubmit = isValidBooking(booking) && isValidContact(contact)
+    && payoutMissing.length === 0 && !pending && !checking;
 
   const dateLong = (iso: string | null | undefined) =>
     iso ? new Date(iso + "T00:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "long", year: "numeric" }) : "—";
@@ -151,6 +174,21 @@ export function SjClaimModal({
               <p className="lead">
                 Ange uppgifterna från din SJ-bokning, så skickar vi in ansökan åt dig.
               </p>
+              {payoutMissing.length > 0 && (
+                <div className="verdict verdict--near">
+                  <b>Komplettera din profil först.</b> SJ betalar ut ersättningen via Swish och
+                  kräver {payoutMissing.join(" och ")}. Mobilnumret och personnumret måste vara
+                  kopplade till samma Swish-konto.
+                  <div className="acct__btns" style={{ marginTop: 10 }}>
+                    <button
+                      className="btn btn--accent btn--block"
+                      onClick={() => { onClose(); navigate("/settings"); }}
+                    >
+                      Till Inställningar
+                    </button>
+                  </div>
+                </div>
+              )}
               <Field label="Boknings- eller biljettnummer">
                 <input
                   value={booking}
