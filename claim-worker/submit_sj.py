@@ -134,6 +134,46 @@ def _quiet(page, *, timeout: int = 8000) -> None:
         pass
 
 
+def _describe_controls(page, limit: int = 25) -> list[str]:
+    """What choices is this page actually offering?
+
+    Diagnostics for landing on a step the flow does not map. A body snippet tells you
+    the heading; this tells you the OPTIONS — which is what decides whether a step can
+    be automated at all, or is a decision that belongs to the user (SJ's payout step
+    being the case in point).
+    """
+    try:
+        return page.evaluate(
+            """(limit) => {
+              const out = [];
+              const label = (el) => {
+                if (el.id) {
+                  const l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+                  if (l && l.innerText) return l.innerText;
+                }
+                const w = el.closest('label');
+                if (w && w.innerText) return w.innerText;
+                return el.getAttribute('aria-label') || el.name || el.value || '';
+              };
+              const sel = 'input[type=radio], input[type=checkbox], select, button, [role=radio], [role=button]';
+              for (const el of document.querySelectorAll(sel)) {
+                if (!el.offsetWidth && !el.offsetHeight) continue;
+                const tag = el.tagName.toLowerCase();
+                const text = (tag === 'button' || el.getAttribute('role') === 'button')
+                  ? el.innerText : label(el);
+                const line = (tag + (el.type ? ':' + el.type : '') + ' | ' + (text || ''))
+                  .replace(/\\s+/g, ' ').trim();
+                if (line && !out.includes(line)) out.push(line);
+                if (out.length >= limit) break;
+              }
+              return out;
+            }""",
+            limit,
+        )
+    except Exception:
+        return []
+
+
 def _page_message(page, *, limit: int = 600) -> str | None:
     """Pull the visible heading/body text SJ shows on the current step so the exact words
     SJ presents (confirmation, "redan ansökt", a rejection) reach the user. Best-effort:
@@ -370,6 +410,14 @@ def _drive(page, claim: dict, profile: dict, booking: str, contact: str, *, live
     registered = ("ansökan är registrerad" in low or "delvis registrerad" in low
                   or "ärendenummer" in low)
     if not registered:
+        # Report the unmapped step in full to the CI log. The audit screenshot goes to a
+        # private bucket, so without this the only way to learn what SJ asked for is to
+        # reproduce the whole run — which is what made the payout step expensive to find.
+        import sys as _sys
+        print(f"  sj: UNMAPPED step url={page.url}", file=_sys.stderr)
+        print(f"  sj: body={' '.join((body or '').split())[:1200]!r}", file=_sys.stderr)
+        for c in _describe_controls(page):
+            print(f"  sj: control | {c}", file=_sys.stderr)
         return {"submitted": False, "already_claimed": False, "error": "sj_incomplete",
                 "message": "SJ:s formulär tog oss vidare till ett steg vi inte hanterar "
                            f"automatiskt ({_page_message(page) or page.url}). Din ansökan "
