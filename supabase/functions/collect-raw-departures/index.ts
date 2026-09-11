@@ -20,6 +20,16 @@ const REQUEST_SPACING_MS = 250
 const MAX_RETRIES = 3
 const DEFAULT_RETRY_AFTER_S = 2
 
+// Upsert in chunks, each retried independently. Mirrors the TV collector's v21
+// CHUNK_SIZE batching, for the same reason: one big upsert is all-or-nothing,
+// so a single transient PostgREST "Gateway Timeout" loses the whole poll. That
+// is exactly what happened 2026-09-12 00:00 (Europe/Stockholm) — the insert
+// failed, nothing committed, and because this collector runs HOURLY against a
+// 90-min rest_raw freshness threshold, one lost poll breaches the watchdog.
+const UPSERT_CHUNK_SIZE = 200
+const UPSERT_ATTEMPTS = 3
+const UPSERT_BACKOFF_MS = 1000
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const formatDateTime = (date: Date): string => {
@@ -122,18 +132,62 @@ Deno.serve(async () => {
   // survive the upsert. Prior to 2026-05-26 the constraint omitted event_type,
   // which caused arrival rows to be silently dropped whenever Trafiklab
   // returned identical `scheduled` values for both endpoints.
-  const { error } = await supabase
-    .from('raw_departures')
-    .upsert(allRows, {
-      onConflict: 'trip__trip_id,trip__start_date,stop__id,scheduled,ingested_at,event_type',
-      ignoreDuplicates: true,
-    })
+  const chunkErrors: string[] = []
+  let inserted = 0
 
-  if (error) {
-    console.error('Insert error:', error)
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500 })
+  for (let start = 0; start < allRows.length; start += UPSERT_CHUNK_SIZE) {
+    const chunk = allRows.slice(start, start + UPSERT_CHUNK_SIZE)
+    const chunkNo = start / UPSERT_CHUNK_SIZE
+    let lastError: string | null = null
+
+    for (let attempt = 0; attempt < UPSERT_ATTEMPTS; attempt++) {
+      if (attempt > 0) await sleep(UPSERT_BACKOFF_MS * Math.pow(2, attempt - 1))
+
+      const { error } = await supabase
+        .from('raw_departures')
+        .upsert(chunk, {
+          onConflict: 'trip__trip_id,trip__start_date,stop__id,scheduled,ingested_at,event_type',
+          ignoreDuplicates: true,
+        })
+
+      if (!error) {
+        lastError = null
+        break
+      }
+
+      lastError = error.message
+      console.warn(`chunk ${chunkNo} upsert failed (attempt ${attempt + 1}): ${error.message}`)
+    }
+
+    if (lastError) {
+      chunkErrors.push(`chunk ${chunkNo}: ${lastError}`)
+    } else {
+      inserted += chunk.length
+    }
   }
 
-  console.log(`Inserted ${allRows.length} rows`)
-  return new Response(JSON.stringify({ success: true, rows: allRows.length }), { status: 200 })
+  // A partial commit is reported honestly but still counts as progress: the
+  // rows that landed are real, and `ingested_at` freshness is what the §10
+  // watchdog measures. Only a total loss is a 500 — otherwise a single bad
+  // chunk would hide the fact that the rest of the poll succeeded.
+  if (chunkErrors.length > 0) {
+    console.error('Insert errors:', chunkErrors)
+    if (inserted === 0) {
+      return new Response(
+        JSON.stringify({ success: false, rows: 0, chunk_errors: chunkErrors }),
+        { status: 500 },
+      )
+    }
+  }
+
+  console.log(`Inserted ${inserted} of ${allRows.length} rows`)
+  return new Response(
+    JSON.stringify({
+      success: chunkErrors.length === 0,
+      rows: inserted,
+      attempted: allRows.length,
+      chunk_errors: chunkErrors,
+    }),
+    { status: 200 },
+  )
 })
