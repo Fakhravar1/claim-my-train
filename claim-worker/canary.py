@@ -37,8 +37,9 @@ import traceback
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import TimeoutError as PWTimeout
 
-from browser_utils import NOT_FOUND, blocking_overlay, dismiss_overlays
+from browser_utils import NOT_FOUND, blocking_overlay, dismiss_overlays, overlay_buttons
 
 OUT_DIR = Path(__file__).parent / "canary_out"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -52,15 +53,17 @@ VT_URL = "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-er
 SJ_URL = "https://www.sj.se/ersattning-vid-forsening/"  # submit_sj.py SJ_FORM_URL
 
 
-def dismiss_cookies(pg: Page) -> None:
+def dismiss_cookies(pg: Page) -> list[str]:
     """Best-effort banner dismissal — never fail a check over a banner.
 
     Delegates to browser_utils so the canary clears EXACTLY what submit_sj clears.
     They used to differ (the canary tried five labels, submit_sj two), which is a
     large part of why the canary sailed through the overlay that was killing every
     SJ claim: the canary dismissed SJ's dialog, the worker never could.
+
+    Returns what it dismissed, so a check can report it (see check_sj).
     """
-    dismiss_overlays(pg, allow_escape=True)
+    return dismiss_overlays(pg, allow_escape=True)
 
 
 def visible_select_labels(pg: Page) -> list[str]:
@@ -133,8 +136,20 @@ def check_vasttrafik(pg: Page) -> str:
 def check_sj(pg: Page) -> str:
     """SJ page 1: booking + email fields + submit (submit_sj.py's entry point)."""
     pg.goto(SJ_URL, wait_until="domcontentloaded", timeout=60000)
-    pg.wait_for_timeout(4000)
-    dismiss_cookies(pg)
+    # "Page 1 is ready" means the field exists — the same definition, and the same
+    # 30 s budget, that submit_sj._drive uses. A fixed 5.5 s sleep made the canary
+    # STRICTER than the worker it guards: on 2026-09-12 it reported the ids missing
+    # while a re-run four minutes later found them present, so the canary could
+    # report drift that would never have failed a real claim. A canary must fail
+    # where the worker fails, not sooner.
+    try:
+        pg.wait_for_selector("#orderOrTicketNumber", timeout=30000)
+    except PWTimeout:
+        raise AssertionError(
+            f"#orderOrTicketNumber absent after 30 s — the wait submit_sj gives it "
+            f"(url={pg.url}, overlay buttons: {overlay_buttons(pg)})"
+        ) from None
+    cleared = dismiss_cookies(pg)
     pg.wait_for_timeout(1500)
     missing = [
         i for i in ("orderOrTicketNumber", "orderSecurity") if pg.locator(f"#{i}").count() == 0
@@ -152,9 +167,16 @@ def check_sj(pg: Page) -> str:
     if blocker and blocker != NOT_FOUND:
         raise AssertionError(
             "page-1 submit button is covered — a headless click would time out "
-            f"(after dismissing banners, elementFromPoint hits: {blocker})"
+            f"(after dismissing banners, elementFromPoint hits: {blocker}; "
+            f"buttons we did not recognise: {overlay_buttons(pg)})"
         )
-    return "page-1 booking/email fields + submit present and clickable"
+    # Report what we cleared even on the happy path. A PASS that says nothing
+    # cannot distinguish "no consent dialog today" from "the dialog was there and
+    # we dismissed it", and on 2026-09-12 that was exactly the question: two runs
+    # failed on SJ's dialog and the next passed, which is a very different story
+    # depending on whether the dialog was still present.
+    how = f" (dismissed: {cleared})" if cleared else " (no overlay present)"
+    return "page-1 booking/email fields + submit present and clickable" + how
 
 
 CHECKS = {

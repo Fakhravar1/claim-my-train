@@ -190,6 +190,49 @@ def dismiss_overlays(page, *, rounds: int = 3, timeout: int = 2500,
 NOT_FOUND = "__not_found__"
 
 
+def overlay_buttons(page, limit: int = 12) -> list[str]:
+    """Labels of the clickable things inside the overlays we tried to dismiss.
+
+    dismiss_overlays() returns [] both when there was nothing to dismiss and when
+    there was an overlay whose buttons it did not recognise — two very different
+    situations that looked identical in a failure report. On 2026-09-12 SJ swapped
+    its consent dialog ("Vi använder kakor" -> "Vi använder cookies") and the new
+    accept button matched none of CONSENT_LABELS; all the report could say was that
+    something covered the button, so the fix needed a round-trip through CI just to
+    learn the label. Naming the candidates we passed over closes that loop.
+
+    Best-effort and never raises: this only ever builds an error message.
+    """
+    labels: list[str] = []
+    for osel in OVERLAY_SELECTORS:
+        try:
+            overlay = page.locator(osel)
+            if not _visible(overlay):
+                continue
+            found = page.evaluate(
+                """(sel) => {
+                  const box = document.querySelector(sel);
+                  if (!box) return [];
+                  const els = box.querySelectorAll(
+                    "button, [role=button], a[href], input[type=button], input[type=submit]");
+                  return [...els]
+                    .filter((e) => e.offsetWidth || e.offsetHeight)
+                    .map((e) => (e.innerText || e.value || e.getAttribute("aria-label") || "")
+                                .replace(/\\s+/g, " ").trim())
+                    .filter(Boolean);
+                }""",
+                osel,
+            )
+        except Exception:
+            continue
+        for text in found or []:
+            if text not in labels:
+                labels.append(text[:60])
+            if len(labels) >= limit:
+                return labels
+    return labels
+
+
 def blocking_overlay(page, selector: str) -> str | None:
     """What, if anything, covers `selector`'s click point? None = clickable.
 
@@ -242,9 +285,11 @@ def click_when_clear(page, selector: str, *, timeout: int = 8000,
         blocker = blocking_overlay(page, selector)
 
     if blocker and blocker != NOT_FOUND:
+        candidates = overlay_buttons(page)
+        seen = f"; buttons we did not recognise: {candidates}" if candidates else ""
         raise FormError(
             user_message or "Formuläret gick inte att fylla i automatiskt just nu.",
-            detail=f"click on {selector} blocked by overlay: {blocker}",
+            detail=f"click on {selector} blocked by overlay: {blocker}{seen}",
             url=getattr(page, "url", None),
         )
 

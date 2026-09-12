@@ -23,7 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from playwright.sync_api import sync_playwright
-from browser_utils import FormError, blocking_overlay, click_when_clear, dismiss_overlays, NOT_FOUND
+from browser_utils import (FormError, blocking_overlay, click_when_clear, dismiss_overlays,
+                           overlay_buttons, NOT_FOUND)
 
 def page_html(dismissable: bool) -> str:
     accept = ('<button onclick="document.getElementById(\'dlg\').remove()">Godkänn alla</button>'
@@ -113,6 +114,27 @@ with sync_playwright() as p:
     pg.fill("#orderOrTicketNumber", "KEEPME")
     dismiss_overlays(pg)                     # default allow_escape=False
     check("field value survives dismissal", pg.input_value("#orderOrTicketNumber") == "KEEPME")
+
+    # THE 2026-09-12 SJ FAILURE. SJ replaced its consent dialog ("Vi använder
+    # kakor" -> "Vi använder cookies") and the new accept button matched none of
+    # CONSENT_LABELS, so dismiss_overlays returned [] — indistinguishable from
+    # "there was no overlay". The report could say only that *something* covered
+    # the button, never which button it had passed over.
+    print("G. an overlay with an UNRECOGNISED button says which button it saw")
+    pg.set_content(page_html(False).replace(
+        "<span>Ingen knapp här</span>", "<button>Fortsätt till sj.se</button>"))
+    check("overlay_buttons lists the unrecognised label",
+          "Fortsätt till sj.se" in overlay_buttons(pg), overlay_buttons(pg))
+    try:
+        click_when_clear(pg, "button[type=submit]", timeout=3000)
+        check("still fails — an unknown label is not a dismissal", False, "it clicked")
+    except FormError as e:
+        check("still fails — an unknown label is not a dismissal", True)
+        check("detail names the button we skipped",
+              "Fortsätt till sj.se" in e.detail, e.detail[:160])
+
+    pg.set_content("<body><button>Hämta resa</button></body>")
+    check("no overlay -> no phantom buttons", overlay_buttons(pg) == [])
 
     browser.close()
 
