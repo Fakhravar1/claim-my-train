@@ -23,7 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from playwright.sync_api import sync_playwright
-from browser_utils import FormError, blocking_overlay, click_when_clear, dismiss_overlays, NOT_FOUND
+from browser_utils import (FormError, blocking_overlay, click_when_clear,
+                           dismiss_overlays, overlay_buttons, NOT_FOUND)
 
 def page_html(dismissable: bool) -> str:
     accept = ('<button onclick="document.getElementById(\'dlg\').remove()">Godkänn alla</button>'
@@ -41,6 +42,33 @@ def page_html(dismissable: bool) -> str:
           <div style="background:#fff;padding:24px">Vi använder kakor. {accept}</div>
         </div>
       </div></body></html>"""
+
+
+def sj_oct_html(label: str = "Spara och fortsätt") -> str:
+    """SJ page 1 as of 2026-10-01: MuiDialogContent-root text with the buttons in a
+    sibling MuiDialogActions-root, and Escape swallowed by the dialog."""
+    return f"""<!doctype html><html lang="sv"><body>
+      <form onsubmit="document.getElementById('done').textContent='CLICKED';return false">
+        <input id="orderOrTicketNumber"><input id="orderSecurity">
+        <button type="submit" class="MuiButtonBase-root">Hämta resa</button>
+      </form>
+      <div id="done"></div>
+      <div id="dlg" role="presentation" class="MuiDialog-root MuiModal-root"
+           style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999">
+        <div class="MuiPaper-root MuiDialog-paper"
+             style="position:fixed;inset:0;display:flex;flex-direction:column;
+                    align-items:center;justify-content:center;background:#fff">
+          <div class="MuiDialogContent-root css-1nbx5hx">Vi använder cookies.
+            Vissa cookies är nödvändiga för att sj.se ska fungera.</div>
+          <div class="MuiDialogActions-root">
+            <button onclick="document.getElementById('dlg').remove()">{label}</button>
+            <button>Hantera val</button>
+          </div>
+        </div>
+      </div>
+      <script>document.addEventListener('keydown',
+        e => {{ if (e.key === 'Escape') e.preventDefault(); }});</script>
+      </body></html>"""
 
 fails = []
 def check(name, cond, extra=""):
@@ -113,6 +141,34 @@ with sync_playwright() as p:
     pg.fill("#orderOrTicketNumber", "KEEPME")
     dismiss_overlays(pg)                     # default allow_escape=False
     check("field value survives dismissal", pg.input_value("#orderOrTicketNumber") == "KEEPME")
+
+    print("G. SJ's 2026-10-01 consent-dialog drift: unknown label must not be reported as dismissed")
+    # SJ swapped its consent component: "Vi använder kakor" -> "Vi använder cookies",
+    # MuiDialog-container -> MuiDialogContent-root, and the accept button's label left
+    # CONSENT_LABELS. The dialog also swallows Escape (disableEscapeKeyDown), which the
+    # old code reported as a successful dismissal three rounds running — a dismissal log
+    # that lied, and no hint as to which label to add.
+    pg.set_content(sj_oct_html())
+    got = dismiss_overlays(pg, allow_escape=True)
+    check("unknown label is NOT claimed as dismissed", got == [], f"reported: {got}")
+    blocker = blocking_overlay(pg, "button[type=submit]")
+    check("still correctly seen as blocked", bool(blocker) and blocker != NOT_FOUND)
+    seen = overlay_buttons(pg, "button[type=submit]")
+    check("names the accept button we failed to match",
+          any("Spara och fortsätt" in b for b in seen), f"{seen}")
+    try:
+        click_when_clear(pg, "button[type=submit]", timeout=3000)
+        check("click_when_clear fails fast", False, "it clicked")
+    except FormError as e:
+        check("click_when_clear fails fast", True)
+        check("detail carries the candidate labels", "buttons in that overlay" in e.detail,
+              e.detail[-90:])
+
+    print("H. a KNOWN label still dismisses in the same new structure (no regression)")
+    pg.set_content(sj_oct_html(label="Godkänn alla"))
+    got = dismiss_overlays(pg, allow_escape=True)
+    check("dismissed via the known label", got and "Godkänn alla" in got[0], f"{got}")
+    check("overlay is actually gone", blocking_overlay(pg, "button[type=submit]") in (None, NOT_FOUND))
 
     browser.close()
 

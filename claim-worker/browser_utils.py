@@ -111,8 +111,32 @@ def _visible(loc) -> bool:
         return False
 
 
+def _still_there(page, box, settle_ms: int = 600) -> bool:
+    """Is this overlay STILL covering the page after we tried to dismiss it?
+
+    Added 2026-10-01. Every dismissal attempt used to be reported as a success the
+    moment the click (or Escape) did not raise — so a consent modal built with
+    disableEscapeKeyDown made `allow_escape=True` return "» Escape" three rounds in
+    a row while the dialog never moved, and the dismissal log actively lied about it.
+    Worse, returning early meant the remaining labels in the SAME container were
+    never tried. Confirm the overlay actually went away instead.
+    """
+    try:
+        page.wait_for_timeout(settle_ms)
+    except Exception:
+        pass
+    try:
+        return box.count() > 0 and box.first.is_visible()
+    except Exception:
+        return False  # detached = gone, which is what we wanted
+
+
 def _dismiss_once(page, timeout: int, allow_escape: bool) -> str | None:
-    """Dismiss ONE overlay. Returns a description of what was dismissed, or None."""
+    """Dismiss ONE overlay. Returns a description of what was dismissed, or None.
+
+    A candidate only counts as dismissed once the overlay is verifiably gone; a
+    no-op click or a swallowed Escape falls through to the next candidate.
+    """
     for sel in ACCEPT_SELECTORS:
         loc = page.locator(sel)
         if _visible(loc):
@@ -136,9 +160,10 @@ def _dismiss_once(page, timeout: int, allow_escape: bool) -> str | None:
             if _visible(btn):
                 try:
                     btn.first.click(timeout=timeout)
-                    return f"{osel} » '{label}'"
                 except Exception:
                     continue
+                if not _still_there(page, overlay):
+                    return f"{osel} » '{label}'"
         if strict:
             close = box.locator(
                 "[aria-label*='stäng' i], [aria-label*='close' i], "
@@ -147,17 +172,20 @@ def _dismiss_once(page, timeout: int, allow_escape: bool) -> str | None:
             if _visible(close):
                 try:
                     close.first.click(timeout=timeout)
-                    return f"{osel} » close button"
+                    if not _still_there(page, overlay):
+                        return f"{osel} » close button"
                 except Exception:
                     pass
             if allow_escape:
                 # Last resort, and ONLY on a freshly loaded page: Escape reverts the
                 # value of some framework inputs (PrimeNG's calendar does exactly
                 # this, see submit_vy.py), so it must never run after we've filled
-                # fields. Hence allow_escape defaults to False.
+                # fields. Hence allow_escape defaults to False. Consent modals
+                # commonly set disableEscapeKeyDown, so this must be verified too.
                 try:
                     page.keyboard.press("Escape")
-                    return f"{osel} » Escape"
+                    if not _still_there(page, overlay):
+                        return f"{osel} » Escape"
                 except Exception:
                     pass
         # Nothing here worked — try the next container rather than giving up; the
@@ -224,6 +252,47 @@ def blocking_overlay(page, selector: str) -> str | None:
         return None  # can't hit-test (navigating, CSP) — let the click try anyway
 
 
+def overlay_buttons(page, selector: str, limit: int = 8) -> list[str]:
+    """Visible button labels inside the overlay covering `selector`.
+
+    Added 2026-10-01, after SJ swapped its consent component: the copy went from
+    "Vi använder kakor" to "Vi använder cookies" and the container from
+    MuiDialog-container to MuiDialogContent-root, so its accept button stopped
+    matching every label in CONSENT_LABELS. The canary correctly reported "submit is
+    covered" — but not by WHAT button, so closing the gap meant guessing the label
+    or reading it off a screenshot artifact by hand.
+
+    This is the same lesson as 2026-06-27 ("Acceptera alla" vs "Godkänn alla") for
+    the third time: the label WILL drift again, so the failure has to name the
+    labels it saw. Fixing a future drift should be a one-line CONSENT_LABELS edit.
+    """
+    try:
+        return page.evaluate(
+            """([sel, lim]) => {
+              const el = document.querySelector(sel);
+              if (!el) return [];
+              const r = el.getBoundingClientRect();
+              if (!r.width || !r.height) return [];
+              const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!top || top === el || el.contains(top)) return [];
+              const root = top.closest("[role=dialog], [role=alertdialog], [class*=Dialog], [class*=Modal], [class*=modal]")
+                        || top.getRootNode().body || top;
+              const out = [];
+              for (const b of root.querySelectorAll("button, [role=button], a[href='#']")) {
+                const rect = b.getBoundingClientRect();
+                if (!rect.height || !rect.width) continue;
+                const t = (b.innerText || b.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim();
+                if (t && !out.includes(t)) out.push(t.slice(0, 60));
+                if (out.length >= lim) break;
+              }
+              return out;
+            }""",
+            [selector, limit],
+        ) or []
+    except Exception:
+        return []
+
+
 def click_when_clear(page, selector: str, *, timeout: int = 8000,
                      user_message: str | None = None) -> None:
     """Click `selector`, clearing overlays first and naming one we can't clear.
@@ -242,9 +311,15 @@ def click_when_clear(page, selector: str, *, timeout: int = 8000,
         blocker = blocking_overlay(page, selector)
 
     if blocker and blocker != NOT_FOUND:
+        seen = overlay_buttons(page, selector)
+        detail = f"click on {selector} blocked by overlay: {blocker}"
+        if seen:
+            # The actionable half: one of these is almost certainly the accept
+            # button whose label drifted out of CONSENT_LABELS.
+            detail += f" | buttons in that overlay: {seen}"
         raise FormError(
             user_message or "Formuläret gick inte att fylla i automatiskt just nu.",
-            detail=f"click on {selector} blocked by overlay: {blocker}",
+            detail=detail,
             url=getattr(page, "url", None),
         )
 

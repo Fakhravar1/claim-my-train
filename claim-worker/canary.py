@@ -38,7 +38,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from browser_utils import NOT_FOUND, blocking_overlay, dismiss_overlays
+from browser_utils import NOT_FOUND, blocking_overlay, dismiss_overlays, overlay_buttons
 
 OUT_DIR = Path(__file__).parent / "canary_out"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -150,9 +150,16 @@ def check_sj(pg: Page) -> str:
     # click point, exactly as click_when_clear does before submitting.
     blocker = blocking_overlay(pg, "button[type=submit]")
     if blocker and blocker != NOT_FOUND:
+        # Name the buttons in that overlay. On 2026-10-01 this check failed with only
+        # "something covers the button", and SJ's new consent dialog could not be
+        # matched to a label without pulling the screenshot artifact by hand. The
+        # label has now drifted three times; the alert must say which label to add.
+        seen = overlay_buttons(pg, "button[type=submit]")
         raise AssertionError(
             "page-1 submit button is covered — a headless click would time out "
             f"(after dismissing banners, elementFromPoint hits: {blocker})"
+            + (f" | buttons in that overlay: {seen} — if one of these is the accept"
+               " button, add its label to browser_utils.CONSENT_LABELS" if seen else "")
         )
     return "page-1 booking/email fields + submit present and clickable"
 
