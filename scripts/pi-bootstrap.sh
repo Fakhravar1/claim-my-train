@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# ⚰️ DEAD CODE SINCE 2026-10-11 — the qvitta-pi Raspberry Pi runner was
+# DECOMMISSIONED and dbt build runs on GitHub-hosted ubuntu-latest. This script
+# provisioned that machine; there is nothing for it to provision. Kept as
+# history alongside docs/pi-setup.md. See CLAUDE.md §3.
+#
 #
 # Phase 1 bootstrap for the Qvitta Raspberry Pi Actions runner.
 # Companion to docs/pi-setup.md — collapses sections 3 to 7 into one command.

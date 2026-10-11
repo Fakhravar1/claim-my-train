@@ -1,5 +1,18 @@
 # Raspberry Pi setup — Phase 1
 
+> ## ⚰️ DECOMMISSIONED 2026-10-11 — the Pi is gone; this document is HISTORY
+>
+> The Raspberry Pi self-hosted runner (`qvitta-pi`) was physically removed — a
+> deliberate decision, not a failure. `dbt build` now runs on GitHub-hosted
+> `ubuntu-latest`, dispatched by the same pg_cron → `dispatch-workflow` chain
+> (see CLAUDE.md §3). Hosted Actions minutes are free on this repo because it is
+> public, so the cost argument that motivated the Pi no longer applies.
+>
+> Nothing here is a current runbook. **Do not execute it.** It is kept because
+> the reasoning still has value if self-hosting is ever revisited, and because
+> the memory-sizing and failsafe lessons generalise (CLAUDE.md §10, Incidents
+> 1–3). `scripts/pi-bootstrap.sh` is dead code for the same reason.
+
 Companion to `docs/pi-runner-plan.md`. Goal of Phase 1: a Pi on the LAN running a
 registered-but-idle GitHub Actions runner, proven able to run `dbt build`.
 AdGuard Home is included because it costs almost nothing and is genuinely useful.

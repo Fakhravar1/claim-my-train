@@ -1,5 +1,13 @@
 # Remote maintenance for the qvitta-pi self-hosted runner.
 #
+# ⚰️ INERT SINCE 2026-10-11 — the Pi was DECOMMISSIONED and this workflow can
+# never run again: every job here is pinned to `runs-on: qvitta-pi`, and no such
+# runner is registered. `dispatch-workflow` already refuses to dispatch it,
+# correctly, with `skipped:'pi_offline'` (it is in that function's
+# PI_ONLY_WORKFLOWS set). Kept for now only so the router's allowlist and this
+# file can be removed together in one change; it does nothing in the meantime.
+# See CLAUDE.md §3 'STALE GUARD #2'.
+#
 # WHY THIS SHAPE. The Pi is behind NAT with no inbound ports (see
 # docs/pi-runner-plan.md §4 — that is deliberate, and why the runner needs no
 # port forwarding). Nothing on the internet can reach into it. But the Pi already

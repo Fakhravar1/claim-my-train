@@ -1,27 +1,39 @@
 name: dbt run
 
 on:
-  # Scheduling is EXTERNAL since 2026-07-01: cron-jobs.org fires this workflow every
-  # 15 min via the GitHub workflow_dispatch API (reliable cadence, no free-tier
-  # `schedule:` jitter). The in-repo `schedule:` was removed on purpose — do NOT
-  # re-add it, or the job double-fires (cron-jobs.org + GitHub both trigger).
+  # Scheduling is EXTERNAL: pg_cron inside Supabase (`dispatch-dbt-run-hourly`,
+  # jobid 18, hourly) POSTs the `dispatch-workflow` edge function, which fires
+  # this workflow via the GitHub workflow_dispatch API. cron-jobs.org was retired
+  # for dbt on 2026-07-29. The in-repo `schedule:` was removed on purpose — do
+  # NOT re-add it, or the job double-fires (external cron + GitHub both trigger).
   workflow_dispatch:          # external cron + manual "Run workflow" button
     inputs:
       runner:
         description: Runner to execute on
         type: choice
-        options: [qvitta-pi, ubuntu-latest]
-        # The `dispatch-workflow` edge function (pg_cron `dispatch-dbt-run-hourly`)
-        # now owns this trigger and always passes an explicit `runner`, having
-        # probed whether the Pi is online. The cron-jobs.org job was retired
-        # 2026-07-29, so this default only applies to a human clicking "Run
-        # workflow" or to a re-run.
+        options: [ubuntu-latest]
+        # The `dispatch-workflow` edge function owns this trigger and always
+        # passes an explicit `runner`. The input is KEPT even though there is
+        # only one choice left: GitHub rejects a dispatch whose inputs don't
+        # match the workflow's declared ones, so dropping it would break the
+        # dispatcher. The default applies only to a human clicking "Run
+        # workflow", or to a re-run.
         #
-        # ⚠️ If you dispatch by hand while the Pi is DOWN, pick ubuntu-latest from
-        # the dropdown. A job aimed at an offline self-hosted runner queues
-        # silently for up to 24 h rather than failing — the router protects the
-        # scheduled path from this, but it cannot protect a manual one.
-        default: qvitta-pi
+        # The Raspberry Pi (`qvitta-pi`) was DECOMMISSIONED 2026-10-11 and
+        # removed from the options, because the old `default: qvitta-pi` was a
+        # live trap once the machine was gone: a job aimed at an offline
+        # self-hosted runner does not fail, it queues SILENTLY for up to 24 h
+        # and is then cancelled. The router protected the scheduled path from
+        # that, but never a manual dispatch.
+        #
+        # ⚠️ IF A SELF-HOSTED RUNNER EVER COMES BACK, re-add its label to
+        # `options` BEFORE pointing the router at it. GitHub validates a
+        # choice input against this list, so a dispatch carrying a label that
+        # isn't here is rejected with a 400 and no run starts — the scheduled
+        # build would stop. That failure is at least loud (the 400 lands in
+        # net._http_response, and check-data-freshness re-dispatches on
+        # ubuntu-latest within its 6 h threshold), but it is still an outage.
+        default: ubuntu-latest
 
 jobs:
   run:
@@ -31,10 +43,12 @@ jobs:
     # only executes on the working repo, even if someone re-enables the
     # workflow on the companion or fires it via workflow_dispatch there.
     if: github.repository == 'Fakhravar1/claim-my-train'
-    # `inputs` IS available in the runs-on context. The `|| 'qvitta-pi'` fallback
-    # covers non-dispatch events (there are none today — the in-repo `schedule:`
-    # was removed on purpose and must not come back).
-    runs-on: ${{ inputs.runner || 'qvitta-pi' }}
+    # `inputs` IS available in the runs-on context. The `|| 'ubuntu-latest'`
+    # fallback covers non-dispatch events (there are none today — the in-repo
+    # `schedule:` was removed on purpose and must not come back) and any caller
+    # that omits the input. It must stay a HOSTED runner: see the decommission
+    # note on the `runner` input above.
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     concurrency:
       group: dbt-run          # prevents overlapping runs if one is slow
       cancel-in-progress: false
@@ -44,14 +58,13 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          # 3.12, not 3.11: Ubuntu 24.04 (the Pi runner) ships 3.12 and does not
-          # package 3.11, while `ubuntu-latest` provides 3.12 too — so 3.12 is the
-          # version that lets ONE workflow file serve both runners without
-          # branching on runner.environment, which is how failsafe paths rot.
-          # Verified on arm64 2026-07-29: setup-python@v5 fetched 3.12.13 for
-          # linux-arm64 unaided, no tool-cache pre-seed needed.
+          # 3.12 because `ubuntu-latest` provides it. (The original reason was
+          # that Ubuntu 24.04 on the Pi shipped 3.12 and not 3.11, so one file
+          # could serve both runners without branching on runner.environment —
+          # moot since the Pi was decommissioned 2026-10-11, but 3.12 is still
+          # the right pin and there is no reason to churn it.)
           python-version: '3.12'
-          # Persist pip's wheel-download cache across the ~96 scheduled runs/day
+          # Persist pip's wheel-download cache across the ~24 scheduled runs/day
           # so re-installing dbt each run skips the downloads. Keyed on the CI
           # requirements file below (the version pins never change between runs).
           cache: pip
