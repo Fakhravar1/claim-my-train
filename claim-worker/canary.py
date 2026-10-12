@@ -38,7 +38,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from browser_utils import NOT_FOUND, blocking_overlay, dismiss_overlays
+from browser_utils import NOT_FOUND, dismiss_overlays, wait_until_clickable
 
 OUT_DIR = Path(__file__).parent / "canary_out"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -50,6 +50,9 @@ SL_URL = "https://sl.se/kundservice/forseningsersattning/resan"
 SKANE_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/"
 VT_URL = "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning/"
 SJ_URL = "https://www.sj.se/ersattning-vid-forsening/"  # submit_sj.py SJ_FORM_URL
+# Must track submit_sj._drive's click_when_clear(..., timeout=15000) on page 1:
+# the canary may not be stricter about a slow consent dialog than the worker is.
+SJ_CLICK_BUDGET_MS = 15000
 
 
 def dismiss_cookies(pg: Page) -> None:
@@ -148,11 +151,22 @@ def check_sj(pg: Page) -> str:
     # and stable" — while a MuiDialog on top of it ate the click and killed the
     # claim. This canary was green through all ten weeks of it. Hit-test the actual
     # click point, exactly as click_when_clear does before submitting.
-    blocker = blocking_overlay(pg, "button[type=submit]")
+    #
+    # ...and "exactly as" has to include HOW LONG. Asking once, ~5.5 s after load,
+    # made this check stricter than the worker it guards: SJ's consent dialog paints
+    # asynchronously, so on a slow render the single hit test saw a dialog that
+    # submit_sj's 15 s retry loop would have dismissed and clicked straight through.
+    # That cried wolf on 2026-10-01 and 2026-10-12 (byte-identical blockers, same
+    # css-1nbx5hx hash, green on the ten days between — SJ had changed nothing).
+    # wait_until_clickable IS that loop, shared, with the worker's own budget: a
+    # late-but-dismissable dialog now passes, while the genuinely undismissable
+    # dialog of 2026-09-04 still fails, because it is still there at the deadline.
+    blocker = wait_until_clickable(pg, "button[type=submit]", timeout=SJ_CLICK_BUDGET_MS)
     if blocker and blocker != NOT_FOUND:
         raise AssertionError(
             "page-1 submit button is covered — a headless click would time out "
-            f"(after dismissing banners, elementFromPoint hits: {blocker})"
+            f"(after dismissing banners for {SJ_CLICK_BUDGET_MS // 1000} s, "
+            f"elementFromPoint hits: {blocker})"
         )
     return "page-1 booking/email fields + submit present and clickable"
 

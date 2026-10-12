@@ -224,6 +224,33 @@ def blocking_overlay(page, selector: str) -> str | None:
         return None  # can't hit-test (navigating, CSP) — let the click try anyway
 
 
+def wait_until_clickable(page, selector: str, *, timeout: int = 8000) -> str | None:
+    """Clear overlays until `selector`'s click point is free, or the budget expires.
+
+    Returns None when the click point is clear, NOT_FOUND when the selector matched
+    nothing, otherwise a description of whatever still covers it. Never clicks and
+    never raises — the caller decides what a persistent blocker means.
+
+    WHY THIS IS SHARED (2026-10-01 / 2026-10-12). SJ's consent dialog paints
+    asynchronously, so "is the button covered?" is only meaningful as a question
+    asked REPEATEDLY over a budget. canary.py asked it ONCE, ~5.5 s after load,
+    while submit_sj asked it in a retry loop for 15 s — so a dialog that merely
+    arrived late failed the canary on days the worker would have sailed through
+    (green Oct 2-11, byte-identical failures Oct 1 and Oct 12, same css-1nbx5hx
+    hash both times: SJ had not changed a thing). A canary STRICTER than the path
+    it guards cries wolf; one LOOSER hides real breakage. Sharing this loop is
+    what keeps the two identical, exactly as dismiss_overlays already does.
+    """
+    deadline = time.monotonic() + timeout / 1000.0
+    dismiss_overlays(page)
+    blocker = blocking_overlay(page, selector)
+    while blocker and blocker != NOT_FOUND and time.monotonic() < deadline:
+        page.wait_for_timeout(250)
+        dismiss_overlays(page)
+        blocker = blocking_overlay(page, selector)
+    return blocker
+
+
 def click_when_clear(page, selector: str, *, timeout: int = 8000,
                      user_message: str | None = None) -> None:
     """Click `selector`, clearing overlays first and naming one we can't clear.
@@ -234,12 +261,7 @@ def click_when_clear(page, selector: str, *, timeout: int = 8000,
     fails immediately with the dialog's tag, class and text.
     """
     deadline = time.monotonic() + timeout / 1000.0
-    dismiss_overlays(page)
-    blocker = blocking_overlay(page, selector)
-    while blocker and blocker != NOT_FOUND and time.monotonic() < deadline:
-        page.wait_for_timeout(250)
-        dismiss_overlays(page)
-        blocker = blocking_overlay(page, selector)
+    blocker = wait_until_clickable(page, selector, timeout=timeout)
 
     if blocker and blocker != NOT_FOUND:
         raise FormError(
