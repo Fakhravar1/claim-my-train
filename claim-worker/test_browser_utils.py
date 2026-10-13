@@ -23,7 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from playwright.sync_api import sync_playwright
-from browser_utils import FormError, blocking_overlay, click_when_clear, dismiss_overlays, NOT_FOUND
+from browser_utils import (FormError, blocking_overlay, click_when_clear, dismiss_overlays,
+                           overlay_actions, NOT_FOUND)
 
 def page_html(dismissable: bool) -> str:
     accept = ('<button onclick="document.getElementById(\'dlg\').remove()">Godkänn alla</button>'
@@ -113,6 +114,44 @@ with sync_playwright() as p:
     pg.fill("#orderOrTicketNumber", "KEEPME")
     dismiss_overlays(pg)                     # default allow_escape=False
     check("field value survives dismissal", pg.input_value("#orderOrTicketNumber") == "KEEPME")
+
+    print("G. overlay_actions names the controls and whether our labels match them")
+    # G1 — the dismissable fixture: the inventory must find the accept button AND
+    # say which known label caught it.
+    pg.set_content(page_html(True))
+    inv = overlay_actions(pg, "button[type=submit]")
+    check("lists the accept button", "'Godkänn alla'" in inv, inv[:140])
+    check("flags it as matched", "MATCHES" in inv, inv[:140])
+
+    # G2 — THE 2026-10-12 SJ SHAPE: a consent dialog whose accept button carries a
+    # label CONSENT_LABELS does not know. This is the case the old message could
+    # not describe; the inventory must name the button and mark it unmatched, which
+    # is what turns the alert into a one-line fix.
+    pg.set_content(page_html(True).replace("Godkänn alla", "Tillat samtliga kakfiler"))
+    inv = overlay_actions(pg, "button[type=submit]")
+    check("names the unknown button", "Tillat samtliga kakfiler" in inv, inv[:160])
+    check("marks it unmatched", "no label match" in inv and "MATCHES" not in inv, inv[:160])
+
+    # G3 — consent inside an iframe: no page-level locator can ever reach the
+    # button, so the inventory must say so rather than listing nothing.
+    pg.set_content("""<!doctype html><html lang="sv"><body>
+      <form><button type="submit">Hämta resa</button></form>
+      <iframe src="about:blank" title="consent"
+              style="position:fixed;inset:0;width:100%;height:100%;z-index:9999"></iframe>
+      </body></html>""")
+    inv = overlay_actions(pg, "button[type=submit]")
+    check("reports an iframe'd consent UI", "IFRAME" in inv, inv[:140])
+
+    # G4 — a dialog with no button at all (scroll-gated accept, or we matched a
+    # wrapper): distinct from "unknown label", and needs a different fix.
+    pg.set_content(page_html(False))
+    inv = overlay_actions(pg, "button[type=submit]")
+    check("reports a button-less overlay", "NO button" in inv, inv[:140])
+
+    # G5 — never reports a blocker when there is none.
+    pg.set_content(page_html(True).replace('<div id="dlg"', '<div id="dlg" hidden'))
+    check("says nothing covers it when clear",
+          "nothing covers it" in overlay_actions(pg, "button[type=submit]"))
 
     browser.close()
 

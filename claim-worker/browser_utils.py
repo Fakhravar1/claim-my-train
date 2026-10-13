@@ -250,3 +250,105 @@ def click_when_clear(page, selector: str, *, timeout: int = 8000,
 
     remaining = max(int((deadline - time.monotonic()) * 1000), 2000)
     page.click(selector, timeout=remaining)
+
+
+def overlay_actions(page, selector: str, *, limit: int = 12) -> str:
+    """Read-only: name the dismissal controls inside whatever covers `selector`.
+
+    DIAGNOSTICS ONLY — changes no behaviour, clicks nothing, and is never called by
+    the submit path. It exists because of the 2026-10-12 SJ breach: the canary
+    correctly reported "submit button is covered" and quoted the dialog's BODY TEXT
+    ("Vi använder cookies …"), which does not name a single button — so there was no
+    way to tell from the alert whether CONSENT_LABELS had simply gone stale, or the
+    consent UI had moved somewhere page-level locators cannot reach at all. A
+    breach that cannot be acted on without someone re-driving the live form by hand
+    wastes the very lead time the canary buys.
+
+    Returns a one-line summary: the dialog container, each candidate control (text,
+    aria-label, data-testid) and — the actionable bit — whether CONSENT_LABELS /
+    GENERIC_LABELS would have matched it. Distinguishes three causes that look
+    identical in the old message:
+      * a label we don't know yet  -> controls listed, none marked MATCHES
+      * consent moved into an iframe / shadow DOM -> reported as such
+      * a dialog with no button at all (scroll-gated, or we matched a wrapper)
+    """
+    try:
+        info = page.evaluate(
+            """(sel) => {
+              const el = document.querySelector(sel);
+              if (!el) return {kind: "no_target"};
+              const r = el.getBoundingClientRect();
+              if (!r.width || !r.height) return {kind: "no_target"};
+              const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!top || top === el || el.contains(top) || top.contains(el)) return {kind: "clear"};
+              if (top.tagName === "IFRAME")
+                return {kind: "iframe", src: (top.getAttribute("src") || "").slice(0, 160)};
+              const box = top.closest("[role=dialog],[role=alertdialog],[class*=Dialog],[class*=modal],[class*=Modal]") || top;
+              const controls = [];
+              const push = (n, shadow) => {
+                const rect = n.getBoundingClientRect();
+                controls.push({
+                  tag: n.tagName.toLowerCase(),
+                  text: (n.innerText || n.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 60),
+                  aria: n.getAttribute("aria-label"),
+                  testid: n.getAttribute("data-testid"),
+                  id: n.id || null,
+                  visible: !!(rect.width && rect.height),
+                  shadow: !!shadow,
+                });
+              };
+              const walk = (root, shadow) => {
+                for (const n of root.querySelectorAll(
+                  "button,[role=button],a[href],input[type=button],input[type=submit]"
+                )) push(n, shadow);
+                for (const n of root.querySelectorAll("*")) if (n.shadowRoot) walk(n.shadowRoot, true);
+              };
+              walk(box, false);
+              const cls = typeof box.className === "string" ? box.className : "";
+              return {
+                kind: "dialog",
+                container: `<${box.tagName.toLowerCase()} class="${cls.slice(0, 100)}">`,
+                controls,
+              };
+            }""",
+            selector,
+        )
+    except Exception as exc:  # never let a diagnostic break the caller
+        return f"(overlay inventory unavailable: {type(exc).__name__})"
+
+    kind = (info or {}).get("kind")
+    if kind == "clear":
+        return "(nothing covers it now)"
+    if kind == "no_target":
+        return "(target not found)"
+    if kind == "iframe":
+        return (f"consent UI is in an IFRAME (src={info.get('src')!r}) — page-level "
+                "locators cannot reach its buttons; dismissal needs a frame_locator")
+    if kind != "dialog":
+        return "(overlay inventory unavailable)"
+
+    known = CONSENT_LABELS + GENERIC_LABELS
+    controls = info.get("controls") or []
+    if not controls:
+        return (f"{info.get('container')} contains NO button/role=button at all — "
+                "either the accept control is scroll-gated inside it, or we matched "
+                "a wrapper rather than the banner")
+
+    parts = []
+    for c in controls[:limit]:
+        # Mirror Playwright's :has-text() — case-insensitive substring.
+        hay = " ".join(filter(None, (c.get("text"), c.get("aria")))).lower()
+        hit = next((lbl for lbl in known if lbl.lower() in hay), None)
+        bits = [c.get("tag") or "?", repr(c.get("text") or "")]
+        if c.get("aria"):
+            bits.append(f"aria={c['aria']!r}")
+        if c.get("testid"):
+            bits.append(f"testid={c['testid']!r}")
+        if c.get("shadow"):
+            bits.append("in-shadow-root")
+        if not c.get("visible"):
+            bits.append("hidden")
+        bits.append(f"MATCHES {hit!r}" if hit else "no label match")
+        parts.append(" ".join(bits))
+    more = f" (+{len(controls) - limit} more)" if len(controls) > limit else ""
+    return f"{info.get('container')} offers: " + "; ".join(parts) + more
