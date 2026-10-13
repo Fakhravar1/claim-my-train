@@ -38,7 +38,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from browser_utils import NOT_FOUND, blocking_overlay, dismiss_overlays
+from browser_utils import NOT_FOUND, dismiss_overlays, overlay_actions, wait_until_clear
 
 OUT_DIR = Path(__file__).parent / "canary_out"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -52,15 +52,19 @@ VT_URL = "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-er
 SJ_URL = "https://www.sj.se/ersattning-vid-forsening/"  # submit_sj.py SJ_FORM_URL
 
 
-def dismiss_cookies(pg: Page) -> None:
+def dismiss_cookies(pg: Page) -> list[str]:
     """Best-effort banner dismissal — never fail a check over a banner.
 
     Delegates to browser_utils so the canary clears EXACTLY what submit_sj clears.
     They used to differ (the canary tried five labels, submit_sj two), which is a
     large part of why the canary sailed through the overlay that was killing every
     SJ claim: the canary dismissed SJ's dialog, the worker never could.
+
+    Returns what it managed to clear. The caller puts that in the breach detail:
+    "dismissed nothing" and "dismissed two banners and a third is still there" are
+    different bugs, and the old message could not tell them apart.
     """
-    dismiss_overlays(pg, allow_escape=True)
+    return dismiss_overlays(pg, allow_escape=True)
 
 
 def visible_select_labels(pg: Page) -> list[str]:
@@ -134,7 +138,7 @@ def check_sj(pg: Page) -> str:
     """SJ page 1: booking + email fields + submit (submit_sj.py's entry point)."""
     pg.goto(SJ_URL, wait_until="domcontentloaded", timeout=60000)
     pg.wait_for_timeout(4000)
-    dismiss_cookies(pg)
+    dismissed = dismiss_cookies(pg)
     pg.wait_for_timeout(1500)
     missing = [
         i for i in ("orderOrTicketNumber", "orderSecurity") if pg.locator(f"#{i}").count() == 0
@@ -148,11 +152,27 @@ def check_sj(pg: Page) -> str:
     # and stable" — while a MuiDialog on top of it ate the click and killed the
     # claim. This canary was green through all ten weeks of it. Hit-test the actual
     # click point, exactly as click_when_clear does before submitting.
-    blocker = blocking_overlay(pg, "button[type=submit]")
+    # Assert clickability through the SAME path the worker clicks through
+    # (wait_until_clear = click_when_clear minus the click): dismiss and re-test
+    # for the worker's full 8 s budget. A single hit test here reported a breach on
+    # 2026-10-12/13 over a consent dialog that rendered a moment late — one the
+    # worker's retry loop would have cleared — then passed minutes later with no
+    # code change. A dialog that survives this budget is the real, claim-killing
+    # kind, which is what the 2026-09 breach was.
+    blocker = wait_until_clear(pg, "button[type=submit]", timeout=8000, allow_escape=True)
     if blocker and blocker != NOT_FOUND:
+        # Name the BUTTONS, not just the dialog's prose. The 2026-10-12 breach
+        # quoted 200 characters of "Vi använder cookies …", which says nothing
+        # about why dismissal failed — so the alert could not be acted on without
+        # someone re-driving the live form by hand. overlay_actions() reports each
+        # candidate control and whether CONSENT_LABELS would have matched it, so a
+        # stale label, an iframe'd consent UI and a button-less wrapper are
+        # distinguishable straight from the email.
         raise AssertionError(
-            "page-1 submit button is covered — a headless click would time out "
-            f"(after dismissing banners, elementFromPoint hits: {blocker})"
+            "page-1 submit button is still covered after 8 s of dismissal attempts "
+            "— a headless click would time out "
+            f"(dismissed: {dismissed or 'nothing'}; elementFromPoint hits: {blocker}; "
+            f"candidates: {overlay_actions(pg, 'button[type=submit]')})"
         )
     return "page-1 booking/email fields + submit present and clickable"
 
