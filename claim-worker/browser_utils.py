@@ -111,17 +111,58 @@ def _visible(loc) -> bool:
         return False
 
 
+def _gone(overlay) -> bool:
+    """Has this overlay stopped covering the page? Visibility, not presence —
+    consent frameworks routinely leave the container in the DOM and just hide it."""
+    return not _visible(overlay)
+
+
+def _click_and_confirm(page, target, overlay, timeout: int) -> bool:
+    """Click `target` and confirm `overlay` actually went away.
+
+    Returns False when the click landed but changed nothing, so the caller keeps
+    looking instead of reporting a dismissal that never happened. Clicking a second
+    consent control afterwards is harmless; believing a stale success is not — that
+    belief is what burned all three rounds in the 2026-10-13 canary run.
+    """
+    try:
+        target.click(timeout=timeout)
+    except Exception:
+        return False
+    for _ in range(3):
+        if _gone(overlay):
+            return True
+        try:
+            page.wait_for_timeout(200)
+        except Exception:
+            break
+    return _gone(overlay)
+
+
 def _dismiss_once(page, timeout: int, allow_escape: bool) -> str | None:
-    """Dismiss ONE overlay. Returns a description of what was dismissed, or None."""
+    """Dismiss ONE overlay. Returns a description of what was dismissed, or None.
+
+    Every branch CONFIRMS the overlay is gone before claiming it (see
+    _click_and_confirm), and Escape is a genuine last resort — tried only after
+    every container has been offered a real control, and only credited if the
+    overlay actually disappears.
+
+    WHY (the 2026-10-13 canary breach): Escape used to be tried inside the
+    container loop and returned immediately, crediting itself without checking.
+    A MUI dialog with disableEscapeKeyDown ignores Escape, so a strict [role=dialog]
+    matching EARLY in the selector order consumed every round and the real consent
+    banner further down the list was never reached. Because only the canary passes
+    allow_escape=True, the canary was strictly WEAKER at dismissal than the worker
+    it is supposed to mirror — the same canary/worker divergence this module was
+    written to remove, pointing the other way. Verified both directions in
+    test_browser_utils.py (case H).
+    """
     for sel in ACCEPT_SELECTORS:
         loc = page.locator(sel)
-        if _visible(loc):
-            try:
-                loc.first.click(timeout=timeout)
-                return sel
-            except Exception:
-                pass
+        if _visible(loc) and _click_and_confirm(page, loc.first, loc, timeout):
+            return sel
 
+    escapable = []  # strict dialogs that offered us no working control
     for osel in OVERLAY_SELECTORS:
         overlay = page.locator(osel)
         if not _visible(overlay):
@@ -133,35 +174,31 @@ def _dismiss_once(page, timeout: int, allow_escape: bool) -> str | None:
             btn = box.locator(
                 f"button:has-text('{label}'), [role='button']:has-text('{label}')"
             )
-            if _visible(btn):
-                try:
-                    btn.first.click(timeout=timeout)
-                    return f"{osel} » '{label}'"
-                except Exception:
-                    continue
+            if _visible(btn) and _click_and_confirm(page, btn.first, overlay, timeout):
+                return f"{osel} » '{label}'"
         if strict:
             close = box.locator(
                 "[aria-label*='stäng' i], [aria-label*='close' i], "
                 "button[title*='stäng' i], button[title*='close' i]"
             )
-            if _visible(close):
-                try:
-                    close.first.click(timeout=timeout)
-                    return f"{osel} » close button"
-                except Exception:
-                    pass
-            if allow_escape:
-                # Last resort, and ONLY on a freshly loaded page: Escape reverts the
-                # value of some framework inputs (PrimeNG's calendar does exactly
-                # this, see submit_vy.py), so it must never run after we've filled
-                # fields. Hence allow_escape defaults to False.
-                try:
-                    page.keyboard.press("Escape")
-                    return f"{osel} » Escape"
-                except Exception:
-                    pass
+            if _visible(close) and _click_and_confirm(page, close.first, overlay, timeout):
+                return f"{osel} » close button"
+            escapable.append((osel, overlay))
         # Nothing here worked — try the next container rather than giving up; the
         # first thing matching an overlay selector isn't always the real banner.
+
+    if allow_escape:
+        # Last resort, and ONLY on a freshly loaded page: Escape reverts the value
+        # of some framework inputs (PrimeNG's calendar does exactly this, see
+        # submit_vy.py), so it must never run after we've filled fields. Hence
+        # allow_escape defaults to False.
+        for osel, overlay in escapable:
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                continue
+            if _gone(overlay):
+                return f"{osel} » Escape"
     return None
 
 
@@ -224,6 +261,34 @@ def blocking_overlay(page, selector: str) -> str | None:
         return None  # can't hit-test (navigating, CSP) — let the click try anyway
 
 
+def wait_until_clear(page, selector: str, *, timeout: int = 8000,
+                     allow_escape: bool = False) -> str | None:
+    """Dismiss and re-hit-test until `selector` is clickable or the budget expires.
+
+    Returns None when nothing covers it, NOT_FOUND when the selector isn't there,
+    or a description of the blocker that outlasted the budget.
+
+    THE CANARY MUST USE THIS, NOT A BARE blocking_overlay(). On 2026-10-12/13 the
+    sj_form check hit-tested exactly ONCE, ~1.5 s after dismissal, and reported a
+    breach — while the worker, which dismisses and retries for a full 8 s here,
+    would have sailed through the same late-rendering consent dialog. Two daily
+    failures and then a pass minutes later, with no code change, is that race.
+    A single hit test cannot tell "a dialog arrived a moment late" from "a dialog
+    we can never clear", and only the second one kills a claim.
+    """
+    deadline = time.monotonic() + timeout / 1000.0
+    dismiss_overlays(page, allow_escape=allow_escape)
+    blocker = blocking_overlay(page, selector)
+    while blocker and blocker != NOT_FOUND and time.monotonic() < deadline:
+        try:
+            page.wait_for_timeout(250)
+        except Exception:
+            break
+        dismiss_overlays(page, allow_escape=allow_escape)
+        blocker = blocking_overlay(page, selector)
+    return blocker
+
+
 def click_when_clear(page, selector: str, *, timeout: int = 8000,
                      user_message: str | None = None) -> None:
     """Click `selector`, clearing overlays first and naming one we can't clear.
@@ -232,14 +297,15 @@ def click_when_clear(page, selector: str, *, timeout: int = 8000,
     8 s budget retrying a click into a dialog and then reported only a timeout.
     Here the same situation dismisses the dialog if it's dismissible, and otherwise
     fails immediately with the dialog's tag, class and text.
+
+    The waiting is wait_until_clear()'s, so the canary asserts clickability through
+    the exact code path the worker clicks through — the divergence that let the
+    canary stay green through ten weeks of a 100 %-failing SJ path in 2026-09, and
+    then cry breach over a survivable race in 2026-10, is structural now, not a
+    matter of keeping two call sites in step.
     """
     deadline = time.monotonic() + timeout / 1000.0
-    dismiss_overlays(page)
-    blocker = blocking_overlay(page, selector)
-    while blocker and blocker != NOT_FOUND and time.monotonic() < deadline:
-        page.wait_for_timeout(250)
-        dismiss_overlays(page)
-        blocker = blocking_overlay(page, selector)
+    blocker = wait_until_clear(page, selector, timeout=timeout)
 
     if blocker and blocker != NOT_FOUND:
         raise FormError(

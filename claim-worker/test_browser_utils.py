@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from playwright.sync_api import sync_playwright
 from browser_utils import (FormError, blocking_overlay, click_when_clear, dismiss_overlays,
-                           overlay_actions, NOT_FOUND)
+                           overlay_actions, wait_until_clear, NOT_FOUND)
 
 def page_html(dismissable: bool) -> str:
     accept = ('<button onclick="document.getElementById(\'dlg\').remove()">Godkänn alla</button>'
@@ -152,6 +152,56 @@ with sync_playwright() as p:
     pg.set_content(page_html(True).replace('<div id="dlg"', '<div id="dlg" hidden'))
     check("says nothing covers it when clear",
           "nothing covers it" in overlay_actions(pg, "button[type=submit]"))
+
+    print("H. Escape must not short-circuit dismissal (the 2026-10-13 canary breach)")
+    # A strict [role=dialog] that matches EARLY in the selector order and ignores
+    # Escape (MUI disableEscapeKeyDown), plus the REAL banner further down the list
+    # carrying a label we know. Escape used to be credited without being checked,
+    # which burned all three rounds and never reached the banner — so the canary
+    # (the only caller passing allow_escape=True) was WEAKER than the worker.
+    esc_html = """<!doctype html><html lang="sv"><body>
+      <form onsubmit="document.getElementById('done').textContent='CLICKED';return false">
+        <button type="submit">Hämta resa</button></form>
+      <div id="done"></div>
+      <div id="shell" role="dialog" aria-label="wrapper" style="position:fixed;inset:0;z-index:9998">
+        <p>Vi använder cookies</p></div>
+      <div id="cookiebar" class="cookie-consent-root"
+           style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4)">
+        <div style="background:#fff;padding:20px">Vi använder cookies
+          <button onclick="document.getElementById('cookiebar').remove();document.getElementById('shell').remove()">Godkänn alla</button>
+        </div></div></body></html>"""
+    for allow_escape in (True, False):
+        pg.set_content(esc_html)
+        got = dismiss_overlays(pg, allow_escape=allow_escape)
+        clear = blocking_overlay(pg, "button[type=submit]") is None
+        who = "canary (allow_escape=True)" if allow_escape else "worker (allow_escape=False)"
+        check(f"reaches the real banner — {who}", clear, f"dismissed={got}")
+    check("Escape is never credited blind",
+          not any("Escape" in d for d in dismiss_overlays(pg, allow_escape=True)))
+
+    print("I. wait_until_clear tolerates a LATE dialog but not a permanent one")
+    # I1 — the 2026-10-12/13 false positive: consent renders ~1.2 s after we first
+    # look. A single hit test calls that a breach; the worker's retry loop clears it.
+    # NB set_content reuses the window, so a stray setTimeout outlives it and would
+    # silently mutate the NEXT case's DOM. Exactly one timer here, and about:blank
+    # between cases.
+    late = page_html(True).replace('<div id="dlg"', '<div id="dlg" hidden') + """
+      <script>setTimeout(() => document.getElementById('dlg').removeAttribute('hidden'), 1200);</script>"""
+    pg.set_content(late)
+    pg.wait_for_timeout(1500)                      # dialog is up now
+    check("single hit test sees the late dialog (the false positive)",
+          "MuiDialog" in (blocking_overlay(pg, "button[type=submit]") or ""))
+    pg.goto("about:blank")
+    pg.set_content(late)
+    check("wait_until_clear rides it out",
+          wait_until_clear(pg, "button[type=submit]", timeout=8000) is None)
+
+    # I2 — a dialog that never goes away must STILL be reported: this is the
+    # 2026-09 claim-killing case and the canary must not go blind to it.
+    pg.goto("about:blank")
+    pg.set_content(page_html(False))
+    blocker = wait_until_clear(pg, "button[type=submit]", timeout=3000, allow_escape=True)
+    check("a permanent overlay is still reported", "MuiDialog" in (blocker or ""), (blocker or "")[:90])
 
     browser.close()
 
