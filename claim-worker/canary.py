@@ -37,6 +37,7 @@ import traceback
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import TimeoutError as PWTimeout
 
 from browser_utils import NOT_FOUND, dismiss_overlays, overlay_actions, wait_until_clear
 
@@ -50,6 +51,10 @@ SL_URL = "https://sl.se/kundservice/forseningsersattning/resan"
 SKANE_URL = "https://www.skanetrafiken.se/kundservice/forseningsersattning/ansokan-om-ersattning/"
 VT_URL = "https://www.vasttrafik.se/kundservice/forseningsersattning/ansok-om-ersattning/"
 SJ_URL = "https://www.sj.se/ersattning-vid-forsening/"  # submit_sj.py SJ_FORM_URL
+# Mirrors submit_sj._drive's page.wait_for_selector("#orderOrTicketNumber", 30000).
+# Keep the two in lockstep: a canary that gives up sooner than the worker reports
+# breaches that are not real (2026-10-27).
+SJ_FIELD_TIMEOUT_MS = 30000
 
 
 def dismiss_cookies(pg: Page) -> list[str]:
@@ -139,12 +144,32 @@ def check_sj(pg: Page) -> str:
     pg.goto(SJ_URL, wait_until="domcontentloaded", timeout=60000)
     pg.wait_for_timeout(4000)
     dismissed = dismiss_cookies(pg)
+    # THE 2026-10-27 FALSE ALARM — the same divergence class as the 2026-10-12/13
+    # clickability one, one line further up: the canary's budget was SHORTER than the
+    # worker's, so it called a breach the worker would have ridden out. submit_sj._drive
+    # waits 30 s for this field ("the field, not the network, is what page 1 is ready
+    # means"); this check slept a fixed 5.5 s and then tested existence INSTANTANEOUSLY,
+    # so one slow SPA mount read as "page-1 ids missing" on a form that was fine — 13
+    # green days either side of it and no SJ change. Wait on the field with the worker's
+    # own budget, so the two can never disagree about what "ready" means.
+    #
+    # One union wait rather than one per id: both inputs mount in the same render, so a
+    # genuine outage costs ~30 s instead of 2x30 s, while a single RENAMED id is still
+    # caught — the union resolves on its surviving sibling and the per-id check below
+    # names the one that actually went away.
+    try:
+        pg.wait_for_selector("#orderOrTicketNumber, #orderSecurity", timeout=SJ_FIELD_TIMEOUT_MS)
+    except PWTimeout:
+        pass  # fall through: the per-id check below reports WHICH ids are missing
     pg.wait_for_timeout(1500)
     missing = [
         i for i in ("orderOrTicketNumber", "orderSecurity") if pg.locator(f"#{i}").count() == 0
     ]
     if missing:
-        raise AssertionError(f"page-1 ids missing: {missing} (url={pg.url})")
+        raise AssertionError(
+            f"page-1 ids missing after {SJ_FIELD_TIMEOUT_MS // 1000}s, submit_sj's own "
+            f"budget: {missing} (url={pg.url})"
+        )
     if pg.locator("button[type=submit]").count() == 0:
         raise AssertionError("no submit button on page 1")
     # THE 2026-09-04 BLIND SPOT. Existence is not clickability: on 2026-06-27 and
