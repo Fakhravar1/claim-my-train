@@ -1,4 +1,10 @@
-{{ config(materialized='table', indexes=[{'columns': ['origin_local_date']}]) }}
+{{ config(
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='origin_local_date',
+    indexes=[{'columns': ['origin_local_date']}],
+    post_hook="delete from {{ this }} where origin_local_date < current_date - 14"
+) }}
 
 -- agg_network_board
 -- Precomputed representative SAMPLE for the "/" Daylight board's default (no-selection)
@@ -10,9 +16,16 @@
 -- and shuffles client-side for per-load variety (src/hooks/useNetworkBoard.ts).
 --
 -- `tier` mirrors the DISPLAY buckets in src/lib/daylightStatus.ts — visual only, NOT the
--- claim rule (is_claimable stays authoritative). random() is re-rolled every build so the
--- sampled pool rotates. NB the sample lags `dbt build` (~15 min) — fine: the board caches
--- 5 min and isn't real-time critical; O-D / claimable browsing still reads v_journeys live.
+-- claim rule (is_claimable stays authoritative).
+--
+-- INCREMENTAL (2026-11-17): each build re-samples only TODAY and YESTERDAY (delete+insert
+-- by origin_local_date) and keeps older days frozen. The old full rebuild re-paired and
+-- random-sorted every retained day of the quadratic fct_journeys each hour and hit the
+-- 120 s statement timeout (runs 5585, 5616). Older days are settled, so freezing their
+-- sample loses nothing; today/yesterday still rotate every build. The post_hook trims to
+-- the board's 14-day window. A --full-refresh is safe (derived sample, no history lost
+-- beyond what int_stop_events still holds) but is the slow path again.
+-- NB the sample lags `dbt build` (~1 h) — fine: the board caches 5 min and isn't real-time critical; O-D / claimable browsing still reads v_journeys live.
 
 with j as (
     select
@@ -28,7 +41,11 @@ with j as (
     from {{ ref('fct_journeys') }}
     -- Board reaches ~14 days back in the default (non-claimable) view; keep a matching
     -- window. Small regardless: 6 tiers x ~15 rows x 14 days ~= 1.3k rows.
+    {% if is_incremental() %}
+    where origin_local_date >= current_date - 1
+    {% else %}
     where origin_local_date >= (current_date - interval '14 days')::date
+    {% endif %}
 ),
 
 ranked as (
